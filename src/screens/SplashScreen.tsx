@@ -9,11 +9,26 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import { Logo } from '../components/Logo';
 import { Colors } from '../theme/colors';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../App';
+
 
 const { height } = Dimensions.get('window');
 
 const SplashScreen = () => {
+    const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            navigation.replace('Auth');
+        }, 3000);
+
+        return () => clearTimeout(timer);
+    }, [navigation]);
+
     return (
+
         <LinearGradient
             colors={[Colors.primary, Colors.primaryDark]}
             style={styles.container}
