@@ -21,7 +21,7 @@ const SplashScreen = () => {
 
     React.useEffect(() => {
         const timer = setTimeout(() => {
-            navigation.replace('Auth');
+            navigation.replace('RoleSelection');
         }, 3000);
 
         return () => clearTimeout(timer);

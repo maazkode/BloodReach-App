@@ -6,9 +6,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import SplashScreen from './src/screens/SplashScreen';
 import AuthScreen from './src/screens/AuthScreen';
+import RoleSelectionScreen from './src/screens/RoleSelectionScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
+  RoleSelection: undefined;
   Auth: undefined;
 };
 
@@ -27,6 +29,7 @@ function App() {
           }}
         >
           <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} />
           <Stack.Screen name="Auth" component={AuthScreen} />
         </Stack.Navigator>
       </NavigationContainer>
