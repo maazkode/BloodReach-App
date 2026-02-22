@@ -14,20 +14,60 @@ import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import FAIcon from 'react-native-vector-icons/FontAwesome';
 import { Colors } from '../theme/colors';
 
-const AuthScreen = () => {
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../App';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
+
+const AuthScreen: React.FC<Props> = ({ navigation, route }) => {
+    const { role } = route.params;
+    const [isLogin, setIsLogin] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+
+    const handleAuth = () => {
+        if (isLogin) {
+            // Mocking authentication and profile check
+            // For now, let's assume if role is donor, check donorProfileComplete
+            // if role is requester, check recipientProfileComplete
+            const isDonorProfileComplete = false;
+            const isRecipientProfileComplete = false;
+
+            if (role === 'donor') {
+                if (isDonorProfileComplete) {
+                    navigation.navigate('Home');
+                } else {
+                    navigation.navigate('DonorRegistration');
+                }
+            } else {
+                if (isRecipientProfileComplete) {
+                    navigation.navigate('Home');
+                } else {
+                    navigation.navigate('RecipientRegistration');
+                }
+            }
+        } else {
+            // On Signup success
+            if (role === 'donor') {
+                navigation.navigate('DonorRegistration');
+            } else {
+                navigation.navigate('RecipientRegistration');
+            }
+        }
+    };
 
     return (
         <SafeAreaView style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity style={styles.backButton}>
+                <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={() => navigation.goBack()}
+                >
                     <MaterialIcon name="arrow-back" size={24} color={Colors.primary} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Create Account</Text>
-                <View style={styles.placeholder} />
+                <Text style={styles.headerTitle}>{isLogin ? 'Login' : 'Create Account'}</Text>
             </View>
 
             <KeyboardAvoidingView
@@ -40,8 +80,14 @@ const AuthScreen = () => {
                         <View style={styles.logoContainer}>
                             <MaterialIcon name="water-drop" size={28} color={Colors.primary} />
                         </View>
-                        <Text style={styles.mainTitle}>Join BloodReach</Text>
-                        <Text style={styles.subtitle}>Become a part of our life-saving community today.</Text>
+                        <Text style={styles.mainTitle}>
+                            {isLogin ? 'Welcome Back' : 'Join BloodReach'}
+                        </Text>
+                        <Text style={styles.subtitle}>
+                            {isLogin
+                                ? 'Log in to continue your life-saving journey.'
+                                : 'Become a part of our life-saving community today.'}
+                        </Text>
                     </View>
 
                     {/* Form Card */}
@@ -70,7 +116,7 @@ const AuthScreen = () => {
                                 <MaterialIcon name="lock" size={18} color="#94A3B8" style={styles.inputIcon} />
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="At least 8 characters"
+                                    placeholder={isLogin ? "Your password" : "At least 8 characters"}
                                     placeholderTextColor="#94A3B8"
                                     secureTextEntry={!showPassword}
                                     value={password}
@@ -86,9 +132,20 @@ const AuthScreen = () => {
                             </View>
                         </View>
 
-                        {/* Sign Up Button */}
-                        <TouchableOpacity style={styles.signUpButton}>
-                            <Text style={styles.signUpButtonText}>Sign Up</Text>
+                        {isLogin && (
+                            <TouchableOpacity style={styles.forgotPassword}>
+                                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {/* Auth Button */}
+                        <TouchableOpacity
+                            style={styles.authButton}
+                            onPress={handleAuth}
+                        >
+                            <Text style={styles.authButtonText}>
+                                {isLogin ? 'Login' : 'Sign Up'}
+                            </Text>
                         </TouchableOpacity>
 
                         {/* Divider */}
@@ -114,9 +171,14 @@ const AuthScreen = () => {
 
                     {/* Footer */}
                     <View style={styles.footer}>
-                        <Text style={styles.footerText}>
-                            Already have an account? <Text style={styles.loginText}>Login</Text>
-                        </Text>
+                        <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
+                            <Text style={styles.footerText}>
+                                {isLogin ? "Don't have an account? " : "Already have an account? "}
+                                <Text style={styles.toggleText}>
+                                    {isLogin ? 'Sign Up' : 'Login'}
+                                </Text>
+                            </Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </KeyboardAvoidingView>
@@ -130,31 +192,29 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.background,
     },
     header: {
+        height: 56,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'center',
         paddingHorizontal: 16,
-        paddingVertical: 10,
     },
     backButton: {
+        position: 'absolute',
+        left: 16,
         padding: 4,
     },
     headerTitle: {
-        fontSize: 19,
+        fontSize: 18,
         fontWeight: '800',
         color: Colors.primary,
-    },
-    placeholder: {
-        width: 32,
     },
     content: {
         flex: 1,
         paddingHorizontal: 24,
-        paddingBottom: 20,
     },
     brandingSection: {
         alignItems: 'center',
-        marginTop: 5,
+        marginTop: 10,
         marginBottom: 20,
     },
     logoContainer: {
@@ -216,7 +276,17 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#1E293B',
     },
-    signUpButton: {
+    forgotPassword: {
+        alignSelf: 'flex-end',
+        marginBottom: 15,
+        marginTop: -5,
+    },
+    forgotPasswordText: {
+        color: Colors.primary,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    authButton: {
         backgroundColor: Colors.primary,
         height: 50,
         borderRadius: 12,
@@ -229,7 +299,7 @@ const styles = StyleSheet.create({
         shadowRadius: 12,
         elevation: 8,
     },
-    signUpButtonText: {
+    authButtonText: {
         color: 'white',
         fontSize: 15,
         fontWeight: '700',
@@ -296,7 +366,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#64748B',
     },
-    loginText: {
+    toggleText: {
         color: Colors.primary,
         fontWeight: '700',
     },

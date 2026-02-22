@@ -18,11 +18,10 @@ type Props = NativeStackScreenProps<RootStackParamList, 'RoleSelection'>;
 type RoleType = 'donor' | 'requester';
 
 const RoleSelectionScreen: React.FC<Props> = ({ navigation }) => {
-  const [selectedRole, setSelectedRole] = useState<RoleType>('requester');
+  const [selectedRole, setSelectedRole] = useState<RoleType>('donor');
 
   const handleContinue = () => {
-    // For now, both roles go to the same Auth screen.
-    navigation.navigate('Auth');
+    navigation.navigate('Auth', { role: selectedRole });
   };
 
   return (
@@ -144,7 +143,7 @@ const RoleSelectionScreen: React.FC<Props> = ({ navigation }) => {
 
         <TouchableOpacity
           style={styles.loginRow}
-          onPress={() => navigation.navigate('Auth')}
+          onPress={() => navigation.navigate('Auth', { role: selectedRole })}
         >
           <Text style={styles.loginQuestion}>Already have an account? </Text>
           <Text style={styles.loginLink}>Login</Text>

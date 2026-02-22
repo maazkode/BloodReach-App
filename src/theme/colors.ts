@@ -1,5 +1,5 @@
 export const Colors = {
-  primary: '#E1292B',
+  primary: '#D32F2F',
   primaryDark: '#8F1D1E',
   white: '#FFFFFF',
   black: '#000000',
@@ -7,12 +7,12 @@ export const Colors = {
   textMain: '#1A1A1A',
   textSecondary: '#666666',
   border: '#E0E0E0',
-  
+
   // Role card backgrounds
   donorLight: '#FEF1F1',
   recipientLight: '#F1F7FF',
   hospitalLight: '#F1FFF8',
-  
+
   // Status colors
   success: '#00A86B',
   successLight: '#E8F5E9',
