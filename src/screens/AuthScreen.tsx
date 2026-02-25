@@ -13,9 +13,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import FAIcon from 'react-native-vector-icons/FontAwesome';
 import { Colors } from '../theme/colors';
+import { Alert } from 'react-native';
 
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
+import { signInWithGoogle } from '../services/authService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 
@@ -54,6 +56,22 @@ const AuthScreen: React.FC<Props> = ({ navigation, route }) => {
             } else {
                 navigation.navigate('RecipientRegistration');
             }
+        }
+    };
+
+    const handleGoogleSignIn = async () => {
+        try {
+            const user = await signInWithGoogle();
+            if (user) {
+                // Navigate based on role after successful Google Sign-In
+                if (role === 'donor') {
+                    navigation.navigate('DonorRegistration');
+                } else {
+                    navigation.navigate('RecipientRegistration');
+                }
+            }
+        } catch (error: any) {
+            Alert.alert('Sign In Error', error.message || 'Something went wrong with Google Sign-In');
         }
     };
 
@@ -157,7 +175,10 @@ const AuthScreen: React.FC<Props> = ({ navigation, route }) => {
 
                         {/* Social Buttons */}
                         <View style={styles.socialGrid}>
-                            <TouchableOpacity style={styles.googleButton}>
+                            <TouchableOpacity
+                                style={styles.googleButton}
+                                onPress={handleGoogleSignIn}
+                            >
                                 <FAIcon name="google" size={18} color="#4285F4" style={styles.socialIcon} />
                                 <Text style={styles.socialButtonText}>Google</Text>
                             </TouchableOpacity>
