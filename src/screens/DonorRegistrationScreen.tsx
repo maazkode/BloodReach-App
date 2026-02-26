@@ -10,216 +10,127 @@ import {
     Platform,
     Modal,
     FlatList,
+    Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-
-const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+import firestore from '@react-native-firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import FAIcon from 'react-native-vector-icons/FontAwesome';
 import { Colors } from '../theme/colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
+import auth from '@react-native-firebase/auth';
+import { createUserDocument } from '../services/firestoreService';
+import { UserDocument } from '../types/database';
+
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DonorRegistration'>;
 
 const DonorRegistrationScreen: React.FC<Props> = ({ navigation }) => {
-    const [fullName, setFullName] = useState('');
+    const [name, setName] = useState('');
     const [age, setAge] = useState('');
     const [weight, setWeight] = useState('');
     const [bloodGroup, setBloodGroup] = useState('');
-    const [city, setCity] = useState('');
-    const [lastDonation, setLastDonation] = useState('');
     const [phone, setPhone] = useState('');
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const [isBloodGroupModalVisible, setIsBloodGroupModalVisible] = useState(false);
+    const [city, setCity] = useState('');
+    const [address, setAddress] = useState('');
+    const [lastDonationDate, setLastDonationDate] = useState<Date | null>(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [isBloodGroupModalVisible, setIsBloodGroupModalVisible] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    // Error states
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
-    const validateField = (field: string, value: string) => {
-        let error = '';
-        switch (field) {
-            case 'fullName':
-                if (!value || value.length < 3) error = 'Enter a valid full name (min 3 characters)';
-                break;
-            case 'age':
-                const ageNum = parseInt(value);
-                if (!value || isNaN(ageNum) || ageNum < 18 || ageNum > 65) error = 'Age must be between 18 and 65';
-                break;
-            case 'weight':
-                const weightNum = parseInt(value);
-                if (!value || isNaN(weightNum) || weightNum < 50) error = 'Weight must be at least 50 kg';
-                break;
-            case 'bloodGroup':
-                if (!value) error = 'Please select a blood group';
-                break;
-            case 'city':
-                if (!value || value.length < 2) error = 'Enter your city';
-                break;
-            case 'phone':
-                const phoneRegex = /^\+92[0-9]{10}$/;
-                if (!value || !phoneRegex.test(value)) error = 'Enter valid Pakistani phone number';
-                break;
-            case 'password':
-                if (!value || value.length < 6) error = 'Password must be at least 6 characters';
-                break;
-            case 'lastDonation':
-                if (value) {
-                    const dateRegex = /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/\d{4}$/;
-                    if (!dateRegex.test(value)) {
-                        error = 'Format must be mm/dd/yyyy';
-                    } else {
-                        const [m, d, y] = value.split('/').map(Number);
-                        const donationDate = new Date(y, m - 1, d);
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
+    const validateForm = () => {
+        let tempErrors: { [key: string]: string } = {};
+        if (!name) tempErrors.name = 'Full name is required';
+        if (!age || isNaN(Number(age))) tempErrors.age = 'Valid age is required';
+        if (!weight || isNaN(Number(weight))) tempErrors.weight = 'Valid weight is required';
+        if (!bloodGroup) tempErrors.bloodGroup = 'Blood group is required';
+        if (!phone) tempErrors.phone = 'Phone number is required';
+        if (!city) tempErrors.city = 'City is required';
+        if (!address) tempErrors.address = 'Address is required';
 
-                        if (donationDate > today) {
-                            error = 'Date cannot be in the future';
-                        } else {
-                            const diffTime = Math.abs(today.getTime() - donationDate.getTime());
-                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                            if (diffDays < 90) {
-                                error = 'You can donate again after 90 days';
-                            }
-                        }
-                    }
-                }
-                break;
-        }
-        setErrors(prev => ({ ...prev, [field]: error }));
-        return error === '';
+        setErrors(tempErrors);
+        return Object.keys(tempErrors).length === 0;
     };
 
-    const handleFieldChange = (field: string, value: string) => {
-        switch (field) {
-            case 'fullName': setFullName(value); break;
-            case 'age': setAge(value); break;
-            case 'weight': setWeight(value); break;
-            case 'bloodGroup':
-                setBloodGroup(value);
-                setIsBloodGroupModalVisible(false);
-                break;
-            case 'city': setCity(value); break;
-            case 'lastDonation': setLastDonation(value); break;
-            case 'phone': setPhone(value); break;
-            case 'password': setPassword(value); break;
-        }
-        validateField(field, value);
-    };
+    const handleRegister = async () => {
+        if (!validateForm()) return;
 
-    const handleDateChange = (event: any, selectedDate?: Date) => {
-        setShowDatePicker(false);
-        if (selectedDate) {
-            const formattedDate = `${(selectedDate.getMonth() + 1).toString().padStart(2, '0')}/${selectedDate.getDate().toString().padStart(2, '0')}/${selectedDate.getFullYear()}`;
-            handleFieldChange('lastDonation', formattedDate);
-        }
-    };
+        setLoading(true);
+        try {
+            const currentUser = auth().currentUser;
+            if (!currentUser) throw new Error('No authenticated user found');
 
-    const isFormValid = () => {
-        const fieldValidations = [
-            validateField('fullName', fullName),
-            validateField('age', age),
-            validateField('weight', weight),
-            validateField('bloodGroup', bloodGroup),
-            validateField('city', city),
-            validateField('phone', phone),
-            validateField('password', password),
-            validateField('lastDonation', lastDonation),
-        ];
-        return fieldValidations.every(v => v === true);
-    };
+            const userData: Partial<UserDocument> = {
+                uid: currentUser.uid,
+                role: 'donor',
+                name,
+                age: Number(age),
+                weight: Number(weight),
+                bloodGroup,
+                phone,
+                city,
+                address,
+                email: currentUser.email || '',
+                photoURL: currentUser.photoURL || '',
+                location: {
+                    latitude: 0,
+                    longitude: 0,
+                },
+                isAvailable: true, // true because role === "donor"
+                lastDonationDate: lastDonationDate ? firestore.Timestamp.fromDate(lastDonationDate) : null,
+                isVerified: false,
+            };
 
-    const handleRegister = () => {
-        if (isFormValid()) {
-            console.log("Saving user data...", { fullName, age, weight, bloodGroup, city, phone });
-            // Set isProfileComplete = true in your auth context or database here
+            await createUserDocument(userData);
             navigation.replace('Home');
+        } catch (error: any) {
+            console.error('Registration Error:', error);
+            Alert.alert('Registration Failed', error.message || 'Something went wrong');
+        } finally {
+            setLoading(false);
         }
     };
-
-    const isSubmitDisabled = !fullName || !age || !weight || !bloodGroup || !city || !phone || !password || Object.values(errors).some(e => e !== '');
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <MaterialIcon name="arrow-back" size={24} color={Colors.primary} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Create Donor Account</Text>
+                <Text style={styles.headerTitle}>Donor Registration</Text>
             </View>
 
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-            >
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                    style={{ flex: 1 }}
-                >
-                    {/* Branding Section */}
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                     <View style={styles.brandingSection}>
                         <View style={styles.logoContainer}>
                             <MaterialIcon name="water-drop" size={32} color={Colors.primary} />
                         </View>
                         <Text style={styles.mainTitle}>Join BloodReach</Text>
-                        <Text style={styles.subtitle}>Your small act can save a life. Register today.</Text>
+                        <Text style={styles.subtitle}>Your small act can save a life. Register as a donor.</Text>
                     </View>
 
-                    {/* Form Card */}
                     <View style={styles.card}>
-                        {/* Full Name */}
+                        {/* Name */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Full Name</Text>
-                            <View style={[styles.inputWrapper, errors.fullName ? styles.inputError : null]}>
-                                <MaterialIcon name="person" size={18} color="#94A3B8" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="John Doe"
-                                    placeholderTextColor="#94A3B8"
-                                    value={fullName}
-                                    onChangeText={(v) => handleFieldChange('fullName', v)}
-                                />
-                            </View>
-                            {errors.fullName ? <Text style={styles.errorText}>{errors.fullName}</Text> : null}
+                            <TextInput style={styles.input} placeholder="John Doe" value={name} onChangeText={setName} />
+                            {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
                         </View>
 
-                        {/* Age and Weight Row */}
+                        {/* Age & Weight */}
                         <View style={styles.row}>
-                            <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
+                            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
                                 <Text style={styles.label}>Age</Text>
-                                <View style={[styles.inputWrapper, errors.age ? styles.inputError : null]}>
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="25"
-                                        placeholderTextColor="#94A3B8"
-                                        keyboardType="numeric"
-                                        value={age}
-                                        onChangeText={(v) => handleFieldChange('age', v)}
-                                    />
-                                </View>
-                                {errors.age ? <Text style={styles.errorText}>{errors.age}</Text> : null}
+                                <TextInput style={styles.input} placeholder="25" keyboardType="numeric" value={age} onChangeText={setAge} />
                             </View>
-                            <View style={[styles.inputGroup, { flex: 1, marginLeft: 10 }]}>
+                            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
                                 <Text style={styles.label}>Weight (kg)</Text>
-                                <View style={[styles.inputWrapper, errors.weight ? styles.inputError : null]}>
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="70"
-                                        placeholderTextColor="#94A3B8"
-                                        keyboardType="numeric"
-                                        value={weight}
-                                        onChangeText={(v) => handleFieldChange('weight', v)}
-                                    />
-                                </View>
-                                {errors.weight ? <Text style={styles.errorText}>{errors.weight}</Text> : null}
+                                <TextInput style={styles.input} placeholder="70" keyboardType="numeric" value={weight} onChangeText={setWeight} />
                             </View>
                         </View>
 
@@ -227,159 +138,88 @@ const DonorRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Blood Group</Text>
                             <TouchableOpacity
-                                style={[styles.inputWrapper, errors.bloodGroup ? styles.inputError : null]}
-                                activeOpacity={0.7}
+                                style={styles.inputWrapper}
                                 onPress={() => setIsBloodGroupModalVisible(true)}
                             >
-                                <MaterialIcon name="opacity" size={18} color="#94A3B8" style={styles.inputIcon} />
-                                <Text style={[styles.input, { color: bloodGroup ? '#1E293B' : '#94A3B8', paddingTop: 14 }]}>
+                                <Text style={{ color: bloodGroup ? '#1E293B' : '#94A3B8' }}>
                                     {bloodGroup || "Select blood type"}
                                 </Text>
                                 <MaterialIcon name="expand-more" size={20} color="#94A3B8" />
                             </TouchableOpacity>
-                            {errors.bloodGroup ? <Text style={styles.errorText}>{errors.bloodGroup}</Text> : null}
                         </View>
 
                         {/* City */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>City</Text>
-                            <View style={[styles.inputWrapper, errors.city ? styles.inputError : null]}>
-                                <MaterialIcon name="location-pin" size={18} color="#94A3B8" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Enter city"
-                                    placeholderTextColor="#94A3B8"
-                                    value={city}
-                                    onChangeText={(v) => handleFieldChange('city', v)}
-                                />
-                            </View>
-                            {errors.city ? <Text style={styles.errorText}>{errors.city}</Text> : null}
+                            <TextInput style={styles.input} placeholder="Your City" value={city} onChangeText={setCity} />
+                        </View>
+
+                        {/* Phone */}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Phone Number</Text>
+                            <TextInput style={styles.input} placeholder="+92XXXXXXXXXX" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
                         </View>
 
                         {/* Last Donation Date */}
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Last Donation Date</Text>
-                            <View style={[styles.inputWrapper, errors.lastDonation ? styles.inputError : null]}>
-                                <MaterialIcon name="calendar-today" size={18} color="#94A3B8" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="mm/dd/yyyy"
-                                    placeholderTextColor="#94A3B8"
-                                    value={lastDonation}
-                                    onChangeText={(v) => handleFieldChange('lastDonation', v)}
+                            <Text style={styles.label}>Last Donation Date (Optional)</Text>
+                            <TouchableOpacity
+                                style={styles.inputWrapper}
+                                onPress={() => setShowDatePicker(true)}
+                            >
+                                <Text style={{ color: lastDonationDate ? '#1E293B' : '#94A3B8' }}>
+                                    {lastDonationDate ? lastDonationDate.toDateString() : "Select date if you donated before"}
+                                </Text>
+                                <MaterialIcon name="calendar-today" size={20} color="#94A3B8" />
+                            </TouchableOpacity>
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    value={lastDonationDate || new Date()}
+                                    mode="date"
+                                    display="default"
+                                    maximumDate={new Date()}
+                                    onChange={(event, selectedDate) => {
+                                        setShowDatePicker(false);
+                                        if (selectedDate) setLastDonationDate(selectedDate);
+                                    }}
                                 />
-                                <TouchableOpacity onPress={() => setShowDatePicker(true)}>
-                                    <MaterialIcon name="calendar-today" size={18} color={Colors.primary} />
-                                </TouchableOpacity>
-                                {showDatePicker && (
-                                    <DateTimePicker
-                                        value={(() => {
-                                            if (lastDonation) {
-                                                const d = new Date(lastDonation);
-                                                return isNaN(d.getTime()) ? new Date() : d;
-                                            }
-                                            return new Date();
-                                        })()}
-                                        mode="date"
-                                        display="default"
-                                        maximumDate={new Date()}
-                                        onChange={handleDateChange}
-                                    />
-                                )}
-                            </View>
-                            {errors.lastDonation ? <Text style={styles.errorText}>{errors.lastDonation}</Text> : null}
+                            )}
                         </View>
 
-                        {/* Phone Number */}
+                        {/* Address */}
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Phone Number</Text>
-                            <View style={[styles.inputWrapper, errors.phone ? styles.inputError : null]}>
-                                <MaterialIcon name="phone" size={18} color="#94A3B8" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="+92 XXX XXX XXXX"
-                                    placeholderTextColor="#94A3B8"
-                                    keyboardType="phone-pad"
-                                    value={phone}
-                                    onChangeText={(v) => handleFieldChange('phone', v)}
-                                />
-                            </View>
-                            {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
+                            <Text style={styles.label}>Address</Text>
+                            <TextInput style={styles.input} placeholder="Full Home Address" multiline value={address} onChangeText={setAddress} />
                         </View>
 
-                        {/* Password */}
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Password</Text>
-                            <View style={[styles.inputWrapper, errors.password ? styles.inputError : null]}>
-                                <MaterialIcon name="lock" size={18} color="#94A3B8" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="********"
-                                    placeholderTextColor="#94A3B8"
-                                    secureTextEntry={!showPassword}
-                                    value={password}
-                                    onChangeText={(v) => handleFieldChange('password', v)}
-                                />
-                                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                                    <MaterialIcon
-                                        name={showPassword ? "visibility" : "visibility-off"}
-                                        size={20}
-                                        color="#94A3B8"
-                                    />
-                                </TouchableOpacity>
-                            </View>
-                            {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
-                        </View>
-
-                        {/* Register Button */}
                         <TouchableOpacity
-                            style={[styles.registerButton, isSubmitDisabled ? styles.buttonDisabled : null]}
+                            style={[styles.registerButton, loading && { opacity: 0.7 }]}
                             onPress={handleRegister}
-                            disabled={isSubmitDisabled}
+                            disabled={loading}
                         >
-                            <Text style={styles.registerButtonText}>Register</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Footer */}
-                    <View style={styles.footer}>
-                        <TouchableOpacity onPress={() => navigation.navigate('Auth', { role: 'donor' })}>
-                            <Text style={styles.footerText}>
-                                Already have an account? <Text style={styles.loginText}>Login</Text>
-                            </Text>
+                            <Text style={styles.registerButtonText}>{loading ? 'Saving...' : 'Become a Donor'}</Text>
                         </TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>
             </ScrollView>
 
-            {/* Blood Group Modal */}
-            <Modal
-                visible={isBloodGroupModalVisible}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setIsBloodGroupModalVisible(false)}
-            >
+            <Modal visible={isBloodGroupModalVisible} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>Select Blood Group</Text>
-                        <FlatList
-                            data={BLOOD_GROUPS}
-                            keyExtractor={(item) => item}
-                            renderItem={({ item }) => (
+                        <View style={styles.bloodGrid}>
+                            {BLOOD_GROUPS.map((item) => (
                                 <TouchableOpacity
-                                    style={styles.modalItem}
-                                    onPress={() => handleFieldChange('bloodGroup', item)}
+                                    key={item}
+                                    style={[styles.bloodItem, bloodGroup === item && styles.bloodItemSelected]}
+                                    onPress={() => { setBloodGroup(item); setIsBloodGroupModalVisible(false); }}
                                 >
-                                    <Text style={styles.modalItemText}>{item}</Text>
-                                    {bloodGroup === item && <MaterialIcon name="check" size={20} color={Colors.primary} />}
+                                    <Text style={[styles.bloodItemText, bloodGroup === item && styles.bloodItemTextSelected]}>{item}</Text>
                                 </TouchableOpacity>
-                            )}
-                        />
-                        <TouchableOpacity
-                            style={styles.modalCloseButton}
-                            onPress={() => setIsBloodGroupModalVisible(false)}
-                        >
-                            <Text style={styles.modalCloseButtonText}>Close</Text>
+                            ))}
+                        </View>
+                        <TouchableOpacity style={styles.modalCloseButton} onPress={() => setIsBloodGroupModalVisible(false)}>
+                            <Text style={styles.modalCloseButtonText}>Cancel</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -389,188 +229,34 @@ const DonorRegistrationScreen: React.FC<Props> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F7F7F7',
-    },
-    header: {
-        height: 56,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 16,
-        backgroundColor: 'white',
-    },
-    backButton: {
-        position: 'absolute',
-        left: 16,
-        padding: 4,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '800',
-        color: '#1E293B',
-    },
-    scrollContent: {
-        paddingHorizontal: 16,
-        paddingBottom: 40,
-    },
-    brandingSection: {
-        alignItems: 'center',
-        marginTop: 30,
-        marginBottom: 30,
-    },
-    logoContainer: {
-        width: 60,
-        height: 60,
-        backgroundColor: '#FDECEC',
-        borderRadius: 30,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    mainTitle: {
-        fontSize: 24,
-        fontWeight: '800',
-        color: '#1E293B',
-        marginBottom: 8,
-    },
-    subtitle: {
-        fontSize: 14,
-        color: '#64748B',
-        textAlign: 'center',
-        paddingHorizontal: 40,
-        lineHeight: 20,
-    },
-    card: {
-        backgroundColor: 'white',
-        borderRadius: 16,
-        padding: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 3,
-    },
-    inputGroup: {
-        marginBottom: 16,
-    },
-    label: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#1E293B',
-        marginBottom: 8,
-    },
-    inputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F8FAFC',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-        paddingHorizontal: 14,
-        height: 50,
-    },
-    inputIcon: {
-        marginRight: 10,
-    },
-    input: {
-        flex: 1,
-        fontSize: 14,
-        color: '#1E293B',
-    },
-    row: {
-        flexDirection: 'row',
-    },
-    registerButton: {
-        backgroundColor: Colors.primary,
-        height: 50,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 10,
-        shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    registerButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '700',
-    },
-    footer: {
-        marginTop: 24,
-        marginBottom: 20,
-        alignItems: 'center',
-    },
-    footerText: {
-        fontSize: 14,
-        color: '#64748B',
-    },
-    loginText: {
-        color: Colors.primary,
-        fontWeight: '700',
-    },
-    inputError: {
-        borderColor: Colors.error,
-    },
-    errorText: {
-        color: Colors.error,
-        fontSize: 11,
-        marginTop: 4,
-        marginLeft: 4,
-    },
-    buttonDisabled: {
-        backgroundColor: '#E2E8F0',
-        shadowColor: 'transparent',
-        elevation: 0,
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    modalContent: {
-        width: '80%',
-        backgroundColor: 'white',
-        borderRadius: 20,
-        padding: 20,
-        maxHeight: '60%',
-    },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: '800',
-        color: '#1E293B',
-        marginBottom: 15,
-        textAlign: 'center',
-    },
-    modalItem: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingVertical: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
-    },
-    modalItemText: {
-        fontSize: 16,
-        color: '#1E293B',
-        fontWeight: '500',
-    },
-    modalCloseButton: {
-        marginTop: 15,
-        paddingVertical: 12,
-        backgroundColor: '#F1F5F9',
-        borderRadius: 10,
-        alignItems: 'center',
-    },
-    modalCloseButtonText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#64748B',
-    },
+    container: { flex: 1, backgroundColor: '#F8FAFC' },
+    header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'white' },
+    backButton: { position: 'absolute', left: 16 },
+    headerTitle: { fontSize: 18, fontWeight: '800', color: Colors.primary },
+    scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
+    brandingSection: { alignItems: 'center', marginVertical: 30 },
+    logoContainer: { width: 60, height: 60, backgroundColor: '#FEE2E2', borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+    mainTitle: { fontSize: 24, fontWeight: 'bold', color: '#1E293B' },
+    subtitle: { fontSize: 14, color: '#64748B', textAlign: 'center' },
+    card: { backgroundColor: 'white', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+    inputGroup: { marginBottom: 16 },
+    label: { fontSize: 13, fontWeight: '600', color: '#475569', marginBottom: 6 },
+    input: { backgroundColor: '#F1F5F9', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1E293B' },
+    inputWrapper: { backgroundColor: '#F1F5F9', borderRadius: 12, paddingHorizontal: 16, height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    row: { flexDirection: 'row' },
+    registerButton: { backgroundColor: Colors.primary, height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
+    registerButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
+    errorText: { color: Colors.error, fontSize: 11, marginTop: 4 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24 },
+    modalTitle: { fontSize: 20, fontWeight: '800', color: '#1E293B', marginBottom: 20, textAlign: 'center' },
+    bloodGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+    bloodItem: { width: '23%', aspectRatio: 1, backgroundColor: '#F1F5F9', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+    bloodItemSelected: { backgroundColor: Colors.primary },
+    bloodItemText: { fontSize: 16, fontWeight: '700', color: '#475569' },
+    bloodItemTextSelected: { color: 'white' },
+    modalCloseButton: { marginTop: 10, paddingVertical: 12, alignItems: 'center' },
+    modalCloseButtonText: { color: '#64748B', fontWeight: '600' },
 });
 
 export default DonorRegistrationScreen;

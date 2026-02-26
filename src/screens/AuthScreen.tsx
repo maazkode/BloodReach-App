@@ -18,6 +18,8 @@ import { Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { signInWithGoogle } from '../services/authService';
+import { checkUserExists } from '../services/firestoreService';
+
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 
@@ -63,14 +65,23 @@ const AuthScreen: React.FC<Props> = ({ navigation, route }) => {
         try {
             const user = await signInWithGoogle();
             if (user) {
-                // Navigate based on role after successful Google Sign-In
-                if (role === 'donor') {
-                    navigation.navigate('DonorRegistration');
+                // Check if user document exists in Firestore
+                const exists = await checkUserExists(user.uid);
+
+                if (exists) {
+                    // User already registered, go to Home
+                    navigation.replace('Home');
                 } else {
-                    navigation.navigate('RecipientRegistration');
+                    // New user, navigate to Registration Screen based on role
+                    if (role === 'donor') {
+                        navigation.navigate('DonorRegistration');
+                    } else {
+                        navigation.navigate('RecipientRegistration');
+                    }
                 }
             }
         } catch (error: any) {
+            console.error('Sign In Error:', error);
             Alert.alert('Sign In Error', error.message || 'Something went wrong with Google Sign-In');
         }
     };

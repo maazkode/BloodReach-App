@@ -1,21 +1,16 @@
 import auth from '@react-native-firebase/auth';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import { createUser } from './firestoreService';
 import { Alert } from 'react-native';
-
 
 /**
  * Configure Google Sign-In with your Web Client ID from Firebase Console.
- * Path: Settings > General > Your apps > Web apps (or Android app's Web Client ID in Auth section)
  */
 GoogleSignin.configure({
     webClientId: '77440415256-99qs4h1gk8ec50brk7vb427a4br49pm9.apps.googleusercontent.com', // Replace with actual Web Client ID
 });
 
 /**
- * Handles the Google Sign-In process, Firebase authentication, 
- * and user document creation in Firestore.
- * 
+ * Handles the Google Sign-In process, Firebase authentication.
  * @returns The authenticated user object or null if cancelled.
  */
 export const signInWithGoogle = async () => {
@@ -24,11 +19,9 @@ export const signInWithGoogle = async () => {
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
         // Step 1: Trigger Google Sign-In picker
-        // const { idToken, user: googleUser } = await GoogleSignin.signIn();
         const signInResult = await GoogleSignin.signIn();
 
         const idToken = signInResult.data?.idToken;
-        const googleUser = signInResult.data?.user;
 
         if (!idToken) {
             throw new Error('Google Sign-In failed: No ID Token found.');
@@ -41,14 +34,7 @@ export const signInWithGoogle = async () => {
         const userCredential = await auth().signInWithCredential(googleCredential);
         const firebaseUser = userCredential.user;
 
-        // Step 4: After successful login, ensure user exists in Firestore
         if (firebaseUser) {
-            await createUser({
-                uid: firebaseUser.uid,
-                name: firebaseUser.displayName || googleUser?.name || 'Anonymous User',
-                email: firebaseUser.email || googleUser?.email || '',
-            });
-
             console.log('Google Sign-In successful for:', firebaseUser.email);
             return firebaseUser;
         }

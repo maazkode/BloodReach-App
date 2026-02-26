@@ -1,55 +1,96 @@
 import {
     getFirestore,
     doc,
-    setDoc,
     getDoc,
+    setDoc,
+    collection,
+    addDoc,
     serverTimestamp
 } from '@react-native-firebase/firestore';
+import { UserDocument, DonationRequest, Donation } from '../types/database';
 
 /**
- * Initialize Firestore instance using the modular API.
+ * Initialize Firestore instance
  */
 const db = getFirestore();
 
 /**
- * Interface for User data
+ * Checks if a user document exists in Firestore using UID.
+ * @param uid - Firebase Auth UID
+ * @returns Promise<boolean>
  */
-interface UserData {
-    uid: string;
-    name: string;
-    email: string;
-}
+export const checkUserExists = async (uid: string): Promise<boolean> => {
+    try {
+        const userRef = doc(db, 'users', uid);
+        const userSnap = await getDoc(userRef);
+        return userSnap.exists();
+    } catch (error) {
+        console.error('Error checking user existence:', error);
+        throw error;
+    }
+};
 
 /**
- * Creates a new user document in the "users" collection if it doesn't already exist.
- * 
- * @param user - The user object containing uid, name, and email.
+ * Creates or updates a user document in the "users" collection.
+ * @param userData - Partial user data to save
  */
-export const createUser = async (user: UserData): Promise<void> => {
+export const createUserDocument = async (userData: Partial<UserDocument>): Promise<void> => {
+    if (!userData.uid) throw new Error('UID is required to create a user document');
+
     try {
-        const userRef = doc(db, 'users', user.uid);
+        const userRef = doc(db, 'users', userData.uid);
 
-        // Check if user already exists to avoid duplicates/overwriting data
-        const userSnap = await getDoc(userRef);
-
-        if (userSnap.exists()) {
-            console.log('User already exists in Firestore, skipping creation.');
-            return;
-        }
-
-        // Document structure for new users
-        const userData = {
-            name: user.name,
-            email: user.email,
-            credits: 10,
-            role: 'user',
+        const finalData = {
+            ...userData,
+            isAvailable: userData.role === 'donor', // Default available if donor
+            lastDonationDate: userData.lastDonationDate || null,
+            isVerified: userData.isVerified || false,
             createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
         };
 
-        await setDoc(userRef, userData);
-        console.log('New user document created successfully:', user.uid);
+        // We use { merge: true } to avoid overwriting existing fields if any
+        await setDoc(userRef, finalData as any, { merge: true });
+        console.log('User document saved successfully');
     } catch (error) {
-        console.error('Error in createUser:', error);
+        console.error('Error creating user document:', error);
+        throw error;
+    }
+};
+
+/**
+ * Creates a new donation request in the "donationRequests" collection.
+ * @param requestData - Donation request data
+ */
+export const createDonationRequest = async (requestData: Omit<DonationRequest, 'createdAt' | 'updatedAt'>): Promise<string> => {
+    try {
+        const colRef = collection(db, 'donationRequests');
+        const docRef = await addDoc(colRef, {
+            ...requestData,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        } as any);
+        return docRef.id;
+    } catch (error) {
+        console.error('Error creating donation request:', error);
+        throw error;
+    }
+};
+
+/**
+ * Creates a new donation record in the "donations" collection.
+ * @param donationData - Donation data
+ */
+export const createDonation = async (donationData: Omit<Donation, 'createdAt'>): Promise<string> => {
+    try {
+        const colRef = collection(db, 'donations');
+        const docRef = await addDoc(colRef, {
+            ...donationData,
+            createdAt: serverTimestamp(),
+        } as any);
+        return docRef.id;
+    } catch (error) {
+        console.error('Error creating donation:', error);
         throw error;
     }
 };
