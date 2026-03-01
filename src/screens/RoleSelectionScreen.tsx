@@ -12,16 +12,28 @@ import FAIcon from 'react-native-vector-icons/FontAwesome5';
 import { Colors } from '../theme/colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
+import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoleSelection'>;
 
 type RoleType = 'donor' | 'requester';
 
 const RoleSelectionScreen: React.FC<Props> = ({ navigation }) => {
+  const { user } = useAuth();
   const [selectedRole, setSelectedRole] = useState<RoleType>('donor');
 
   const handleContinue = () => {
-    navigation.navigate('Auth', { role: selectedRole });
+    if (user) {
+      // User is already authenticated in Firebase but missing Firestore doc
+      if (selectedRole === 'donor') {
+        navigation.navigate('DonorRegistration');
+      } else {
+        navigation.navigate('RecipientRegistration');
+      }
+    } else {
+      // New user, go to Auth screen to login/signup
+      navigation.navigate('Auth', { role: selectedRole });
+    }
   };
 
   return (

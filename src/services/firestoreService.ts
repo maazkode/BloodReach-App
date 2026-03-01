@@ -31,6 +31,25 @@ export const checkUserExists = async (uid: string): Promise<boolean> => {
 };
 
 /**
+ * Fetches a user document from Firestore.
+ * @param uid - Firebase Auth UID
+ * @returns Promise<UserDocument | null>
+ */
+export const getUserDocument = async (uid: string): Promise<UserDocument | null> => {
+    try {
+        const userRef = doc(db, 'users', uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+            return userSnap.data() as UserDocument;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error fetching user document:', error);
+        throw error;
+    }
+};
+
+/**
  * Creates or updates a user document in the "users" collection.
  * @param userData - Partial user data to save
  */

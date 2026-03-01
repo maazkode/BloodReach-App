@@ -17,8 +17,8 @@ import { Alert } from 'react-native';
 
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { signInWithGoogle } from '../services/authService';
-import { checkUserExists } from '../services/firestoreService';
+import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../services/authService';
+import { checkUserExists, getUserDocument } from '../services/firestoreService';
 
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
@@ -30,34 +30,48 @@ const AuthScreen: React.FC<Props> = ({ navigation, route }) => {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
-    const handleAuth = () => {
-        if (isLogin) {
-            // Mocking authentication and profile check
-            // For now, let's assume if role is donor, check donorProfileComplete
-            // if role is requester, check recipientProfileComplete
-            const isDonorProfileComplete = false;
-            const isRecipientProfileComplete = false;
+    const handleAuth = async () => {
+        if (!email || !password) {
+            Alert.alert('Error', 'Please enter email and password');
+            return;
+        }
 
-            if (role === 'donor') {
-                if (isDonorProfileComplete) {
-                    navigation.navigate('Home');
-                } else {
-                    navigation.navigate('DonorRegistration');
+        try {
+            if (isLogin) {
+                const user = await signInWithEmail(email, password);
+                if (user) {
+                    const exists = await checkUserExists(user.uid);
+                    if (exists) {
+                        const userDoc = await getUserDocument(user.uid);
+                        if (userDoc?.role === 'donor') {
+                            navigation.replace('DonorDashboard');
+                        } else if (userDoc?.role === 'requester') {
+                            navigation.replace('RequesterDashboard');
+                        } else {
+                            navigation.replace('Home');
+                        }
+                    } else {
+                        // Profile not created yet
+                        if (role === 'donor') {
+                            navigation.navigate('DonorRegistration');
+                        } else {
+                            navigation.navigate('RecipientRegistration');
+                        }
+                    }
                 }
             } else {
-                if (isRecipientProfileComplete) {
-                    navigation.navigate('Home');
-                } else {
-                    navigation.navigate('RecipientRegistration');
+                const user = await signUpWithEmail(email, password);
+                if (user) {
+                    if (role === 'donor') {
+                        navigation.navigate('DonorRegistration');
+                    } else {
+                        navigation.navigate('RecipientRegistration');
+                    }
                 }
             }
-        } else {
-            // On Signup success
-            if (role === 'donor') {
-                navigation.navigate('DonorRegistration');
-            } else {
-                navigation.navigate('RecipientRegistration');
-            }
+        } catch (error: any) {
+            console.error('Auth Error:', error);
+            Alert.alert('Authentication Error', error.message || 'Something went wrong');
         }
     };
 
@@ -65,14 +79,18 @@ const AuthScreen: React.FC<Props> = ({ navigation, route }) => {
         try {
             const user = await signInWithGoogle();
             if (user) {
-                // Check if user document exists in Firestore
                 const exists = await checkUserExists(user.uid);
 
                 if (exists) {
-                    // User already registered, go to Home
-                    navigation.replace('Home');
+                    const userDoc = await getUserDocument(user.uid);
+                    if (userDoc?.role === 'donor') {
+                        navigation.replace('DonorDashboard');
+                    } else if (userDoc?.role === 'requester') {
+                        navigation.replace('RequesterDashboard');
+                    } else {
+                        navigation.replace('Home');
+                    }
                 } else {
-                    // New user, navigate to Registration Screen based on role
                     if (role === 'donor') {
                         navigation.navigate('DonorRegistration');
                     } else {

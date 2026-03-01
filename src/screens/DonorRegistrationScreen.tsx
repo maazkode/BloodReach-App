@@ -86,7 +86,7 @@ const DonorRegistrationScreen: React.FC<Props> = ({ navigation }) => {
             };
 
             await createUserDocument(userData);
-            navigation.replace('Home');
+            navigation.replace('DonorDashboard');
         } catch (error: any) {
             console.error('Registration Error:', error);
             Alert.alert('Registration Failed', error.message || 'Something went wrong');

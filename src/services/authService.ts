@@ -57,6 +57,32 @@ export const signInWithGoogle = async () => {
 };
 
 /**
+ * Signs up a user with email and password.
+ */
+export const signUpWithEmail = async (email: string, pass: string) => {
+    try {
+        const userCredential = await auth().createUserWithEmailAndPassword(email, pass);
+        return userCredential.user;
+    } catch (error: any) {
+        console.error('Sign Up Error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Signs in a user with email and password.
+ */
+export const signInWithEmail = async (email: string, pass: string) => {
+    try {
+        const userCredential = await auth().signInWithEmailAndPassword(email, pass);
+        return userCredential.user;
+    } catch (error: any) {
+        console.error('Sign In Error:', error);
+        throw error;
+    }
+};
+
+/**
  * Sign out from both Firebase and Google.
  */
 export const signOut = async () => {
