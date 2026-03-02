@@ -13,15 +13,15 @@ import {
     Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import firestore from '@react-native-firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { Colors } from '../theme/colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import auth from '@react-native-firebase/auth';
+import { getAuth } from '@react-native-firebase/auth';
 import { createUserDocument } from '../services/firestoreService';
 import { UserDocument } from '../types/database';
+import { Timestamp } from '@react-native-firebase/firestore';
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -61,7 +61,7 @@ const DonorRegistrationScreen: React.FC<Props> = ({ navigation }) => {
 
         setLoading(true);
         try {
-            const currentUser = auth().currentUser;
+            const currentUser = getAuth().currentUser;
             if (!currentUser) throw new Error('No authenticated user found');
 
             const userData: Partial<UserDocument> = {
@@ -81,7 +81,7 @@ const DonorRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                     longitude: 0,
                 },
                 isAvailable: true, // true because role === "donor"
-                lastDonationDate: lastDonationDate ? firestore.Timestamp.fromDate(lastDonationDate) : null,
+                lastDonationDate: lastDonationDate ? Timestamp.fromDate(lastDonationDate) : null,
                 isVerified: false,
             };
 

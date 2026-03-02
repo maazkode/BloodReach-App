@@ -1,4 +1,4 @@
-import auth from '@react-native-firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithCredential, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from '@react-native-firebase/auth';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { Alert } from 'react-native';
 
@@ -15,6 +15,7 @@ GoogleSignin.configure({
  */
 export const signInWithGoogle = async () => {
     try {
+        const auth = getAuth();
         // Check if device has Google Play Services
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
@@ -28,10 +29,10 @@ export const signInWithGoogle = async () => {
         }
 
         // Step 2: Create a Google credential with the token
-        const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+        const googleCredential = GoogleAuthProvider.credential(idToken);
 
         // Step 3: Authenticate with Firebase using the credential
-        const userCredential = await auth().signInWithCredential(googleCredential);
+        const userCredential = await signInWithCredential(auth, googleCredential);
         const firebaseUser = userCredential.user;
 
         if (firebaseUser) {
@@ -61,7 +62,8 @@ export const signInWithGoogle = async () => {
  */
 export const signUpWithEmail = async (email: string, pass: string) => {
     try {
-        const userCredential = await auth().createUserWithEmailAndPassword(email, pass);
+        const auth = getAuth();
+        const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
         return userCredential.user;
     } catch (error: any) {
         console.error('Sign Up Error:', error);
@@ -74,7 +76,8 @@ export const signUpWithEmail = async (email: string, pass: string) => {
  */
 export const signInWithEmail = async (email: string, pass: string) => {
     try {
-        const userCredential = await auth().signInWithEmailAndPassword(email, pass);
+        const auth = getAuth();
+        const userCredential = await signInWithEmailAndPassword(auth, email, pass);
         return userCredential.user;
     } catch (error: any) {
         console.error('Sign In Error:', error);
@@ -87,8 +90,9 @@ export const signInWithEmail = async (email: string, pass: string) => {
  */
 export const signOut = async () => {
     try {
+        const auth = getAuth();
         await GoogleSignin.signOut();
-        await auth().signOut();
+        await firebaseSignOut(auth);
         console.log('Signed out successfully');
     } catch (error) {
         console.error('Sign-Out Error:', error);

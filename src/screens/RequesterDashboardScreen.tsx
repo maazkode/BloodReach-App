@@ -14,6 +14,11 @@ import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { Colors } from '../theme/colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
+import { useAuth } from '../context/AuthContext';
+import { getUserDocument } from '../services/firestoreService';
+import { UserDocument } from '../types/database';
+import { signOut } from '../services/authService';
+import { Modal, Animated, Pressable } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -56,6 +61,45 @@ const REQUESTS_DATA = [
 
 const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
+    const [userData, setUserData] = React.useState<UserDocument | null>(null);
+    const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+    const slideAnim = React.useRef(new Animated.Value(-width * 0.75)).current;
+
+    React.useEffect(() => {
+        const fetchUserData = async () => {
+            if (user) {
+                const data = await getUserDocument(user.uid);
+                setUserData(data);
+            }
+        };
+        fetchUserData();
+    }, [user]);
+
+    const toggleDrawer = (open: boolean) => {
+        if (open) {
+            setIsDrawerOpen(true);
+            Animated.timing(slideAnim, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: true,
+            }).start();
+        } else {
+            Animated.timing(slideAnim, {
+                toValue: -width * 0.75,
+                duration: 250,
+                useNativeDriver: true,
+            }).start(() => setIsDrawerOpen(false));
+        }
+    };
+
+    const handleLogout = async () => {
+        try {
+            await signOut();
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+    };
 
     const renderStatusBadge = (status: string) => {
         let bgColor = '#F1F5F9';
@@ -89,18 +133,88 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
+            {/* Sidebar Drawer Modal */}
+            <Modal
+                transparent
+                visible={isDrawerOpen}
+                onRequestClose={() => toggleDrawer(false)}
+                animationType="none"
+            >
+                <View style={styles.modalOverlayOuter}>
+                    <Pressable
+                        style={styles.modalBackdrop}
+                        onPress={() => toggleDrawer(false)}
+                    />
+                    <Animated.View
+                        style={[
+                            styles.drawerContainer,
+                            { transform: [{ translateX: slideAnim }] }
+                        ]}
+                    >
+                        <View style={[styles.drawerHeader, { paddingTop: insets.top + 20 }]}>
+                            <View style={styles.profileSection}>
+                                <View style={styles.profileImageContainer}>
+                                    {userData?.photoURL ? (
+                                        <Image source={{ uri: userData.photoURL }} style={styles.profileImage} />
+                                    ) : (
+                                        <MaterialIcon name="person" size={40} color={Colors.primary} />
+                                    )}
+                                </View>
+                                <Text style={styles.profileName} numberOfLines={1}>
+                                    {userData?.name || 'Requester'}
+                                </Text>
+                                <Text style={styles.profileEmail} numberOfLines={1}>
+                                    {user?.email || 'user@bloodreach.com'}
+                                </Text>
+                            </View>
+
+                            <View style={styles.drawerBadgeRow}>
+                                <View style={styles.bloodTypeBadge}>
+                                    <Text style={styles.bloodTypeBadgeText}>{userData?.bloodGroup || '--'}</Text>
+                                </View>
+                                <View style={styles.statusBadge}>
+                                    <Text style={styles.statusBadgeText}>REQUESTER</Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        <View style={styles.drawerItems}>
+                            <TouchableOpacity style={styles.drawerItem}>
+                                <MaterialIcon name="edit" size={22} color="#64748B" />
+                                <Text style={styles.drawerItemText}>Edit Profile</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.drawerItem}>
+                                <MaterialIcon name="list-alt" size={22} color="#64748B" />
+                                <Text style={styles.drawerItemText}>My Requests</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.drawerItem}>
+                                <MaterialIcon name="settings" size={22} color="#64748B" />
+                                <Text style={styles.drawerItemText}>Settings</Text>
+                            </TouchableOpacity>
+                            <View style={styles.drawerDivider} />
+                            <TouchableOpacity style={styles.drawerItem} onPress={handleLogout}>
+                                <MaterialIcon name="logout" size={22} color="#EF4444" />
+                                <Text style={[styles.drawerItemText, { color: '#EF4444' }]}>Logout</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.versionText}>Version 1.0.0</Text>
+                    </Animated.View>
+                </View>
+            </Modal>
+
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-                <View style={styles.headerInfo}>
+                <TouchableOpacity onPress={() => toggleDrawer(true)} style={styles.headerInfo}>
                     <Image
-                        source={{ uri: 'https://i.pravatar.cc/100?u=sarah' }}
+                        source={{ uri: userData?.photoURL || 'https://i.pravatar.cc/100?u=user' }}
                         style={styles.avatar}
                     />
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.welcomeText}>Welcome back,</Text>
-                        <Text style={styles.userName}>Hello, Sarah</Text>
+                        <Text style={styles.userName}>Hello, {userData?.name?.split(' ')[0] || 'User'}</Text>
                     </View>
-                </View>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.notificationButton}>
                     <MaterialIcon name="notifications" size={26} color="#475569" />
                 </TouchableOpacity>
@@ -115,7 +229,7 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                     <View style={styles.plusCircle}>
                         <MaterialIcon name="add" size={24} color={Colors.primary} />
                     </View>
-                    <Text style={styles.createRequestText}>+ Create Blood Request</Text>
+                    <Text style={styles.createRequestText}>Create Blood Request</Text>
                 </TouchableOpacity>
 
                 {/* Stats Row */}
@@ -353,6 +467,70 @@ const styles = StyleSheet.create({
     },
     navItem: { alignItems: 'center' },
     navText: { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginTop: 4 },
+    // Side Drawer Styles
+    modalOverlayOuter: { flex: 1, flexDirection: 'row' },
+    modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
+    drawerContainer: {
+        width: width * 0.75,
+        height: '100%',
+        backgroundColor: 'white',
+        borderTopRightRadius: 30,
+        borderBottomRightRadius: 30,
+        paddingHorizontal: 20,
+        elevation: 16,
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 25,
+    },
+    drawerHeader: { paddingVertical: 30, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+    profileSection: { marginBottom: 20 },
+    profileImageContainer: {
+        width: 70,
+        height: 70,
+        borderRadius: 22,
+        backgroundColor: '#FDECEC',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+        borderWidth: 2,
+        borderColor: '#FEE2E2',
+    },
+    profileImage: { width: '100%', height: '100%', borderRadius: 20 },
+    profileName: { fontSize: 18, fontWeight: '800', color: '#1E293B', marginBottom: 4 },
+    profileEmail: { fontSize: 13, color: '#64748B', fontWeight: '500' },
+    drawerBadgeRow: { flexDirection: 'row', alignItems: 'center' },
+    bloodTypeBadge: {
+        backgroundColor: '#DC2626',
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+        borderRadius: 8,
+        marginRight: 10,
+    },
+    bloodTypeBadgeText: { color: 'white', fontSize: 14, fontWeight: '800' },
+    statusBadge: {
+        backgroundColor: '#F1F5F9',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 6,
+    },
+    statusBadgeText: { fontSize: 10, fontWeight: '800', color: '#64748B' },
+    drawerItems: { marginTop: 25 },
+    drawerItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        marginBottom: 8,
+    },
+    drawerItemText: { fontSize: 15, fontWeight: '600', color: '#475569', marginLeft: 14 },
+    drawerDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 15 },
+    versionText: {
+        position: 'absolute',
+        bottom: 30,
+        left: 20,
+        fontSize: 11,
+        color: '#94A3B8',
+        fontWeight: '600',
+    },
 });
 
 export default RequesterDashboard;

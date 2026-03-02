@@ -15,7 +15,7 @@ import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { Colors } from '../theme/colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import auth from '@react-native-firebase/auth';
+import { getAuth } from '@react-native-firebase/auth';
 import { createUserDocument } from '../services/firestoreService';
 import { UserDocument } from '../types/database';
 
@@ -53,7 +53,7 @@ const RecipientRegistrationScreen: React.FC<Props> = ({ navigation }) => {
 
         setLoading(true);
         try {
-            const currentUser = auth().currentUser;
+            const currentUser = getAuth().currentUser;
             if (!currentUser) throw new Error('No authenticated user found');
 
             const userData: Partial<UserDocument> = {
@@ -97,68 +97,69 @@ const RecipientRegistrationScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                    <View style={styles.brandingSection}>
-                        <View style={styles.logoContainer}>
-                            <MaterialIcon name="person-add" size={30} color={Colors.primary} />
-                        </View>
-                        <Text style={styles.mainTitle}>Join BloodReach</Text>
-                        <Text style={styles.subtitle}>Complete your profile to start requesting blood.</Text>
+                {/* <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}> */}
+
+                <View style={styles.brandingSection}>
+                    <View style={styles.logoContainer}>
+                        <MaterialIcon name="person-add" size={30} color={Colors.primary} />
+                    </View>
+                    <Text style={styles.mainTitle}>Join BloodReach</Text>
+                    <Text style={styles.subtitle}>Complete your profile to start requesting blood.</Text>
+                </View>
+
+                <View style={styles.card}>
+                    {/* Name */}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Full Name</Text>
+                        <TextInput style={styles.input} placeholder="John Doe" value={name} onChangeText={setName} />
+                        {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
                     </View>
 
-                    <View style={styles.card}>
-                        {/* Name */}
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Full Name</Text>
-                            <TextInput style={styles.input} placeholder="John Doe" value={name} onChangeText={setName} />
-                            {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+                    {/* Age & Weight Row */}
+                    <View style={styles.row}>
+                        <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                            <Text style={styles.label}>Age</Text>
+                            <TextInput style={styles.input} placeholder="25" keyboardType="numeric" value={age} onChangeText={setAge} />
                         </View>
-
-                        {/* Age & Weight Row */}
-                        <View style={styles.row}>
-                            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                                <Text style={styles.label}>Age</Text>
-                                <TextInput style={styles.input} placeholder="25" keyboardType="numeric" value={age} onChangeText={setAge} />
-                            </View>
-                            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                                <Text style={styles.label}>Weight (kg)</Text>
-                                <TextInput style={styles.input} placeholder="70" keyboardType="numeric" value={weight} onChangeText={setWeight} />
-                            </View>
+                        <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                            <Text style={styles.label}>Weight (kg)</Text>
+                            <TextInput style={styles.input} placeholder="70" keyboardType="numeric" value={weight} onChangeText={setWeight} />
                         </View>
-
-                        {/* Blood Group */}
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Blood Group</Text>
-                            <TextInput style={styles.input} placeholder="A+, B-, AB+, O+" value={bloodGroup} onChangeText={setBloodGroup} />
-                        </View>
-
-                        {/* Phone */}
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Phone Number</Text>
-                            <TextInput style={styles.input} placeholder="+92XXXXXXXXXX" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-                        </View>
-
-                        {/* City */}
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>City</Text>
-                            <TextInput style={styles.input} placeholder="City Name" value={city} onChangeText={setCity} />
-                        </View>
-
-                        {/* Address */}
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Address</Text>
-                            <TextInput style={styles.input} placeholder="Full Home Address" multiline value={address} onChangeText={setAddress} />
-                        </View>
-
-                        <TouchableOpacity
-                            style={[styles.registerButton, loading && { opacity: 0.7 }]}
-                            onPress={handleRegister}
-                            disabled={loading}
-                        >
-                            <Text style={styles.registerButtonText}>{loading ? 'Saving...' : 'Complete Registration'}</Text>
-                        </TouchableOpacity>
                     </View>
-                </KeyboardAvoidingView>
+
+                    {/* Blood Group */}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Blood Group</Text>
+                        <TextInput style={styles.input} placeholder="A+, B-, AB+, O+" value={bloodGroup} onChangeText={setBloodGroup} />
+                    </View>
+
+                    {/* Phone */}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Phone Number</Text>
+                        <TextInput style={styles.input} placeholder="+92XXXXXXXXXX" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+                    </View>
+
+                    {/* City */}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>City</Text>
+                        <TextInput style={styles.input} placeholder="City Name" value={city} onChangeText={setCity} />
+                    </View>
+
+                    {/* Address */}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Address</Text>
+                        <TextInput style={styles.input} placeholder="Full Home Address" multiline value={address} onChangeText={setAddress} />
+                    </View>
+
+                    <TouchableOpacity
+                        style={[styles.registerButton, loading && { opacity: 0.7 }]}
+                        onPress={handleRegister}
+                        disabled={loading}
+                    >
+                        <Text style={styles.registerButtonText}>{loading ? 'Saving...' : 'Complete Registration'}</Text>
+                    </TouchableOpacity>
+                </View>
+                {/* </KeyboardAvoidingView> */}
             </ScrollView>
         </SafeAreaView>
     );

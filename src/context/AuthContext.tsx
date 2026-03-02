@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
-
+import { getAuth, onAuthStateChanged, FirebaseAuthTypes } from '@react-native-firebase/auth';
 interface AuthContextType {
     user: FirebaseAuthTypes.User | null;
     loading: boolean;
@@ -16,10 +15,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        const auth = getAuth();
         const minSplashTime = 2500;
         const start = Date.now();
 
-        const unsubscribe = auth().onAuthStateChanged((firebaseUser) => {
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
             const elapsed = Date.now() - start;
             const remaining = Math.max(0, minSplashTime - elapsed);
 
