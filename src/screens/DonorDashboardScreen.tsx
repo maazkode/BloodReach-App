@@ -17,10 +17,10 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import LinearGradient from 'react-native-linear-gradient';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument } from '../services/firestoreService';
-import { UserDocument } from '../types/database';
+import { getUserDocument, subscribeToRequests } from '../services/firestoreService';
+import { UserDocument, DonationRequest } from '../types/database';
 import { signOut } from '../services/authService';
-import { Modal, Animated, Pressable } from 'react-native';
+import { Modal, Animated, Pressable, ActivityIndicator } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -43,29 +43,20 @@ const STATS_DATA = [
     },
 ];
 
-const REQUESTS_DATA = [
-    {
-        id: '1',
-        type: 'O+',
-        distance: '3 km',
-        hospital: 'St. Mary\'s Hospital',
-        reason: 'Required for emergency surgery',
-        image: 'https://images.unsplash.com/photo-1587350859728-4476654a1809?q=80&w=2070&auto=format&fit=crop',
-    },
-    {
-        id: '2',
-        type: 'A-',
-        distance: '5 km',
-        hospital: 'City General Hospital',
-        reason: 'Urgent plasma transfusion',
-        image: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=2053&auto=format&fit=crop',
-    }
+// Placeholder images for aesthetic consistency
+const REQUEST_IMAGES = [
+    'https://images.unsplash.com/photo-1587350859728-4476654a1809?q=80&w=2070&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=2053&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1579154235828-4519939f9392?q=80&w=2070&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1538108197017-c1a966bd7b3f?q=80&w=2024&auto=format&fit=crop'
 ];
 
 const DonorDashboard: React.FC<Props> = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
+    const [nearbyRequests, setNearbyRequests] = React.useState<DonationRequest[]>([]);
+    const [loadingRequests, setLoadingRequests] = React.useState(true);
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
     const slideAnim = React.useRef(new Animated.Value(-width * 0.75)).current;
 
@@ -77,6 +68,14 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
             }
         };
         fetchUserData();
+
+        // Subscribe to real-time requests for the dashboard
+        const unsubscribe = subscribeToRequests((requests) => {
+            setNearbyRequests(requests.slice(0, 5)); // Just show top 5 on dashboard
+            setLoadingRequests(false);
+        });
+
+        return () => unsubscribe();
     }, [user]);
 
     const toggleDrawer = (open: boolean) => {
@@ -245,39 +244,60 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                 {/* Nearby Requests Section */}
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Nearby Blood Requests</Text>
-                    <TouchableOpacity>
+                    <TouchableOpacity onPress={() => navigation.navigate('BloodRequestFeed')}>
                         <Text style={styles.seeAllText}>See All</Text>
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.requestsList}>
-                    {REQUESTS_DATA.map((item) => (
-                        <View key={item.id} style={styles.requestCard}>
-                            <View style={styles.requestImageContainer}>
-                                <Image source={{ uri: item.image }} style={styles.requestImage} />
-                                <View style={styles.emergencyBadge}>
-                                    <MaterialIcon name="priority-high" size={12} color="white" />
-                                    <Text style={styles.emergencyText}>EMERGENCY</Text>
-                                </View>
-                            </View>
+                {loadingRequests ? (
+                    <View style={{ height: 180, justifyContent: 'center', alignItems: 'center' }}>
+                        <ActivityIndicator size="small" color={Colors.primary} />
+                    </View>
+                ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.requestsList}>
+                        {nearbyRequests.length > 0 ? (
+                            nearbyRequests.map((item: DonationRequest, index: number) => (
+                                <View key={item.id} style={styles.requestCard}>
+                                    <View style={styles.requestImageContainer}>
+                                        <Image 
+                                            source={{ uri: REQUEST_IMAGES[index % REQUEST_IMAGES.length] }} 
+                                            style={styles.requestImage} 
+                                        />
+                                        <View style={styles.emergencyBadge}>
+                                            <MaterialIcon name="priority-high" size={12} color="white" />
+                                            <Text style={styles.emergencyText}>
+                                                {item.urgencyLevel === 'urgent' ? 'EMERGENCY' : 'BLOOD NEEDED'}
+                                            </Text>
+                                        </View>
+                                    </View>
 
-                            <View style={styles.requestInfo}>
-                                <View style={styles.typeRow}>
-                                    <Text style={styles.bloodType}>{item.type}</Text>
-                                    <View style={styles.distanceBadge}>
-                                        <Text style={styles.distanceText}>{item.distance}</Text>
+                                    <View style={styles.requestInfo}>
+                                        <View style={styles.typeRow}>
+                                            <Text style={styles.bloodType}>{item.bloodGroup}</Text>
+                                            <View style={styles.distanceBadge}>
+                                                <Text style={styles.distanceText}>{item.city}</Text>
+                                            </View>
+                                        </View>
+                                        <Text style={styles.hospitalName} numberOfLines={1}>{item.hospitalName}</Text>
+                                        <Text style={styles.reasonText} numberOfLines={1}>For {item.patientName}</Text>
+
+                                        <TouchableOpacity 
+                                            style={styles.viewDetailsBtn}
+                                            onPress={() => navigation.navigate('BloodRequestFeed')}
+                                        >
+                                            <Text style={styles.viewDetailsBtnText}>Help Now</Text>
+                                        </TouchableOpacity>
                                     </View>
                                 </View>
-                                <Text style={styles.hospitalName}>{item.hospital}</Text>
-                                <Text style={styles.reasonText} numberOfLines={1}>{item.reason}</Text>
-
-                                <TouchableOpacity style={styles.viewDetailsBtn}>
-                                    <Text style={styles.viewDetailsBtnText}>View Details</Text>
-                                </TouchableOpacity>
+                            ))
+                        ) : (
+                            <View style={styles.emptyRequestsBox}>
+                                <MaterialCommunityIcon name="water-off" size={40} color="#E2E8F0" />
+                                <Text style={styles.emptyRequestsText}>No active requests nearby</Text>
                             </View>
-                        </View>
-                    ))}
-                </ScrollView>
+                        )}
+                    </ScrollView>
+                )}
 
                 {/* Future Window Info */}
                 <View style={styles.futureContainer}>
@@ -500,6 +520,24 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#94A3B8',
         fontWeight: '600',
+    },
+    emptyRequestsBox: {
+        width: 260,
+        height: 180,
+        backgroundColor: '#F8FAFC',
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1.5,
+        borderColor: '#F1F5F9',
+        borderStyle: 'dashed',
+    },
+    emptyRequestsText: {
+        fontSize: 14,
+        color: '#94A3B8',
+        fontWeight: '600',
+        marginTop: 10,
+        textAlign: 'center',
     },
 });
 

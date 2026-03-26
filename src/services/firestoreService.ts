@@ -5,7 +5,12 @@ import {
     setDoc,
     collection,
     addDoc,
-    serverTimestamp
+    serverTimestamp,
+    onSnapshot,
+    query,
+    orderBy,
+    limit,
+    where
 } from '@react-native-firebase/firestore';
 import { UserDocument, DonationRequest, Donation } from '../types/database';
 
@@ -82,12 +87,12 @@ export const createUserDocument = async (userData: Partial<UserDocument>): Promi
 };
 
 /**
- * Creates a new donation request in the "donationRequests" collection.
+ * Creates a new blood request in the "requests" collection.
  * @param requestData - Donation request data
  */
-export const createDonationRequest = async (requestData: Omit<DonationRequest, 'createdAt' | 'updatedAt'>): Promise<string> => {
+export const createDonationRequest = async (requestData: Omit<DonationRequest, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
     try {
-        const colRef = collection(db, 'donationRequests');
+        const colRef = collection(db, 'requests');
         const docRef = await addDoc(colRef, {
             ...requestData,
             createdAt: serverTimestamp(),
@@ -95,16 +100,41 @@ export const createDonationRequest = async (requestData: Omit<DonationRequest, '
         } as any);
         return docRef.id;
     } catch (error) {
-        console.error('Error creating donation request:', error);
+        console.error('Error creating request:', error);
         throw error;
     }
+};
+
+/**
+ * Listens for real-time updates on blood donation requests.
+ * @param callback - Function to handle the requests list updates
+ * @returns Unsubscribe function
+ */
+export const subscribeToRequests = (callback: (requests: DonationRequest[]) => void) => {
+    const colRef = collection(db, 'requests');
+    const q = query(
+        colRef, 
+        where('status', '==', 'open'),
+        orderBy('createdAt', 'desc'),
+        limit(50)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+        const requestsList: DonationRequest[] = snapshot.docs.map((doc: any) => ({
+            id: doc.id,
+            ...doc.data()
+        } as DonationRequest));
+        callback(requestsList);
+    }, (error) => {
+        console.error('Real-time listener error:', error);
+    });
 };
 
 /**
  * Creates a new donation record in the "donations" collection.
  * @param donationData - Donation data
  */
-export const createDonation = async (donationData: Omit<Donation, 'createdAt'>): Promise<string> => {
+export const createDonation = async (donationData: Omit<Donation, 'id' | 'createdAt'>): Promise<string> => {
     try {
         const colRef = collection(db, 'donations');
         const docRef = await addDoc(colRef, {
