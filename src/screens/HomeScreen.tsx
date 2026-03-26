@@ -20,22 +20,19 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
             }
 
             try {
-                const userDoc = await getUserDocument(user.uid);
-                if (userDoc) {
-                    if (userDoc.role === 'donor') {
+                const profile = await getUserDocument(user.uid);
+                if (profile) {
+                    if (profile.primaryRole === 'donor' || profile.isDonor) {
                         navigation.replace('DonorDashboard');
-                    } else if (userDoc.role === 'requester') {
-                        navigation.replace('RequesterDashboard');
                     } else {
-                        // Unknown role, send to RoleSelection
-                        navigation.replace('RoleSelection');
+                        navigation.replace('RequesterDashboard');
                     }
                 } else {
-                    // No Firestore document, send to RoleSelection to pick a role
-                    navigation.replace('RoleSelection');
+                    // No Firestore document, send to unified registration
+                    navigation.replace('UnifiedRegistration');
                 }
             } catch (error) {
-                console.error('Error redirecting based on role:', error);
+                console.error('Error redirecting based on profile:', error);
                 setLoading(false);
             }
         };

@@ -179,6 +179,12 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                         </View>
 
                         <View style={styles.drawerItems}>
+                            <TouchableOpacity style={styles.drawerItem} onPress={() => { toggleDrawer(false); navigation.replace('DonorDashboard'); }}>
+                                <MaterialIcon name="volunteer-activism" size={22} color={Colors.primary} />
+                                <Text style={[styles.drawerItemText, { color: Colors.primary }]}>Switch to Donor Mode</Text>
+                            </TouchableOpacity>
+                            <View style={styles.drawerDivider} />
+
                             <TouchableOpacity style={styles.drawerItem}>
                                 <MaterialIcon name="edit" size={22} color="#64748B" />
                                 <Text style={styles.drawerItemText}>Edit Profile</Text>
@@ -225,7 +231,10 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
             >
                 {/* Create Request Button */}
-                <TouchableOpacity style={styles.createRequestButton}>
+                <TouchableOpacity
+                    style={styles.createRequestButton}
+                    onPress={() => navigation.navigate('CreateRequest')}
+                >
                     <View style={styles.plusCircle}>
                         <MaterialIcon name="add" size={24} color={Colors.primary} />
                     </View>
@@ -312,7 +321,7 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                     <MaterialIcon name="list-alt" size={28} color="#94A3B8" />
                     <Text style={styles.navText}>My Requests</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem}>
+                <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
                     <MaterialIcon name="person" size={28} color="#94A3B8" />
                     <Text style={styles.navText}>Profile</Text>
                 </TouchableOpacity>

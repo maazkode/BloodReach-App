@@ -154,6 +154,12 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                         </View>
 
                         <View style={styles.drawerItems}>
+                            <TouchableOpacity style={styles.drawerItem} onPress={() => { toggleDrawer(false); navigation.replace('RequesterDashboard'); }}>
+                                <MaterialIcon name="swap-horiz" size={22} color={Colors.primary} />
+                                <Text style={[styles.drawerItemText, { color: Colors.primary }]}>Switch to Requester Mode</Text>
+                            </TouchableOpacity>
+                            <View style={styles.drawerDivider} />
+                            
                             <TouchableOpacity style={styles.drawerItem}>
                                 <MaterialIcon name="edit" size={22} color="#64748B" />
                                 <Text style={styles.drawerItemText}>Edit Profile</Text>
@@ -306,7 +312,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                     <MaterialIcon name="history" size={28} color="#94A3B8" />
                     <Text style={styles.navText}>History</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem}>
+                <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
                     <MaterialIcon name="person" size={28} color="#94A3B8" />
                     <Text style={styles.navText}>Profile</Text>
                 </TouchableOpacity>

@@ -61,15 +61,19 @@ export const createUserDocument = async (userData: Partial<UserDocument>): Promi
 
         const finalData = {
             ...userData,
-            isAvailable: userData.role === 'donor', // Default available if donor
+            isAvailable: userData.isDonor ?? false,
             lastDonationDate: userData.lastDonationDate || null,
             isVerified: userData.isVerified || false,
-            createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
         };
 
-        // We use { merge: true } to avoid overwriting existing fields if any
-        await setDoc(userRef, finalData as any, { merge: true });
+        // If it's the first time creating, we should ensure createdAt is set
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+            (finalData as any).createdAt = serverTimestamp();
+        }
+
+        await setDoc(userRef, finalData, { merge: true });
         console.log('User document saved successfully');
     } catch (error) {
         console.error('Error creating user document:', error);

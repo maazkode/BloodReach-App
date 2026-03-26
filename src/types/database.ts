@@ -4,14 +4,17 @@ export type UserRole = 'donor' | 'requester';
 
 export interface UserDocument {
     uid: string;
-    role: UserRole;
+    isDonor: boolean;
+    isRequester: boolean;
+    primaryRole: UserRole;
     name: string;
-    age: number;
-    weight: number;
+    age?: number;
+    weight?: number;
+    gender?: string;
     bloodGroup: string;
     phone: string;
     city: string;
-    address: string;
+    address?: string;
     isAvailable: boolean;
     lastDonationDate: FirebaseFirestoreTypes.Timestamp | null;
     location: {

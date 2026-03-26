@@ -23,8 +23,7 @@ import { checkUserExists, getUserDocument } from '../services/firestoreService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 
-const AuthScreen: React.FC<Props> = ({ navigation, route }) => {
-    const { role } = route.params;
+const AuthScreen: React.FC<Props> = ({ navigation }) => {
     const [isLogin, setIsLogin] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -40,33 +39,23 @@ const AuthScreen: React.FC<Props> = ({ navigation, route }) => {
             if (isLogin) {
                 const user = await signInWithEmail(email, password);
                 if (user) {
-                    const exists = await checkUserExists(user.uid);
-                    if (exists) {
-                        const userDoc = await getUserDocument(user.uid);
-                        if (userDoc?.role === 'donor') {
+                    const profile = await getUserDocument(user.uid);
+                    if (profile) {
+                        // User exists, go to primary dashboard
+                        if (profile.primaryRole === 'donor' || profile.isDonor) {
                             navigation.replace('DonorDashboard');
-                        } else if (userDoc?.role === 'requester') {
-                            navigation.replace('RequesterDashboard');
                         } else {
-                            navigation.replace('Home');
+                            navigation.replace('RequesterDashboard');
                         }
                     } else {
-                        // Profile not created yet
-                        if (role === 'donor') {
-                            navigation.navigate('DonorRegistration');
-                        } else {
-                            navigation.navigate('RecipientRegistration');
-                        }
+                        // User exists in Auth but no profile yet
+                        navigation.replace('UnifiedRegistration');
                     }
                 }
             } else {
                 const user = await signUpWithEmail(email, password);
                 if (user) {
-                    if (role === 'donor') {
-                        navigation.navigate('DonorRegistration');
-                    } else {
-                        navigation.navigate('RecipientRegistration');
-                    }
+                    navigation.replace('UnifiedRegistration');
                 }
             }
         } catch (error: any) {
@@ -79,28 +68,20 @@ const AuthScreen: React.FC<Props> = ({ navigation, route }) => {
         try {
             const user = await signInWithGoogle();
             if (user) {
-                const exists = await checkUserExists(user.uid);
-
-                if (exists) {
-                    const userDoc = await getUserDocument(user.uid);
-                    if (userDoc?.role === 'donor') {
+                const profile = await getUserDocument(user.uid);
+                if (profile) {
+                    if (profile.primaryRole === 'donor' || profile.isDonor) {
                         navigation.replace('DonorDashboard');
-                    } else if (userDoc?.role === 'requester') {
-                        navigation.replace('RequesterDashboard');
                     } else {
-                        navigation.replace('Home');
+                        navigation.replace('RequesterDashboard');
                     }
                 } else {
-                    if (role === 'donor') {
-                        navigation.navigate('DonorRegistration');
-                    } else {
-                        navigation.navigate('RecipientRegistration');
-                    }
+                    navigation.replace('UnifiedRegistration');
                 }
             }
         } catch (error: any) {
             console.error('Sign In Error:', error);
-            Alert.alert('Sign In Error', error.message || 'Something went wrong with Google Sign-In');
+            Alert.alert('Sign In Error', error.message || 'Something went wrong');
         }
     };
 

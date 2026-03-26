@@ -7,22 +7,22 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import SplashScreen from './src/screens/SplashScreen';
 import AuthScreen from './src/screens/AuthScreen';
-import RoleSelectionScreen from './src/screens/RoleSelectionScreen';
 import HomeScreen from './src/screens/HomeScreen';
-import DonorRegistrationScreen from './src/screens/DonorRegistrationScreen';
-import RecipientRegistrationScreen from './src/screens/RecipientRegistrationScreen';
+import UnifiedRegistrationScreen from './src/screens/UnifiedRegistrationScreen';
 import DonorDashboard from './src/screens/DonorDashboardScreen';
 import RequesterDashboard from './src/screens/RequesterDashboardScreen';
+import CreateRequestScreen from './src/screens/CreateRequestScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
-  RoleSelection: undefined;
-  Auth: { role: 'donor' | 'requester' };
+  Auth: undefined;
   Home: undefined;
-  DonorRegistration: undefined;
+  UnifiedRegistration: undefined;
   DonorDashboard: undefined;
   RequesterDashboard: undefined;
-  RecipientRegistration: undefined;
+  CreateRequest: undefined;
+  Profile: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -30,7 +30,6 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
   const { user, loading } = useAuth();
 
-  // 1. Splash Screen Branding & Auth Initialization
   if (loading) {
     return <SplashScreen />;
   }
@@ -44,21 +43,17 @@ const RootNavigator = () => {
         }}
       >
         {user ? (
-          // 2. Authenticated Stack: Direct to Dashboard
           <>
             <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="UnifiedRegistration" component={UnifiedRegistrationScreen} />
             <Stack.Screen name="DonorDashboard" component={DonorDashboard} />
             <Stack.Screen name="RequesterDashboard" component={RequesterDashboard} />
-            <Stack.Screen name="DonorRegistration" component={DonorRegistrationScreen} />
-            <Stack.Screen name="RecipientRegistration" component={RecipientRegistrationScreen} />
-            {/* Allow access to role selection if profile is missing */}
-            <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} />
+            <Stack.Screen name="CreateRequest" component={CreateRequestScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="Auth" component={AuthScreen} />
           </>
         ) : (
-          // 3. Unauthenticated Stack: Direct to Role Selection
           <>
-            <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} />
             <Stack.Screen name="Auth" component={AuthScreen} />
           </>
         )}
@@ -66,9 +61,6 @@ const RootNavigator = () => {
     </NavigationContainer>
   );
 }
-
-
-
 
 function App() {
   return (
@@ -82,4 +74,3 @@ function App() {
 }
 
 export default App;
-
