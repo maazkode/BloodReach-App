@@ -21,8 +21,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
             try {
                 const profile = await getUserDocument(user.uid);
-                if (profile) {
-                    if (profile.primaryRole === 'donor' || profile.isDonor) {
+                if (profile && profile.roles) {
+                    if (profile.roles.includes('donor')) {
                         navigation.replace('DonorDashboard');
                     } else {
                         navigation.replace('RequesterDashboard');

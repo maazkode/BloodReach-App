@@ -28,7 +28,7 @@ const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
 const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const insets = useSafeAreaInsets();
-    
+
     // Form State
     const [patientName, setPatientName] = useState('');
     const [bloodGroup, setBloodGroup] = useState('');
@@ -37,7 +37,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const [city, setCity] = useState('');
     const [date, setDate] = useState(new Date());
     const [isEmergency, setIsEmergency] = useState(false);
-    
+
     // UI Helpers
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showBloodGroupPicker, setShowBloodGroupPicker] = useState(false);
@@ -74,7 +74,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
 
             await createDonationRequest(requestData);
             Alert.alert(
-                'Success', 
+                'Success',
                 'Your request has been posted to donors.',
                 [{ text: 'OK', onPress: () => navigation.goBack() }]
             );
@@ -228,8 +228,8 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 </Text>
 
                 {/* Submit Button */}
-                <TouchableOpacity 
-                    style={[styles.submitButton, loading && { opacity: 0.8 }]} 
+                <TouchableOpacity
+                    style={[styles.submitButton, loading && { opacity: 0.8 }]}
                     onPress={handleSubmit}
                     disabled={loading}
                 >

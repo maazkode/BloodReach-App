@@ -17,7 +17,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import LinearGradient from 'react-native-linear-gradient';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument, subscribeToRequests } from '../services/firestoreService';
+import { getUserDocument, createUserDocument, subscribeToRequests } from '../services/firestoreService';
 import { UserDocument, DonationRequest } from '../types/database';
 import { signOut } from '../services/authService';
 import { Modal, Animated, Pressable, ActivityIndicator } from 'react-native';
@@ -153,7 +153,14 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                         </View>
 
                         <View style={styles.drawerItems}>
-                            <TouchableOpacity style={styles.drawerItem} onPress={() => { toggleDrawer(false); navigation.replace('RequesterDashboard'); }}>
+                            <TouchableOpacity 
+                                style={styles.drawerItem} 
+                                onPress={async () => { 
+                                    toggleDrawer(false); 
+                                    if (user) await createUserDocument({ uid: user.uid, lastActiveRole: 'requester' });
+                                    navigation.replace('RequesterDashboard'); 
+                                }}
+                            >
                                 <MaterialIcon name="swap-horiz" size={22} color={Colors.primary} />
                                 <Text style={[styles.drawerItemText, { color: Colors.primary }]}>Switch to Requester Mode</Text>
                             </TouchableOpacity>

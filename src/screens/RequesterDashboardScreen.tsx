@@ -15,7 +15,7 @@ import { Colors } from '../theme/colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument } from '../services/firestoreService';
+import { getUserDocument, createUserDocument } from '../services/firestoreService';
 import { UserDocument } from '../types/database';
 import { signOut } from '../services/authService';
 import { Modal, Animated, Pressable } from 'react-native';
@@ -179,7 +179,14 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                         </View>
 
                         <View style={styles.drawerItems}>
-                            <TouchableOpacity style={styles.drawerItem} onPress={() => { toggleDrawer(false); navigation.replace('DonorDashboard'); }}>
+                            <TouchableOpacity 
+                                style={styles.drawerItem} 
+                                onPress={async () => { 
+                                    toggleDrawer(false); 
+                                    if (user) await createUserDocument({ uid: user.uid, lastActiveRole: 'donor' });
+                                    navigation.replace('DonorDashboard'); 
+                                }}
+                            >
                                 <MaterialIcon name="volunteer-activism" size={22} color={Colors.primary} />
                                 <Text style={[styles.drawerItemText, { color: Colors.primary }]}>Switch to Donor Mode</Text>
                             </TouchableOpacity>
@@ -239,6 +246,15 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                         <MaterialIcon name="add" size={24} color={Colors.primary} />
                     </View>
                     <Text style={styles.createRequestText}>Create Blood Request</Text>
+                </TouchableOpacity>
+
+                {/* Temporary Test Button */}
+                <TouchableOpacity
+                    style={[styles.createRequestButton, { backgroundColor: '#F1F5F9', marginTop: -10, marginBottom: 20, shadowColor: 'transparent' }]}
+                    onPress={() => navigation.navigate('UnifiedRegistration')}
+                >
+                    <MaterialIcon name="bug-report" size={22} color="#64748B" style={{ marginRight: 10 }} />
+                    <Text style={[styles.createRequestText, { color: '#64748B', fontSize: 14 }]}>[Test] Open Registration</Text>
                 </TouchableOpacity>
 
                 {/* Stats Row */}

@@ -10,8 +10,12 @@ import {
     query,
     orderBy,
     limit,
-    where
+    where,
+    getDocs,
+    startAt,
+    endAt
 } from '@react-native-firebase/firestore';
+import { geohashQueryBounds, distanceBetween } from 'geofire-common';
 import { UserDocument, DonationRequest, Donation } from '../types/database';
 
 /**
@@ -66,7 +70,9 @@ export const createUserDocument = async (userData: Partial<UserDocument>): Promi
 
         const finalData = {
             ...userData,
-            isAvailable: userData.isDonor ?? false,
+            isAvailable: userData.isAvailable ?? false,
+            roles: userData.roles || ['requester'],
+            lastActiveRole: userData.lastActiveRole || 'requester',
             lastDonationDate: userData.lastDonationDate || null,
             isVerified: userData.isVerified || false,
             updatedAt: serverTimestamp(),
@@ -128,6 +134,75 @@ export const subscribeToRequests = (callback: (requests: DonationRequest[]) => v
     }, (error) => {
         console.error('Real-time listener error:', error);
     });
+};
+
+/**
+ * Find nearby donors for specific blood group
+ */
+export const getNearbyDonors = async ({ 
+    latitude, 
+    longitude, 
+    radiusInKm, 
+    bloodGroup 
+}: { 
+    latitude: number, 
+    longitude: number, 
+    radiusInKm: number, 
+    bloodGroup: string 
+}) => {
+    try {
+        const center: [number, number] = [latitude, longitude];
+        const radiusInM = radiusInKm * 1000;
+
+        // Get the bounds for our geohash query
+        const bounds = geohashQueryBounds(center, radiusInM);
+        const promises = [];
+
+        for (const b of bounds) {
+            const q = query(
+                collection(db, 'users'),
+                where('roles', 'array-contains', 'donor'),
+                where('isAvailable', '==', true),
+                where('bloodGroup', '==', bloodGroup),
+                orderBy('location.geohash'),
+                startAt(b[0]),
+                endAt(b[1])
+            );
+            promises.push(getDocs(q));
+        }
+
+        // Wait for all queries to finish
+        const snapshots = await Promise.all(promises);
+        const matchingDocs: any[] = [];
+
+        for (const snap of snapshots) {
+            for (const docSnapshot of snap.docs) {
+                const data = docSnapshot.data() as UserDocument;
+                const lat = data.location.latitude;
+                const lng = data.location.longitude;
+
+                // We have to filter out false positives due to geohash accuracy (square bounds vs radius)
+                const distanceInKm = distanceBetween([lat, lng], center);
+                const distanceInM = distanceInKm * 1000;
+
+                if (distanceInM <= radiusInM) {
+                    matchingDocs.push({
+                        uid: data.uid,
+                        name: data.name,
+                        phone: data.phone,
+                        bloodGroup: data.bloodGroup,
+                        distance: Math.round(distanceInKm * 10) / 10, // Round to 1 decimal place
+                    });
+                }
+            }
+        }
+
+        // Sort by distance and return
+        return matchingDocs.sort((a, b) => a.distance - b.distance);
+    } catch (error) {
+        console.error('Error finding nearby donors:', error);
+        throw error;
+    }
 };
 
 /**

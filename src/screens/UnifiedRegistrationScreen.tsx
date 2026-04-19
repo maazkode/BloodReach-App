@@ -22,6 +22,8 @@ import { getAuth } from '@react-native-firebase/auth';
 import { createUserDocument } from '../services/firestoreService';
 import { UserDocument } from '../types/database';
 import { Timestamp, serverTimestamp } from '@react-native-firebase/firestore';
+import { getFullLocationData, forwardGeocode, LocationData } from '../services/locationService';
+import { geohashForLocation } from 'geofire-common';
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["Male", "Female", "Other"];
@@ -48,6 +50,12 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
+    // Location States
+    const [locationData, setLocationData] = useState<LocationData | null>(null);
+    const [isDetecting, setIsDetecting] = useState(false);
+    const [isManual, setIsManual] = useState(false);
+    const [manualAddress, setManualAddress] = useState('');
+
     const validateForm = () => {
         let tempErrors: { [key: string]: string } = {};
         if (!name.trim()) tempErrors.name = 'Full name is required';
@@ -56,7 +64,56 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
         if (!city.trim()) tempErrors.city = 'City is required';
 
         setErrors(tempErrors);
+        if (!locationData) {
+            Alert.alert('Location Required', 'Please detect your location or enter it manually to proceed.');
+            return false;
+        }
         return Object.keys(tempErrors).length === 0;
+    };
+
+    const handleAutoDetect = async () => {
+        setIsDetecting(true);
+        try {
+            const data = await getFullLocationData();
+            setLocationData(data);
+            if (data.address) {
+                // Simplified city extraction
+                const parts = data.address.split(',');
+                if (parts.length > 0) setCity(parts[0].trim());
+            }
+        } catch (error: any) {
+            Alert.alert('Detection Failed', error.message || 'Could not detect location');
+        } finally {
+            setIsDetecting(false);
+        }
+    };
+
+    const handleManualLocate = async () => {
+        if (!manualAddress.trim()) {
+            Alert.alert('Error', 'Please enter an address or city name');
+            return;
+        }
+
+        setIsDetecting(true);
+        try {
+            const result = await forwardGeocode(manualAddress);
+            if (result) {
+                const hash = geohashForLocation([result.latitude, result.longitude]);
+                setLocationData({
+                    latitude: result.latitude,
+                    longitude: result.longitude,
+                    geohash: hash,
+                    address: result.address
+                });
+                setCity(manualAddress);
+            } else {
+                Alert.alert('Not Found', 'Could not find coordinates for this address.');
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Something went wrong while locating.');
+        } finally {
+            setIsDetecting(false);
+        }
     };
 
     const handleRegister = async () => {
@@ -66,6 +123,10 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
         try {
             const currentUser = getAuth().currentUser;
             if (!currentUser) throw new Error('No authenticated user found');
+            if (!locationData) throw new Error('Location data missing');
+
+            const roles = isAvailable ? ['donor', 'requester'] : ['requester'];
+            const lastActiveRole = isAvailable ? 'donor' : 'requester';
 
             const userData: UserDocument = {
                 uid: currentUser.uid,
@@ -76,22 +137,27 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 age: age ? Number(age) : undefined,
                 gender: gender || undefined,
                 isAvailable: isAvailable,
-                isDonor: isAvailable, // If available to donate, they are a donor
-                isRequester: true, // Everyone can be a requester
-                primaryRole: isAvailable ? 'donor' : 'requester',
+                roles: roles,
+                lastActiveRole: lastActiveRole as 'donor' | 'requester',
                 lastDonationDate: lastDonationDate ? Timestamp.fromDate(lastDonationDate) : null,
+
+                address: locationData.address,
+                location: {
+                    latitude: locationData.latitude,
+                    longitude: locationData.longitude,
+                    geohash: locationData.geohash,
+                },
 
                 // System / Placeholders for removed fields
                 email: currentUser.email || '',
                 photoURL: currentUser.photoURL || '',
-                location: { latitude: 0, longitude: 0 },
                 isVerified: false,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
             };
 
             await createUserDocument(userData);
-            navigation.replace(userData.isDonor ? 'DonorDashboard' : 'RequesterDashboard');
+            navigation.replace(roles.includes('donor') ? 'DonorDashboard' : 'RequesterDashboard');
         } catch (error: any) {
             console.error('Registration Error:', error);
             Alert.alert('Registration Failed', error.message || 'Something went wrong');
@@ -113,7 +179,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                     <View style={styles.brandingSection}>
                         <Text style={styles.mainTitle}>Join the Community</Text>
-                        <Text style={styles.subtitle}>Fill in your details to start saving lives or requesting help.</Text>
+                        <Text style={styles.subtitle}>Enter details to save lives or request help.</Text>
                     </View>
 
                     <View style={styles.card}>
@@ -185,16 +251,85 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                             </TouchableOpacity>
                         </View>
 
+                        <View style={styles.separator} />
+
+                        <View style={styles.locationSection}>
+                            <Text style={styles.sectionTitle}>Location Selection</Text>
+                            <Text style={styles.donorSubtitle}>Required for matching you with nearby donors/requests.</Text>
+                            
+                            {!locationData ? (
+                                <View style={styles.locationActions}>
+                                    {!isManual ? (
+                                        <TouchableOpacity 
+                                            style={styles.detectButton} 
+                                            onPress={handleAutoDetect}
+                                            disabled={isDetecting}
+                                        >
+                                            <MaterialIcon name="my-location" size={20} color="white" />
+                                            <Text style={styles.detectButtonText}>
+                                                {isDetecting ? 'Detecting...' : 'Auto-Detect My Location'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ) : (
+                                        <View style={styles.manualInputRow}>
+                                            <TextInput 
+                                                style={[styles.input, { flex: 1, marginBottom: 0 }]} 
+                                                placeholder="Enter Address or City" 
+                                                value={manualAddress}
+                                                onChangeText={setManualAddress}
+                                            />
+                                            <TouchableOpacity 
+                                                style={styles.locateButton} 
+                                                onPress={handleManualLocate}
+                                                disabled={isDetecting}
+                                            >
+                                                <MaterialIcon name="search" size={24} color="white" />
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
+                                    
+                                    <TouchableOpacity 
+                                        style={styles.toggleModeButton} 
+                                        onPress={() => setIsManual(!isManual)}
+                                    >
+                                        <Text style={styles.toggleModeText}>
+                                            {isManual ? 'Use GPS instead' : 'Enter location manually'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <View style={styles.capturedLocation}>
+                                    <View style={styles.locationInfo}>
+                                        <MaterialIcon name="check-circle" size={24} color="#10B981" />
+                                        <View style={styles.locationTextContainer}>
+                                            <Text style={styles.locationFoundTitle}>Location Captured</Text>
+                                            <Text style={styles.capturedAddress} numberOfLines={2}>
+                                                {locationData.address}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <TouchableOpacity 
+                                        onPress={() => { setLocationData(null); setManualAddress(''); }}
+                                        style={styles.retryLocation}
+                                    >
+                                        <Text style={styles.retryText}>Change</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </View>
+
+                        <View style={styles.separator} />
+
                         <View style={styles.donorSection}>
                             <View style={styles.donorInfo}>
-                                <Text style={styles.donorTitle}>Available to Donate?</Text>
-                                <Text style={styles.donorSubtitle}>Turn on to show up as a potential donor</Text>
+                                <Text style={styles.donorTitle}>Wants to Donate Blood?</Text>
+                                <Text style={styles.donorSubtitle}>Turn this on to show up as a donor for people in need.</Text>
                             </View>
                             <Switch
                                 value={isAvailable}
                                 onValueChange={setIsAvailable}
-                                trackColor={{ false: '#E2E8F0', true: '#FEE2E2' }}
-                                thumbColor={isAvailable ? Colors.primary : '#94A3B8'}
+                                trackColor={{ false: '#CBD5E1', true: '#FEE2E2' }}
+                                thumbColor={isAvailable ? Colors.primary : '#F4F4F5'}
                             />
                         </View>
 
@@ -203,7 +338,9 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                             onPress={handleRegister}
                             disabled={loading}
                         >
-                            <Text style={styles.registerButtonText}>{loading ? 'Saving Profile...' : 'Complete Profile'}</Text>
+                            <Text style={styles.registerButtonText}>
+                                {loading ? 'Saving Profile...' : 'Complete Profile'}
+                            </Text>
                         </TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>
@@ -296,6 +433,52 @@ const styles = StyleSheet.create({
     registerButton: { backgroundColor: Colors.primary, height: 54, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 20 },
     registerButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
     errorText: { color: Colors.error, fontSize: 11, marginTop: 4 },
+    
+    // Location Styles
+    locationSection: { marginVertical: 10 },
+    locationActions: { marginTop: 10 },
+    detectButton: { 
+        backgroundColor: Colors.primary, 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        height: 48, 
+        borderRadius: 12, 
+        shadowColor: Colors.primary,
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 3
+    },
+    detectButtonText: { color: 'white', fontWeight: 'bold', marginLeft: 8 },
+    manualInputRow: { flexDirection: 'row', alignItems: 'center' },
+    locateButton: { 
+        backgroundColor: Colors.primary, 
+        width: 48, 
+        height: 48, 
+        borderRadius: 12, 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        marginLeft: 8 
+    },
+    toggleModeButton: { marginTop: 12, alignItems: 'center' },
+    toggleModeText: { color: '#64748B', fontSize: 13, textDecorationLine: 'underline' },
+    capturedLocation: { 
+        backgroundColor: '#F0FDF4', 
+        borderRadius: 12, 
+        padding: 12, 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: '#BBF7D0'
+    },
+    locationInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    locationTextContainer: { marginLeft: 10, flex: 1 },
+    locationFoundTitle: { fontSize: 13, fontWeight: 'bold', color: '#065F46' },
+    capturedAddress: { fontSize: 12, color: '#047857', marginTop: 2 },
+    retryLocation: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#DCFCE7', borderRadius: 8 },
+    retryText: { fontSize: 12, fontWeight: 'bold', color: '#059669' },
+
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalContent: { backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24 },
     modalTitle: { fontSize: 20, fontWeight: '800', color: '#1E293B', marginBottom: 20, textAlign: 'center' },

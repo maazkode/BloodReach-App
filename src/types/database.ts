@@ -4,9 +4,8 @@ export type UserRole = 'donor' | 'requester';
 
 export interface UserDocument {
     uid: string;
-    isDonor: boolean;
-    isRequester: boolean;
-    primaryRole: UserRole;
+    roles: string[];
+    lastActiveRole: UserRole;
     name: string;
     age?: number;
     weight?: number;
@@ -20,7 +19,9 @@ export interface UserDocument {
     location: {
         latitude: number;
         longitude: number;
+        geohash: string;
     };
+    address: string;
     email: string;
     photoURL: string;
     isVerified: boolean;
