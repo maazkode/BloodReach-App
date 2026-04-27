@@ -119,7 +119,7 @@ export const createDonationRequest = async (requestData: Omit<DonationRequest, '
 export const subscribeToRequests = (callback: (requests: DonationRequest[]) => void) => {
     const colRef = collection(db, 'requests');
     const q = query(
-        colRef, 
+        colRef,
         where('status', '==', 'open'),
         orderBy('createdAt', 'desc'),
         limit(50)
@@ -137,18 +137,60 @@ export const subscribeToRequests = (callback: (requests: DonationRequest[]) => v
 };
 
 /**
+ * Listens for NEW blood requests matching donor's criteria (Blood Group + City)
+ * This is used for triggering local notifications/alerts.
+ */
+export const subscribeToMatchingRequests = (
+    bloodGroup: string,
+    city: string,
+    callback: (newRequest: DonationRequest) => void
+) => {
+    const colRef = collection(db, 'requests');
+
+    // Query for open requests in the same city and matching blood group
+    const q = query(
+        colRef,
+        where('status', '==', 'open'),
+        where('bloodGroup', '==', bloodGroup),
+        where('city', '==', city),
+        orderBy('createdAt', 'desc'),
+        limit(1) // Only look at the most recent one
+    );
+
+    let isInitial = true;
+
+    return onSnapshot(q, (snapshot) => {
+        // Skip the first run so we don't notify for existing old requests
+        if (isInitial) {
+            isInitial = false;
+            return;
+        }
+
+        // Only notify on 'added' changes
+        snapshot.docChanges().forEach((change: any) => {
+            if (change.type === 'added') {
+                const data = change.doc.data() as DonationRequest;
+                callback({ id: change.doc.id, ...data });
+            }
+        });
+    }, (error) => {
+        console.error('Matching listener error:', error);
+    });
+};
+
+/**
  * Find nearby donors for specific blood group
  */
-export const getNearbyDonors = async ({ 
-    latitude, 
-    longitude, 
-    radiusInKm, 
-    bloodGroup 
-}: { 
-    latitude: number, 
-    longitude: number, 
-    radiusInKm: number, 
-    bloodGroup: string 
+export const getNearbyDonors = async ({
+    latitude,
+    longitude,
+    radiusInKm,
+    bloodGroup
+}: {
+    latitude: number,
+    longitude: number,
+    radiusInKm: number,
+    bloodGroup: string
 }) => {
     try {
         const center: [number, number] = [latitude, longitude];

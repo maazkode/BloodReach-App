@@ -1,35 +1,40 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     StyleSheet,
     View,
     Text,
     TouchableOpacity,
-    Dimensions,
+    Image,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import FAIcon from 'react-native-vector-icons/FontAwesome';
-import { Colors } from '../theme/colors';
-import { Alert } from 'react-native';
+import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { signInWithGoogle } from '../services/authService';
 import { getUserDocument, createUserDocument } from '../services/firestoreService';
 import { getFCMToken } from '../services/notificationService';
+import { Colors } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 
-const { width } = Dimensions.get('window');
-
 const AuthScreen: React.FC<Props> = ({ navigation }) => {
+    const [loading, setLoading] = useState(false);
+
     const handleGoogleSignIn = async () => {
+        if (loading) return;
+        setLoading(true);
+
         try {
             const user = await signInWithGoogle();
+
             if (user) {
                 const profile = await getUserDocument(user.uid);
+
                 if (profile) {
-                    // Update FCM Token on every login
                     const token = await getFCMToken();
                     if (token) {
                         await createUserDocument({ uid: user.uid, fcmToken: token });
@@ -45,48 +50,76 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
                 }
             }
         } catch (error: any) {
-            console.error('Sign In Error:', error);
             Alert.alert('Sign In Error', error.message || 'Something went wrong');
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
-                {/* Visual Elements Section */}
-                <View style={styles.artworkContainer}>
-                    <View style={[styles.glowCircle, styles.glowCircleOuter]} />
-                    <View style={[styles.glowCircle, styles.glowCircleInner]} />
-                    <View style={styles.iconWrapper}>
-                        <MaterialIcon name="water-drop" size={48} color="white" />
+
+                {/* Branding Section */}
+                <View style={styles.brandingContainer}>
+
+                    {/* Logo */}
+                    <View style={styles.logoWrapper}>
+                        <Image
+                            source={require('../assets/logo.png')} // ✅ clean path
+                            style={styles.logo}
+                            resizeMode="contain"
+                        />
                     </View>
+
+                    {/* Text */}
+                    <View style={styles.textContainer}>
+                        <Text style={styles.mainTitle}>BloodReach</Text>
+                        <Text style={styles.subtitle}>
+                            Find blood donors instantly near you
+                        </Text>
+                        <Text style={styles.trustText}>
+                            Secure • Fast • Life-saving
+                        </Text>
+                    </View>
+
                 </View>
 
-                {/* Text Content */}
-                <View style={styles.textContainer}>
-                    <Text style={styles.mainTitle}>BloodReach</Text>
-                    <Text style={styles.tagline}>Save Lives, Spread Hope</Text>
-                    <Text style={styles.descriptionText}>
-                        Join the fastest-growing community of blood donors and recipients. 
-                        A single drop of your blood can be someone's ocean of hope.
-                    </Text>
+                {/* Impact Section - Fills the middle space elegantly */}
+                <View style={styles.impactContainer}>
+                    <View style={styles.impactLine} />
+                    <View style={styles.impactBadge}>
+                        <MaterialIcon name="favorite" size={20} color={Colors.primary} />
+                        <Text style={styles.impactText}>Save Lives in Real-time</Text>
+                    </View>
+                    <View style={styles.impactLine} />
                 </View>
 
-                {/* Bottom Actions */}
+                {/* Actions */}
                 <View style={styles.actionContainer}>
                     <TouchableOpacity
-                        style={styles.googleButtonMain}
+                        style={styles.googleButton}
                         onPress={handleGoogleSignIn}
                         activeOpacity={0.8}
+                        disabled={loading}
                     >
-                        <FAIcon name="google" size={22} color="#4285F4" style={styles.socialIcon} />
-                        <Text style={styles.googleButtonText}>Continue with Google</Text>
+                        {loading ? (
+                            <ActivityIndicator color={Colors.primary} />
+                        ) : (
+                            <>
+                                <FAIcon name="google" size={20} color="#4285F4" />
+                                <Text style={styles.googleText}>
+                                    Continue with Google
+                                </Text>
+                            </>
+                        )}
                     </TouchableOpacity>
-                    
+
                     <Text style={styles.footerText}>
-                        By continuing, you agree to our Terms of Service and Privacy Policy.
+                        By continuing, you agree to Terms & Privacy
                     </Text>
                 </View>
+
             </View>
         </SafeAreaView>
     );
@@ -95,108 +128,123 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8FAFC', // Very soft cool gray for a premium look
+        backgroundColor: '#FFFFFF',
     },
+
     content: {
         flex: 1,
         paddingHorizontal: 24,
         justifyContent: 'space-between',
-        paddingVertical: 50,
+        paddingVertical: 60,
     },
-    artworkContainer: {
+
+    brandingContainer: {
         alignItems: 'center',
-        justifyContent: 'center',
         marginTop: 60,
-        height: 200,
+        gap: 32,
     },
-    glowCircle: {
-        position: 'absolute',
-        borderRadius: 999,
-        backgroundColor: Colors.primary,
-    },
-    glowCircleOuter: {
-        width: width * 0.75,
-        height: width * 0.75,
-        opacity: 0.05,
-    },
-    glowCircleInner: {
-        width: width * 0.5,
-        height: width * 0.5,
-        opacity: 0.1,
-    },
-    iconWrapper: {
-        width: 100,
-        height: 100,
-        backgroundColor: Colors.primary,
-        borderRadius: 50,
+
+    logoWrapper: {
+        width: 110,
+        height: 110,
+        borderRadius: 32,
+        backgroundColor: '#FFFFFF',
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: Colors.primary,
+        // Premium Shadow
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.1,
         shadowRadius: 20,
-        elevation: 10,
+        elevation: 8,
     },
+
+    logo: {
+        width: 80,
+        height: 80,
+    },
+
     textContainer: {
         alignItems: 'center',
-        paddingHorizontal: 10,
-        marginTop: -20,
     },
+
     mainTitle: {
-        fontSize: 38,
-        fontWeight: '900',
+        fontSize: 34,
+        fontWeight: '800',
         color: '#0F172A',
-        letterSpacing: -0.5,
-        marginBottom: 8,
+        marginBottom: 4,
     },
-    tagline: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: Colors.primary,
-        marginBottom: 20,
-        letterSpacing: 0.5,
-    },
-    descriptionText: {
+
+    subtitle: {
         fontSize: 16,
-        color: '#64748B',
+        color: '#475569',
         textAlign: 'center',
-        lineHeight: 24,
-        paddingHorizontal: 10,
+        marginBottom: 10,
     },
+
+    trustText: {
+        fontSize: 13,
+        color: '#94A3B8',
+    },
+
+    impactContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginVertical: 20,
+    },
+
+    impactLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: '#F1F5F9',
+    },
+
+    impactBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFF1F2',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        marginHorizontal: 16,
+    },
+
+    impactText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: Colors.primary,
+        marginLeft: 8,
+    },
+
     actionContainer: {
         width: '100%',
-        paddingBottom: 20,
     },
-    googleButtonMain: {
+
+    googleButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#FFFFFF',
-        height: 60,
-        borderRadius: 16,
+        height: 56,
+        borderRadius: 14,
         borderWidth: 1,
-        borderColor: '#E2E8F0',
-        shadowColor: '#64748B',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.1,
-        shadowRadius: 24,
-        elevation: 5,
-        marginBottom: 24,
+        borderColor: '#E5E7EB',
+        marginBottom: 16,
+        elevation: 2, // subtle shadow
     },
-    googleButtonText: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#1E293B',
+
+    googleText: {
+        marginLeft: 10,
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#111827',
     },
-    socialIcon: {
-        marginRight: 12,
-    },
+
     footerText: {
-        fontSize: 13,
-        color: '#94A3B8',
+        fontSize: 12,
+        color: '#9CA3AF',
         textAlign: 'center',
-        lineHeight: 20,
-        paddingHorizontal: 20,
     },
 });
 

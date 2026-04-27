@@ -93,3 +93,27 @@ export const setupNotificationHandlers = () => {
             }
         });
 };
+
+/**
+ * Triggers a local notification alert (Foreground)
+ */
+export const triggerLocalNotification = (title: string, body: string, requestId?: string) => {
+    Alert.alert(
+        title,
+        body,
+        [
+            {
+                text: 'View Details',
+                onPress: () => {
+                    if (requestId) {
+                        navigate('RequestDetail', { requestId });
+                    }
+                }
+            },
+            {
+                text: 'Dismiss',
+                style: 'cancel'
+            }
+        ]
+    );
+};

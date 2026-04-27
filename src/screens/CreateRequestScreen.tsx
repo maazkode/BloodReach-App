@@ -10,26 +10,26 @@ import {
     StatusBar,
     Alert,
     ActivityIndicator,
+    Modal,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../theme/colors';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../App';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getAuth } from '@react-native-firebase/auth';
+
+import { RootStackParamList } from '../../App';
 import { createDonationRequest } from '../services/firestoreService';
 import { DonationRequest } from '../types/database';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateRequest'>;
 
-const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const insets = useSafeAreaInsets();
 
-    // Form State
     const [patientName, setPatientName] = useState('');
     const [bloodGroup, setBloodGroup] = useState('');
     const [units, setUnits] = useState('1');
@@ -38,19 +38,18 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const [date, setDate] = useState(new Date());
     const [isEmergency, setIsEmergency] = useState(false);
 
-    // UI Helpers
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showBloodGroupPicker, setShowBloodGroupPicker] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    const onDateChange = (event: any, selectedDate?: Date) => {
+    const onDateChange = (_: any, selectedDate?: Date) => {
         setShowDatePicker(false);
         if (selectedDate) setDate(selectedDate);
     };
 
     const handleSubmit = async () => {
         if (!patientName || !bloodGroup || !hospital || !city) {
-            Alert.alert('Missing Info', 'Please fill in all mandatory fields');
+            Alert.alert('Missing Info', 'Please fill all required fields');
             return;
         }
 
@@ -65,7 +64,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 bloodGroup,
                 unitsRequired: parseInt(units) || 1,
                 hospitalName: hospital,
-                hospitalAddress: hospital, // In a real app, this would be a full address
+                hospitalAddress: hospital,
                 city,
                 urgencyLevel: isEmergency ? 'urgent' : 'normal',
                 status: 'open',
@@ -73,14 +72,12 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
             };
 
             await createDonationRequest(requestData);
-            Alert.alert(
-                'Success',
-                'Your request has been posted to donors.',
-                [{ text: 'OK', onPress: () => navigation.goBack() }]
-            );
+
+            Alert.alert('Success', 'Request submitted successfully', [
+                { text: 'OK', onPress: () => navigation.goBack() },
+            ]);
         } catch (error) {
-            console.error('Submit Error:', error);
-            Alert.alert('Error', 'Could not post request. Please try again.');
+            Alert.alert('Error', 'Could not submit request');
         } finally {
             setLoading(false);
         }
@@ -88,161 +85,168 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+            <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-            {/* Header */}
-            <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <MaterialIcon name="arrow-back" size={26} color="#1E293B" />
+            <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
+                <TouchableOpacity onPress={() => navigation.goBack()}>
+                    <MaterialIcon name="arrow-back" size={24} color="#1E293B" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Create Blood Request</Text>
-                <View style={{ width: 40 }} />
+                <Text style={styles.headerTitle}>Blood Request</Text>
+                <View style={{ width: 24 }} />
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                <View style={styles.formCard}>
-                    {/* Patient Name */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Patient Name</Text>
-                        <View style={styles.inputWrapper}>
-                            <MaterialIcon name="person-outline" size={22} color="#94A3B8" style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Enter patient name"
-                                value={patientName}
-                                onChangeText={setPatientName}
-                                placeholderTextColor="#94A3B8"
-                            />
-                        </View>
-                    </View>
-
-                    {/* Blood Group & Units Row */}
-                    <View style={styles.row}>
-                        <View style={[styles.inputGroup, { flex: 1.5, marginRight: 8 }]}>
-                            <Text style={styles.label}>Blood Group</Text>
-                            <TouchableOpacity
-                                style={styles.dropdownPicker}
-                                onPress={() => setShowBloodGroupPicker(!showBloodGroupPicker)}
-                            >
-                                <Text style={[styles.pickerText, !bloodGroup && { color: '#94A3B8' }]}>
-                                    {bloodGroup || 'Select'}
-                                </Text>
-                                <MaterialCommunityIcon name="unfold-more-horizontal" size={24} color="#94A3B8" />
-                            </TouchableOpacity>
-                            {showBloodGroupPicker && (
-                                <View style={styles.bloodGroupDropdown}>
-                                    {BLOOD_GROUPS.map((group) => (
-                                        <TouchableOpacity
-                                            key={group}
-                                            style={styles.bloodGroupItem}
-                                            onPress={() => { setBloodGroup(group); setShowBloodGroupPicker(false); }}
-                                        >
-                                            <Text style={styles.bloodGroupText}>{group}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            )}
-                        </View>
-                        <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                            <Text style={styles.label}>Units</Text>
-                            <View style={styles.inputWrapper}>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="2"
-                                    keyboardType="numeric"
-                                    value={units}
-                                    onChangeText={setUnits}
-                                    placeholderTextColor="#94A3B8"
-                                />
-                            </View>
-                        </View>
-                    </View>
-
-                    {/* Hospital Name */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Hospital Name</Text>
-                        <View style={styles.inputWrapper}>
-                            <MaterialCommunityIcon name="home-plus-outline" size={22} color="#94A3B8" style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Enter hospital name"
-                                value={hospital}
-                                onChangeText={setHospital}
-                                placeholderTextColor="#94A3B8"
-                            />
-                        </View>
-                    </View>
-
-                    {/* City */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>City / Location</Text>
-                        <View style={styles.inputWrapper}>
-                            <MaterialIcon name="location-on" size={22} color="#94A3B8" style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. Islamabad"
-                                value={city}
-                                onChangeText={setCity}
-                                placeholderTextColor="#94A3B8"
-                            />
-                        </View>
-                    </View>
-
-                    {/* Required Date */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Required Date</Text>
-                        <TouchableOpacity style={styles.inputWrapper} onPress={() => setShowDatePicker(true)}>
-                            <MaterialCommunityIcon name="calendar-range" size={22} color="#94A3B8" style={styles.inputIcon} />
-                            <Text style={styles.pickerText}>
-                                {date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+            >
+                <View style={styles.row}>
+                    <View style={[styles.inputGroup, { flex: 1.3, marginRight: 8 }]}>
+                        <Text style={styles.label}>Blood Group</Text>
+                        <TouchableOpacity
+                            style={styles.inputBox}
+                            onPress={() => setShowBloodGroupPicker(true)}
+                        >
+                            <Text style={styles.valueText}>
+                                {bloodGroup || 'Select'}
                             </Text>
-                            <View style={{ flex: 1 }} />
-                            <MaterialCommunityIcon name="calendar-edit" size={22} color="#1E293B" />
+                            <MaterialCommunityIcon
+                                name="chevron-down"
+                                size={22}
+                                color="#64748B"
+                            />
                         </TouchableOpacity>
-                        {showDatePicker && (
-                            <DateTimePicker value={date} mode="date" display="default" onChange={onDateChange} minimumDate={new Date()} />
-                        )}
                     </View>
 
-                    {/* Emergency Toggle Design from Image */}
-                    <View style={styles.emergencyContainer}>
-                        <View style={styles.warningIconBox}>
-                            <MaterialIcon name="report-problem" size={24} color="#DC2626" />
+                    <View style={[styles.inputGroup, { flex: 1 }]}>
+                        <Text style={styles.label}>Units</Text>
+                        <View style={styles.inputBox}>
+                            <TextInput
+                                value={units}
+                                onChangeText={setUnits}
+                                keyboardType="numeric"
+                                placeholder="1"
+                                style={styles.input}
+                                placeholderTextColor="#94A3B8"
+                            />
                         </View>
-                        <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                            <Text style={styles.emergencyLabel}>Emergency Request</Text>
-                            <Text style={styles.emergencySubtext}>Mark as high priority for faster matching</Text>
-                        </View>
-                        <Switch
-                            value={isEmergency}
-                            onValueChange={setIsEmergency}
-                            trackColor={{ false: '#E2E8F0', true: '#DC2626' }}
-                            thumbColor="#FFFFFF"
+                    </View>
+                </View>
+
+                <View style={styles.emergencyCard}>
+                    <View style={styles.warningBox}>
+                        <MaterialIcon name="report-problem" size={20} color="#DC2626" />
+                    </View>
+                    <View style={{ flex: 1, marginHorizontal: 10 }}>
+                        <Text style={styles.emergencyTitle}>Emergency Request</Text>
+                        <Text style={styles.emergencySub}>High priority matching</Text>
+                    </View>
+                    <Switch value={isEmergency} onValueChange={setIsEmergency} />
+                </View>
+
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Patient Name</Text>
+                    <View style={styles.inputBox}>
+                        <TextInput
+                            value={patientName}
+                            onChangeText={setPatientName}
+                            placeholder="Enter patient name"
+                            style={styles.input}
+                            placeholderTextColor="#94A3B8"
                         />
                     </View>
                 </View>
 
-                {/* Agreement Text */}
-                <Text style={styles.agreementText}>
-                    BY SUBMITTING, YOU AGREE TO BLOODREACH'S TERMS AND PRIVACY POLICY REGARDING EMERGENCY MEDICAL REQUESTS.
-                </Text>
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Hospital Name</Text>
+                    <View style={styles.inputBox}>
+                        <TextInput
+                            value={hospital}
+                            onChangeText={setHospital}
+                            placeholder="Enter hospital name"
+                            style={styles.input}
+                            placeholderTextColor="#94A3B8"
+                        />
+                    </View>
+                </View>
 
-                {/* Submit Button */}
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>City</Text>
+                    <View style={styles.inputBox}>
+                        <TextInput
+                            value={city}
+                            onChangeText={setCity}
+                            placeholder="e.g. Islamabad"
+                            style={styles.input}
+                            placeholderTextColor="#94A3B8"
+                        />
+                    </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Required Date</Text>
+                    <TouchableOpacity
+                        style={styles.inputBox}
+                        onPress={() => setShowDatePicker(true)}
+                    >
+                        <Text style={styles.valueText}>
+                            {date.toLocaleDateString()}
+                        </Text>
+                        <MaterialCommunityIcon
+                            name="calendar-month"
+                            size={22}
+                            color="#64748B"
+                        />
+                    </TouchableOpacity>
+                </View>
+
+                <Text style={styles.agreementText}>
+                    By continuing, you agree to Terms & Privacy Policy
+                </Text>
+            </ScrollView>
+
+            <View style={styles.bottomBar}>
                 <TouchableOpacity
-                    style={[styles.submitButton, loading && { opacity: 0.8 }]}
+                    style={styles.submitButton}
                     onPress={handleSubmit}
                     disabled={loading}
                 >
                     {loading ? (
-                        <ActivityIndicator color="white" />
+                        <ActivityIndicator color="#fff" />
                     ) : (
-                        <>
-                            <Text style={styles.submitButtonText}>Submit Request</Text>
-                            <MaterialIcon name="send" size={22} color="white" style={{ marginLeft: 10 }} />
-                        </>
+                        <Text style={styles.submitText}>Submit Request</Text>
                     )}
                 </TouchableOpacity>
-            </ScrollView>
+            </View>
+
+            <Modal visible={showBloodGroupPicker} transparent animationType="slide">
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Select Blood Group</Text>
+                        {BLOOD_GROUPS.map(item => (
+                            <TouchableOpacity
+                                key={item}
+                                style={styles.modalItem}
+                                onPress={() => {
+                                    setBloodGroup(item);
+                                    setShowBloodGroupPicker(false);
+                                }}
+                            >
+                                <Text style={styles.modalItemText}>{item}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </View>
+            </Modal>
+
+            {showDatePicker && (
+                <DateTimePicker
+                    value={date}
+                    mode="date"
+                    display="default"
+                    minimumDate={new Date()}
+                    onChange={onDateChange}
+                />
+            )}
         </View>
     );
 };
@@ -254,99 +258,128 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
-        paddingBottom: 15,
-        backgroundColor: 'white',
+        paddingBottom: 12,
         borderBottomWidth: 1,
         borderBottomColor: '#F1F5F9',
     },
-    backButton: { padding: 4 },
-    headerTitle: { fontSize: 20, fontWeight: '800', color: '#1E293B' },
-    scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 60 },
-    formCard: {
-        backgroundColor: 'white',
-        borderRadius: 24,
-        paddingVertical: 10,
-        marginBottom: 10,
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1E293B',
     },
-    inputGroup: { marginBottom: 18 },
-    label: { fontSize: 14, fontWeight: '700', color: '#475569', marginBottom: 10 },
-    dropdownPicker: {
+    scrollContent: {
+        padding: 20,
+        paddingBottom: 120,
+    },
+    row: { flexDirection: 'row' },
+    inputGroup: { marginBottom: 14 },
+    label: {
+        fontSize: 13,
+        fontWeight: '600',
+        marginBottom: 6,
+        color: '#475569',
+    },
+    inputBox: {
+        height: 50,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        backgroundColor: '#F8FAFC',
+        paddingHorizontal: 14,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: '#F8FAFC',
-        borderWidth: 1.5,
-        borderColor: '#E2E8F0',
-        borderRadius: 16,
-        height: 58,
-        paddingHorizontal: 16,
     },
-    pickerText: { fontSize: 16, color: '#1E293B', fontWeight: '500' },
-    bloodGroupDropdown: {
-        marginTop: 8,
-        backgroundColor: 'white',
-        borderRadius: 16,
-        borderWidth: 1.5,
-        borderColor: '#E2E8F0',
-        elevation: 4,
-        zIndex: 100,
+    input: {
+        flex: 1,
+        fontSize: 14,
+        color: '#1E293B',
     },
-    bloodGroupItem: { paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-    bloodGroupText: { fontSize: 16, color: '#1E293B', fontWeight: '600' },
-    inputWrapper: {
+    valueText: {
+        fontSize: 14,
+        color: '#1E293B',
+    },
+    emergencyCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F8FAFC',
-        borderWidth: 1.5,
+        borderWidth: 1,
         borderColor: '#F1F5F9',
         borderRadius: 16,
-        height: 58,
-        paddingHorizontal: 16,
+        padding: 12,
+        marginBottom: 14,
     },
-    inputIcon: { marginRight: 12 },
-    input: { flex: 1, fontSize: 16, color: '#1E293B', fontWeight: '500' },
-    row: { flexDirection: 'row' },
-    emergencyContainer: {
-        flexDirection: 'row',
+    warningBox: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: '#FEF2F2',
+        justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        borderWidth: 1.5,
-        borderColor: '#F1F5F9',
-        borderRadius: 20,
-        padding: 16,
-        marginTop: 10,
-        shadowColor: '#000',
-        shadowOpacity: 0.03,
-        shadowRadius: 10,
-        elevation: 1,
     },
-    warningIconBox: { width: 44, height: 44, backgroundColor: '#FEF2F2', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    emergencyLabel: { fontSize: 16, fontWeight: '800', color: '#1E293B' },
-    emergencySubtext: { fontSize: 12, color: '#64748B', marginTop: 2 },
-    agreementText: {
-        fontSize: 11,
-        color: '#94A3B8',
-        textAlign: 'center',
-        lineHeight: 18,
-        paddingHorizontal: 25,
-        marginVertical: 35,
+    emergencyTitle: {
+        fontSize: 14,
         fontWeight: '700',
-        letterSpacing: 0.5,
+        color: '#1E293B',
+    },
+    emergencySub: {
+        fontSize: 12,
+        color: '#64748B',
+    },
+    agreementText: {
+        textAlign: 'center',
+        fontSize: 12,
+        color: '#94A3B8',
+        marginTop: 8,
+    },
+    bottomBar: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        padding: 16,
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#F1F5F9',
     },
     submitButton: {
+        height: 54,
+        borderRadius: 16,
         backgroundColor: '#DC2626',
-        borderRadius: 20,
-        height: 64,
-        flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: '#DC2626',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
-        elevation: 8,
+        alignItems: 'center',
     },
-    submitButtonText: { color: 'white', fontSize: 18, fontWeight: '800' },
+    submitText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+    },
+    modalContent: {
+        backgroundColor: '#fff',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 20,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        marginBottom: 14,
+        textAlign: 'center',
+    },
+    modalItem: {
+        paddingVertical: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    modalItemText: {
+        fontSize: 15,
+        textAlign: 'center',
+        color: '#1E293B',
+    },
 });
 
 export default CreateRequestScreen;

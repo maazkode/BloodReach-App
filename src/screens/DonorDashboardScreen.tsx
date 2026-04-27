@@ -17,9 +17,10 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import LinearGradient from 'react-native-linear-gradient';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument, createUserDocument, subscribeToRequests } from '../services/firestoreService';
+import { getUserDocument, createUserDocument, subscribeToRequests, subscribeToMatchingRequests } from '../services/firestoreService';
 import { UserDocument, DonationRequest } from '../types/database';
 import { signOut } from '../services/authService';
+import { triggerLocalNotification } from '../services/notificationService';
 import { Modal, Animated, Pressable, ActivityIndicator } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
@@ -77,6 +78,27 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
 
         return () => unsubscribe();
     }, [user]);
+
+    // Separate effect for matching request notifications
+    React.useEffect(() => {
+        if (!userData || !userData.bloodGroup || !userData.city) return;
+
+        console.log(`Starting matching listener for ${userData.bloodGroup} in ${userData.city}`);
+        
+        const unsubscribeMatching = subscribeToMatchingRequests(
+            userData.bloodGroup,
+            userData.city,
+            (newRequest) => {
+                triggerLocalNotification(
+                    'Urgent Blood Request!',
+                    `A new ${newRequest.bloodGroup} request has been posted in ${newRequest.city}.`,
+                    newRequest.id
+                );
+            }
+        );
+
+        return () => unsubscribeMatching();
+    }, [userData?.bloodGroup, userData?.city]);
 
     const toggleDrawer = (open: boolean) => {
         if (open) {

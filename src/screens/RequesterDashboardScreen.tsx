@@ -248,14 +248,7 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                     <Text style={styles.createRequestText}>Create Blood Request</Text>
                 </TouchableOpacity>
 
-                {/* Temporary Test Button */}
-                <TouchableOpacity
-                    style={[styles.createRequestButton, { backgroundColor: '#F1F5F9', marginTop: -10, marginBottom: 20, shadowColor: 'transparent' }]}
-                    onPress={() => navigation.navigate('UnifiedRegistration')}
-                >
-                    <MaterialIcon name="bug-report" size={22} color="#64748B" style={{ marginRight: 10 }} />
-                    <Text style={[styles.createRequestText, { color: '#64748B', fontSize: 14 }]}>[Test] Open Registration</Text>
-                </TouchableOpacity>
+
 
                 {/* Stats Row */}
                 <View style={styles.statsRow}>
