@@ -273,9 +273,6 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                 {/* Nearby Requests Section */}
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Nearby Blood Requests</Text>
-                    <TouchableOpacity onPress={() => navigation.navigate('BloodRequestFeed')}>
-                        <Text style={styles.seeAllText}>See All</Text>
-                    </TouchableOpacity>
                 </View>
 
                 {loadingRequests ? (
@@ -312,7 +309,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
 
                                         <TouchableOpacity 
                                             style={styles.viewDetailsBtn}
-                                            onPress={() => navigation.navigate('BloodRequestFeed')}
+                                            onPress={() => navigation.navigate('RequestDetail', { requestId: item.id! })}
                                         >
                                             <Text style={styles.viewDetailsBtnText}>Help Now</Text>
                                         </TouchableOpacity>

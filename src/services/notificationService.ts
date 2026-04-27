@@ -1,9 +1,20 @@
-import messaging from '@react-native-firebase/messaging';
+import { 
+    getMessaging, 
+    getToken, 
+    onMessage, 
+    requestPermission, 
+    onNotificationOpenedApp, 
+    getInitialNotification,
+    AuthorizationStatus
+} from '@react-native-firebase/messaging';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import { createNavigationContainerRef } from '@react-navigation/native';
 import { RootStackParamList } from '../../App';
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+// Initialize Messaging Instance
+const messaging = getMessaging();
 
 export function navigate(name: keyof RootStackParamList, params?: any) {
     if (navigationRef.isReady()) {
@@ -27,10 +38,10 @@ export const requestUserPermission = async (): Promise<boolean> => {
         }
     }
     
-    const authStatus = await messaging().requestPermission();
+    const authStatus = await requestPermission(messaging);
     const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        authStatus === AuthorizationStatus.AUTHORIZED ||
+        authStatus === AuthorizationStatus.PROVISIONAL;
 
     return enabled;
 };
@@ -44,7 +55,7 @@ export const getFCMToken = async (): Promise<string | null> => {
         const hasPermission = await requestUserPermission();
         if (!hasPermission) return null;
 
-        const token = await messaging().getToken();
+        const token = await getToken(messaging);
         if (token) {
             console.log('FCM Token:', token);
             return token;
@@ -60,7 +71,7 @@ export const getFCMToken = async (): Promise<string | null> => {
  * Handles foreground notifications (shows an alert)
  */
 export const subscribeToForegroundMessages = () => {
-    return messaging().onMessage(async remoteMessage => {
+    return onMessage(messaging, async remoteMessage => {
         console.log('A new FCM message arrived in foreground!', remoteMessage);
         Alert.alert(
             remoteMessage.notification?.title || 'Urgent Update',
@@ -74,7 +85,7 @@ export const subscribeToForegroundMessages = () => {
  */
 export const setupNotificationHandlers = () => {
     // 1. App in Background
-    messaging().onNotificationOpenedApp(remoteMessage => {
+    onNotificationOpenedApp(messaging, remoteMessage => {
         console.log('Notification caused app to open from background state:', remoteMessage);
         if (remoteMessage.data?.requestId) {
             navigate('RequestDetail', { requestId: remoteMessage.data.requestId as string });
@@ -82,8 +93,7 @@ export const setupNotificationHandlers = () => {
     });
 
     // 2. App was Quit (Initial Notification)
-    messaging()
-        .getInitialNotification()
+    getInitialNotification(messaging)
         .then(remoteMessage => {
             if (remoteMessage) {
                 console.log('Notification caused app to open from quit state:', remoteMessage);

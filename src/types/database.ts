@@ -39,6 +39,7 @@ export interface DonationRequest {
     hospitalAddress: string;
     city: string;
     patientName: string;
+    phone: string;
     urgencyLevel: 'normal' | 'urgent' | 'critical';
     status: 'open' | 'matched' | 'completed' | 'cancelled';
     matchedDonorIds: string[];

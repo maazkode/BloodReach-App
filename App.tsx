@@ -13,7 +13,6 @@ import DonorDashboard from './src/screens/DonorDashboardScreen';
 import RequesterDashboard from './src/screens/RequesterDashboardScreen';
 import CreateRequestScreen from './src/screens/CreateRequestScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
-import BloodRequestFeed from './src/screens/BloodRequestFeedScreen';
 import RequestDetailScreen from './src/screens/RequestDetailScreen';
 import { 
   navigationRef, 
@@ -31,7 +30,6 @@ export type RootStackParamList = {
   RequesterDashboard: undefined;
   CreateRequest: undefined;
   Profile: undefined;
-  BloodRequestFeed: undefined;
   RequestDetail: { requestId: string };
 };
 
@@ -69,7 +67,6 @@ const RootNavigator = () => {
             <Stack.Screen name="RequesterDashboard" component={RequesterDashboard} />
             <Stack.Screen name="CreateRequest" component={CreateRequestScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
-            <Stack.Screen name="BloodRequestFeed" component={BloodRequestFeed} />
             <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
             <Stack.Screen name="Auth" component={AuthScreen} />
           </>

@@ -10,7 +10,6 @@ import {
     StatusBar,
     Alert,
     ActivityIndicator,
-    Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
@@ -22,6 +21,7 @@ import { getAuth } from '@react-native-firebase/auth';
 import { RootStackParamList } from '../../App';
 import { createDonationRequest } from '../services/firestoreService';
 import { DonationRequest } from '../types/database';
+import { getFullLocationData } from '../services/locationService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateRequest'>;
 
@@ -34,9 +34,11 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const [bloodGroup, setBloodGroup] = useState('');
     const [units, setUnits] = useState('1');
     const [hospital, setHospital] = useState('');
-    const [city, setCity] = useState('');
+    const [address, setAddress] = useState('');
+    const [fetchingLocation, setFetchingLocation] = useState(false);
     const [date, setDate] = useState(new Date());
     const [isEmergency, setIsEmergency] = useState(false);
+    const [phone, setPhone] = useState('');
 
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showBloodGroupPicker, setShowBloodGroupPicker] = useState(false);
@@ -47,8 +49,20 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
         if (selectedDate) setDate(selectedDate);
     };
 
+    const handleFetchLocation = async () => {
+        setFetchingLocation(true);
+        try {
+            const locationData = await getFullLocationData();
+            setAddress(locationData.address);
+        } catch (error: any) {
+            Alert.alert('Location Error', error.message || 'Could not fetch location');
+        } finally {
+            setFetchingLocation(false);
+        }
+    };
+
     const handleSubmit = async () => {
-        if (!patientName || !bloodGroup || !hospital || !city) {
+        if (!patientName || !phone || !bloodGroup || !hospital || !address) {
             Alert.alert('Missing Info', 'Please fill all required fields');
             return;
         }
@@ -61,11 +75,12 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
             const requestData: Omit<DonationRequest, 'id' | 'createdAt' | 'updatedAt'> = {
                 requesterId: currentUser.uid,
                 patientName,
+                phone,
                 bloodGroup,
                 unitsRequired: parseInt(units) || 1,
                 hospitalName: hospital,
                 hospitalAddress: hospital,
-                city,
+                city: address,
                 urgencyLevel: isEmergency ? 'urgent' : 'normal',
                 status: 'open',
                 matchedDonorIds: [],
@@ -99,22 +114,43 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
             >
+                {/* BLOOD GROUP + DROPDOWN FIX */}
                 <View style={styles.row}>
                     <View style={[styles.inputGroup, { flex: 1.3, marginRight: 8 }]}>
                         <Text style={styles.label}>Blood Group</Text>
+
                         <TouchableOpacity
                             style={styles.inputBox}
-                            onPress={() => setShowBloodGroupPicker(true)}
+                            onPress={() => setShowBloodGroupPicker(!showBloodGroupPicker)}
                         >
                             <Text style={styles.valueText}>
                                 {bloodGroup || 'Select'}
                             </Text>
+
                             <MaterialCommunityIcon
                                 name="chevron-down"
                                 size={22}
                                 color="#64748B"
                             />
                         </TouchableOpacity>
+
+                        {/* SMALL DROPDOWN */}
+                        {showBloodGroupPicker && (
+                            <View style={styles.dropdown}>
+                                {BLOOD_GROUPS.map(item => (
+                                    <TouchableOpacity
+                                        key={item}
+                                        style={styles.dropdownItem}
+                                        onPress={() => {
+                                            setBloodGroup(item);
+                                            setShowBloodGroupPicker(false);
+                                        }}
+                                    >
+                                        <Text style={styles.dropdownText}>{item}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
                     </View>
 
                     <View style={[styles.inputGroup, { flex: 1 }]}>
@@ -157,6 +193,20 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
 
                 <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Mobile Number</Text>
+                    <View style={styles.inputBox}>
+                        <TextInput
+                            value={phone}
+                            onChangeText={setPhone}
+                            placeholder="03xx xxxxxxx"
+                            keyboardType="phone-pad"
+                            style={styles.input}
+                            placeholderTextColor="#94A3B8"
+                        />
+                    </View>
+                </View>
+
+                <View style={styles.inputGroup}>
                     <Text style={styles.label}>Hospital Name</Text>
                     <View style={styles.inputBox}>
                         <TextInput
@@ -170,15 +220,18 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
 
                 <View style={styles.inputGroup}>
-                    <Text style={styles.label}>City</Text>
+                    <Text style={styles.label}>Address</Text>
                     <View style={styles.inputBox}>
                         <TextInput
-                            value={city}
-                            onChangeText={setCity}
-                            placeholder="e.g. Islamabad"
+                            value={address}
+                            onChangeText={setAddress}
+                            placeholder="Enter full address or fetch live"
                             style={styles.input}
                             placeholderTextColor="#94A3B8"
                         />
+                        <TouchableOpacity onPress={handleFetchLocation}>
+                            <MaterialIcon name="my-location" size={22} color="#DC2626" />
+                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -218,26 +271,6 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 </TouchableOpacity>
             </View>
 
-            <Modal visible={showBloodGroupPicker} transparent animationType="slide">
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Select Blood Group</Text>
-                        {BLOOD_GROUPS.map(item => (
-                            <TouchableOpacity
-                                key={item}
-                                style={styles.modalItem}
-                                onPress={() => {
-                                    setBloodGroup(item);
-                                    setShowBloodGroupPicker(false);
-                                }}
-                            >
-                                <Text style={styles.modalItemText}>{item}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                </View>
-            </Modal>
-
             {showDatePicker && (
                 <DateTimePicker
                     value={date}
@@ -253,6 +286,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
+
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -262,23 +296,29 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#F1F5F9',
     },
+
     headerTitle: {
         fontSize: 18,
         fontWeight: '700',
         color: '#1E293B',
     },
+
     scrollContent: {
         padding: 20,
         paddingBottom: 120,
     },
+
     row: { flexDirection: 'row' },
+
     inputGroup: { marginBottom: 14 },
+
     label: {
         fontSize: 13,
         fontWeight: '600',
         marginBottom: 6,
         color: '#475569',
     },
+
     inputBox: {
         height: 50,
         borderRadius: 14,
@@ -290,15 +330,18 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
     },
+
     input: {
         flex: 1,
         fontSize: 14,
         color: '#1E293B',
     },
+
     valueText: {
         fontSize: 14,
         color: '#1E293B',
     },
+
     emergencyCard: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -308,6 +351,7 @@ const styles = StyleSheet.create({
         padding: 12,
         marginBottom: 14,
     },
+
     warningBox: {
         width: 36,
         height: 36,
@@ -316,21 +360,25 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+
     emergencyTitle: {
         fontSize: 14,
         fontWeight: '700',
         color: '#1E293B',
     },
+
     emergencySub: {
         fontSize: 12,
         color: '#64748B',
     },
+
     agreementText: {
         textAlign: 'center',
         fontSize: 12,
         color: '#94A3B8',
         marginTop: 8,
     },
+
     bottomBar: {
         position: 'absolute',
         left: 0,
@@ -341,6 +389,7 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: '#F1F5F9',
     },
+
     submitButton: {
         height: 54,
         borderRadius: 16,
@@ -348,36 +397,35 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+
     submitText: {
         color: '#fff',
         fontSize: 16,
         fontWeight: '700',
     },
-    modalOverlay: {
-        flex: 1,
-        justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.4)',
-    },
-    modalContent: {
+
+    dropdown: {
+        position: 'absolute',
+        top: 75,
+        left: 0,
+        right: 0,
         backgroundColor: '#fff',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        padding: 20,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
+        zIndex: 999,
+        elevation: 5,
     },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        marginBottom: 14,
-        textAlign: 'center',
-    },
-    modalItem: {
-        paddingVertical: 14,
+
+    dropdownItem: {
+        paddingVertical: 10,
+        paddingHorizontal: 14,
         borderBottomWidth: 1,
         borderBottomColor: '#F1F5F9',
     },
-    modalItemText: {
-        fontSize: 15,
-        textAlign: 'center',
+
+    dropdownText: {
+        fontSize: 14,
         color: '#1E293B',
     },
 });
