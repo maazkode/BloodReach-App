@@ -11,6 +11,7 @@ import {
     Modal,
     Alert,
     Switch,
+    ActivityIndicator,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +24,7 @@ import { createUserDocument } from '../services/firestoreService';
 import { UserDocument } from '../types/database';
 import { Timestamp, serverTimestamp } from '@react-native-firebase/firestore';
 import { getFullLocationData, forwardGeocode, LocationData } from '../services/locationService';
+import { getFCMToken } from '../services/notificationService';
 import { geohashForLocation } from 'geofire-common';
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
@@ -35,7 +37,8 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [bloodGroup, setBloodGroup] = useState('');
-    const [city, setCity] = useState('');
+    const [address, setAddress] = useState('');
+    const [manualAddress, setManualAddress] = useState('');
 
     // Optional Fields
     const [age, setAge] = useState('');
@@ -50,18 +53,15 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
-    // Location States
     const [locationData, setLocationData] = useState<LocationData | null>(null);
     const [isDetecting, setIsDetecting] = useState(false);
-    const [isManual, setIsManual] = useState(false);
-    const [manualAddress, setManualAddress] = useState('');
 
     const validateForm = () => {
         let tempErrors: { [key: string]: string } = {};
         if (!name.trim()) tempErrors.name = 'Full name is required';
         if (!phone.trim()) tempErrors.phone = 'Phone number is required';
         if (!bloodGroup) tempErrors.bloodGroup = 'Blood group is required';
-        if (!city.trim()) tempErrors.city = 'City is required';
+        if (!address.trim()) tempErrors.address = 'Full address is required';
 
         setErrors(tempErrors);
         if (!locationData) {
@@ -77,9 +77,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
             const data = await getFullLocationData();
             setLocationData(data);
             if (data.address) {
-                // Simplified city extraction
-                const parts = data.address.split(',');
-                if (parts.length > 0) setCity(parts[0].trim());
+                setAddress(data.address);
             }
         } catch (error: any) {
             Alert.alert('Detection Failed', error.message || 'Could not detect location');
@@ -89,7 +87,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     };
 
     const handleManualLocate = async () => {
-        if (!manualAddress.trim()) {
+        if (!address.trim()) {
             Alert.alert('Error', 'Please enter an address or city name');
             return;
         }
@@ -105,7 +103,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                     geohash: hash,
                     address: result.address
                 });
-                setCity(manualAddress);
+                setAddress(result.address);
             } else {
                 Alert.alert('Not Found', 'Could not find coordinates for this address.');
             }
@@ -133,15 +131,17 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 name,
                 phone,
                 bloodGroup,
-                city,
+                city: address.split(',')[0].trim(), // Extract first part as city for compatibility
+                address: address,
                 age: age ? Number(age) : undefined,
                 gender: gender || undefined,
                 isAvailable: isAvailable,
                 roles: roles,
                 lastActiveRole: lastActiveRole as 'donor' | 'requester',
                 lastDonationDate: lastDonationDate ? Timestamp.fromDate(lastDonationDate) : null,
+                fcmToken: (await getFCMToken()) || undefined,
 
-                address: locationData.address,
+                // locationData.address might be more precise if geocoded
                 location: {
                     latitude: locationData.latitude,
                     longitude: locationData.longitude,
@@ -212,9 +212,38 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>City <Text style={styles.required}>*</Text></Text>
-                            <TextInput style={styles.input} placeholder="e.g. Karachi, Lahore" value={city} onChangeText={setCity} />
-                            {errors.city && <Text style={styles.errorText}>{errors.city}</Text>}
+                            <Text style={styles.label}>Full Address <Text style={styles.required}>*</Text></Text>
+                            <View style={styles.inputWrapper}>
+                                <TextInput
+                                    style={[styles.input, { flex: 1, backgroundColor: 'transparent', paddingHorizontal: 0 }]}
+                                    placeholder="e.g. House #123, Street 5, City"
+                                    value={address}
+                                    onChangeText={(text) => {
+                                        setAddress(text);
+                                        if (locationData) setLocationData(null);
+                                    }}
+                                />
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    {isDetecting ? (
+                                        <ActivityIndicator size="small" color={Colors.primary} style={{ marginRight: 8 }} />
+                                    ) : (
+                                        <TouchableOpacity
+                                            onPress={handleAutoDetect}
+                                            style={{ padding: 4 }}
+                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                        >
+                                            <MaterialIcon name="my-location" size={20} color={Colors.primary} />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+                            {locationData && (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                                    <MaterialIcon name="check-circle" size={14} color="#10B981" />
+                                    <Text style={{ fontSize: 11, color: '#10B981', marginLeft: 4, fontWeight: '600' }}>Location Verified</Text>
+                                </View>
+                            )}
+                            {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
                         </View>
 
 
@@ -249,73 +278,6 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                                 </Text>
                                 <MaterialIcon name="calendar-today" size={18} color="#94A3B8" />
                             </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.separator} />
-
-                        <View style={styles.locationSection}>
-                            <Text style={styles.sectionTitle}>Location Selection</Text>
-                            <Text style={styles.donorSubtitle}>Required for matching you with nearby donors/requests.</Text>
-                            
-                            {!locationData ? (
-                                <View style={styles.locationActions}>
-                                    {!isManual ? (
-                                        <TouchableOpacity 
-                                            style={styles.detectButton} 
-                                            onPress={handleAutoDetect}
-                                            disabled={isDetecting}
-                                        >
-                                            <MaterialIcon name="my-location" size={20} color="white" />
-                                            <Text style={styles.detectButtonText}>
-                                                {isDetecting ? 'Detecting...' : 'Auto-Detect My Location'}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ) : (
-                                        <View style={styles.manualInputRow}>
-                                            <TextInput 
-                                                style={[styles.input, { flex: 1, marginBottom: 0 }]} 
-                                                placeholder="Enter Address or City" 
-                                                value={manualAddress}
-                                                onChangeText={setManualAddress}
-                                            />
-                                            <TouchableOpacity 
-                                                style={styles.locateButton} 
-                                                onPress={handleManualLocate}
-                                                disabled={isDetecting}
-                                            >
-                                                <MaterialIcon name="search" size={24} color="white" />
-                                            </TouchableOpacity>
-                                        </View>
-                                    )}
-                                    
-                                    <TouchableOpacity 
-                                        style={styles.toggleModeButton} 
-                                        onPress={() => setIsManual(!isManual)}
-                                    >
-                                        <Text style={styles.toggleModeText}>
-                                            {isManual ? 'Use GPS instead' : 'Enter location manually'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-                            ) : (
-                                <View style={styles.capturedLocation}>
-                                    <View style={styles.locationInfo}>
-                                        <MaterialIcon name="check-circle" size={24} color="#10B981" />
-                                        <View style={styles.locationTextContainer}>
-                                            <Text style={styles.locationFoundTitle}>Location Captured</Text>
-                                            <Text style={styles.capturedAddress} numberOfLines={2}>
-                                                {locationData.address}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <TouchableOpacity 
-                                        onPress={() => { setLocationData(null); setManualAddress(''); }}
-                                        style={styles.retryLocation}
-                                    >
-                                        <Text style={styles.retryText}>Change</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            )}
                         </View>
 
                         <View style={styles.separator} />
@@ -433,17 +395,17 @@ const styles = StyleSheet.create({
     registerButton: { backgroundColor: Colors.primary, height: 54, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 20 },
     registerButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
     errorText: { color: Colors.error, fontSize: 11, marginTop: 4 },
-    
+
     // Location Styles
     locationSection: { marginVertical: 10 },
     locationActions: { marginTop: 10 },
-    detectButton: { 
-        backgroundColor: Colors.primary, 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        height: 48, 
-        borderRadius: 12, 
+    detectButton: {
+        backgroundColor: Colors.primary,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: 48,
+        borderRadius: 12,
         shadowColor: Colors.primary,
         shadowOpacity: 0.2,
         shadowRadius: 8,
@@ -451,23 +413,23 @@ const styles = StyleSheet.create({
     },
     detectButtonText: { color: 'white', fontWeight: 'bold', marginLeft: 8 },
     manualInputRow: { flexDirection: 'row', alignItems: 'center' },
-    locateButton: { 
-        backgroundColor: Colors.primary, 
-        width: 48, 
-        height: 48, 
-        borderRadius: 12, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        marginLeft: 8 
+    locateButton: {
+        backgroundColor: Colors.primary,
+        width: 48,
+        height: 48,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 8
     },
     toggleModeButton: { marginTop: 12, alignItems: 'center' },
     toggleModeText: { color: '#64748B', fontSize: 13, textDecorationLine: 'underline' },
-    capturedLocation: { 
-        backgroundColor: '#F0FDF4', 
-        borderRadius: 12, 
-        padding: 12, 
-        flexDirection: 'row', 
-        alignItems: 'center', 
+    capturedLocation: {
+        backgroundColor: '#F0FDF4',
+        borderRadius: 12,
+        padding: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'space-between',
         borderWidth: 1,
         borderColor: '#BBF7D0'

@@ -21,7 +21,8 @@ export interface UserDocument {
         longitude: number;
         geohash: string;
     };
-    address: string;
+    // address: string;
+    fcmToken?: string;
     email: string;
     photoURL: string;
     isVerified: boolean;

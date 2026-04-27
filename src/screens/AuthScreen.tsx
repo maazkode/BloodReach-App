@@ -15,7 +15,8 @@ import { Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { signInWithGoogle } from '../services/authService';
-import { getUserDocument } from '../services/firestoreService';
+import { getUserDocument, createUserDocument } from '../services/firestoreService';
+import { getFCMToken } from '../services/notificationService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 
@@ -28,7 +29,13 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
             if (user) {
                 const profile = await getUserDocument(user.uid);
                 if (profile) {
-                    if (profile.primaryRole === 'donor' || profile.isDonor) {
+                    // Update FCM Token on every login
+                    const token = await getFCMToken();
+                    if (token) {
+                        await createUserDocument({ uid: user.uid, fcmToken: token });
+                    }
+
+                    if (profile.roles && profile.roles.includes('donor')) {
                         navigation.replace('DonorDashboard');
                     } else {
                         navigation.replace('RequesterDashboard');

@@ -14,6 +14,13 @@ import RequesterDashboard from './src/screens/RequesterDashboardScreen';
 import CreateRequestScreen from './src/screens/CreateRequestScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import BloodRequestFeed from './src/screens/BloodRequestFeedScreen';
+import RequestDetailScreen from './src/screens/RequestDetailScreen';
+import { 
+  navigationRef, 
+  subscribeToForegroundMessages, 
+  setupNotificationHandlers 
+} from './src/services/notificationService';
+import { useEffect } from 'react';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -25,6 +32,7 @@ export type RootStackParamList = {
   CreateRequest: undefined;
   Profile: undefined;
   BloodRequestFeed: undefined;
+  RequestDetail: { requestId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -32,12 +40,20 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootNavigator = () => {
   const { user, loading } = useAuth();
 
+  useEffect(() => {
+    // Initialize Notification Listeners
+    const unsubscribe = subscribeToForegroundMessages();
+    setupNotificationHandlers();
+
+    return unsubscribe;
+  }, []);
+
   if (loading) {
     return <SplashScreen />;
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
@@ -53,6 +69,7 @@ const RootNavigator = () => {
             <Stack.Screen name="CreateRequest" component={CreateRequestScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="BloodRequestFeed" component={BloodRequestFeed} />
+            <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
             <Stack.Screen name="Auth" component={AuthScreen} />
           </>
         ) : (
