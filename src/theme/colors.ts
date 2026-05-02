@@ -1,6 +1,7 @@
 export const Colors = {
-  primary: '#D32F2F',
+  primary: '#B62022',
   primaryDark: '#8F1D1E',
+  primaryLight: '#FDECEC',
   white: '#FFFFFF',
   black: '#000000',
   background: '#F8F9FA',
@@ -18,6 +19,6 @@ export const Colors = {
   successLight: '#E8F5E9',
   info: '#2196F3',
   infoLight: '#E3F2FD',
-  error: '#F44336',
+  error: '#B62022',
   errorLight: '#FFEBEE',
 };

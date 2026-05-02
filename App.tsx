@@ -55,7 +55,8 @@ const RootNavigator = () => {
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
-          animation: 'fade',
+          animation: 'slide_from_right',
+          animationDuration: 280,
         }}
       >
         {user ? (
@@ -67,11 +68,11 @@ const RootNavigator = () => {
             <Stack.Screen name="CreateRequest" component={CreateRequestScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
-            <Stack.Screen name="Auth" component={AuthScreen} />
+            <Stack.Screen name="Auth" component={AuthScreen} options={{ animation: 'fade' }} />
           </>
         ) : (
           <>
-            <Stack.Screen name="Auth" component={AuthScreen} />
+            <Stack.Screen name="Auth" component={AuthScreen} options={{ animation: 'fade' }} />
           </>
         )}
       </Stack.Navigator>

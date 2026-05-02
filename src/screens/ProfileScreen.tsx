@@ -135,8 +135,8 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.navText}>History</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem}>
-          <MaterialIcon name="person" size={26} color="#DC2626" />
-          <Text style={[styles.navText, { color: '#DC2626' }]}>Profile</Text>
+          <MaterialIcon name="person" size={26} color="#B62022" />
+          <Text style={[styles.navText, { color: '#B62022' }]}>Profile</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -151,11 +151,11 @@ const MenuRow: React.FC<{
 }> = ({ icon, label, onPress, danger }) => (
   <TouchableOpacity style={styles.menuRow} onPress={onPress}>
     <View style={[styles.menuIconBox, danger && styles.menuIconBoxDanger]}>
-      <MaterialIcon name={icon as any} size={22} color={danger ? '#DC2626' : '#DC2626'} />
+      <MaterialIcon name={icon as any} size={22} color={danger ? '#B62022' : '#B62022'} />
     </View>
-    <Text style={[styles.menuLabel, danger && { color: '#DC2626' }]}>{label}</Text>
+    <Text style={[styles.menuLabel, danger && { color: '#B62022' }]}>{label}</Text>
     <View style={{ flex: 1 }} />
-    <MaterialIcon name="chevron-right" size={24} color={danger ? '#DC2626' : '#CBD5E1'} />
+    <MaterialIcon name="chevron-right" size={24} color={danger ? '#B62022' : '#CBD5E1'} />
   </TouchableOpacity>
 );
 
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#DC2626',
+    backgroundColor: '#B62022',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
@@ -193,12 +193,12 @@ const styles = StyleSheet.create({
   bloodPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DC2626',
+    backgroundColor: '#B62022',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 14,
     gap: 8,
-    shadowColor: '#DC2626',
+    shadowColor: '#B62022',
     shadowOpacity: 0.22,
     shadowRadius: 10,
     elevation: 4,
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
     borderColor: '#F1F5F9',
   },
   statCol: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 18, fontWeight: '900', color: '#DC2626', marginBottom: 6 },
+  statValue: { fontSize: 18, fontWeight: '900', color: '#B62022', marginBottom: 6 },
   statLabel: { fontSize: 10, fontWeight: '900', color: '#94A3B8', letterSpacing: 0.6 },
   statDivider: { width: 1, height: 42, backgroundColor: '#F1F5F9' },
   menuCard: {
@@ -251,10 +251,10 @@ const styles = StyleSheet.create({
   menuLabel: { fontSize: 15, fontWeight: '700', color: '#334155' },
   menuDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 8 },
   referCard: {
-    backgroundColor: '#DC2626',
+    backgroundColor: '#B62022',
     borderRadius: 18,
     padding: 18,
-    shadowColor: '#DC2626',
+    shadowColor: '#B62022',
     shadowOpacity: 0.22,
     shadowRadius: 18,
     elevation: 4,
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  inviteBtnText: { color: '#DC2626', fontSize: 13, fontWeight: '900' },
+  inviteBtnText: { color: '#B62022', fontSize: 13, fontWeight: '900' },
   bottomNav: {
     position: 'absolute',
     left: 0,

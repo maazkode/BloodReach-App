@@ -19,6 +19,7 @@ import { getUserDocument, createUserDocument } from '../services/firestoreServic
 import { UserDocument } from '../types/database';
 import { signOut } from '../services/authService';
 import { Modal, Animated, Pressable } from 'react-native';
+import BottomTabBar from '../components/BottomTabBar';
 
 const { width } = Dimensions.get('window');
 
@@ -27,35 +28,39 @@ type Props = NativeStackScreenProps<RootStackParamList, 'RequesterDashboard'>;
 const REQUESTS_DATA = [
     {
         id: '1',
-        title: 'O Positive (O+)',
-        units: '2 Units required',
-        hospital: 'St. Mary\'s Hospital',
-        status: ['EMERGENCY', 'WAITING'],
+        patientName: 'Ali Khan',
+        bloodGroup: 'O+',
+        unitsRequired: 2,
+        hospitalName: "St. Mary's Hospital",
+        city: 'Islamabad',
+        urgencyLevel: 'urgent',
+        status: 'open',
         time: '2h ago',
-        bloodType: 'O+',
-        matches: ['JD', '+1'],
-        type: 'emergency'
+        matchedDonorIds: ['donor1', 'donor2'],
     },
     {
         id: '2',
-        title: 'A Negative (A-)',
-        units: '1 Unit',
-        hospital: 'Match Found',
-        status: ['CONFIRMED'],
+        patientName: 'Sarah Ahmed',
+        bloodGroup: 'A-',
+        unitsRequired: 1,
+        hospitalName: 'City Hospital',
+        city: 'Lahore',
+        urgencyLevel: 'normal',
+        status: 'matched',
         time: '1 day ago',
-        bloodType: 'A-',
-        info: 'Donor arriving soon',
-        type: 'confirmed'
+        matchedDonorIds: ['donor3'],
     },
     {
         id: '3',
-        title: 'B Positive (B+)',
-        units: '3 Units',
-        hospital: 'Request Fulfilled',
-        status: ['CLOSED'],
+        patientName: 'Zainab Bibi',
+        bloodGroup: 'B+',
+        unitsRequired: 3,
+        hospitalName: 'General Hospital',
+        city: 'Karachi',
+        urgencyLevel: 'normal',
+        status: 'completed',
         time: '4 days ago',
-        bloodType: 'B+',
-        type: 'closed'
+        matchedDonorIds: ['donor4'],
     }
 ];
 
@@ -64,6 +69,7 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
     const { user } = useAuth();
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+    const [activeTab, setActiveTab] = React.useState('home');
     const slideAnim = React.useRef(new Animated.Value(width * 0.75)).current;
 
     React.useEffect(() => {
@@ -108,12 +114,12 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
 
         if (status === 'EMERGENCY') {
             bgColor = '#FEE2E2';
-            textColor = '#DC2626';
-            icon = <MaterialIcon name="emergency" size={12} color="#DC2626" style={{ marginRight: 4 }} />;
+            textColor = '#B62022';
+            icon = <MaterialIcon name="emergency" size={12} color="#B62022" style={{ marginRight: 4 }} />;
         } else if (status === 'WAITING') {
             bgColor = '#FFEDD5';
             textColor = '#D97706';
-        } else if (status === 'CONFIRMED') {
+        } else if (status === 'MATCHED') {
             bgColor = '#DCFCE7';
             textColor = '#16A34A';
         } else if (status === 'CLOSED') {
@@ -218,17 +224,15 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
 
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-                <View style={styles.headerInfo}>
+                <View style={styles.headerBrand}>
                     <Image
-                        source={{ uri: userData?.photoURL || 'https://i.pravatar.cc/100?u=user' }}
-                        style={styles.avatar}
+                        source={require('../assets/logo.png')}
+                        style={styles.headerLogo}
+                        resizeMode="contain"
                     />
-                    <View style={styles.headerTextContainer}>
-                        <Text style={styles.welcomeText}>Welcome back,</Text>
-                        <Text style={styles.userName}>{userData?.name?.split(' ')[0] || 'User'}</Text>
-                    </View>
+                    <Text style={styles.headerBrandName}>BloodReach</Text>
                 </View>
-                <TouchableOpacity onPress={() => toggleDrawer(true)} style={styles.notificationButton}>
+                <TouchableOpacity onPress={() => toggleDrawer(true)} style={styles.menuButton}>
                     <MaterialIcon name="menu" size={26} color="#475569" />
                 </TouchableOpacity>
             </View>
@@ -254,7 +258,7 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                 <View style={styles.statsRow}>
                     <View style={styles.statCard}>
                         <Text style={styles.statLabel}>ACTIVE MATCHES</Text>
-                        <Text style={[styles.statValue, { color: '#DC2626' }]}>02</Text>
+                        <Text style={[styles.statValue, { color: '#B62022' }]}>02</Text>
                     </View>
                     <View style={styles.statCard}>
                         <Text style={styles.statLabel}>PENDING UNITS</Text>
@@ -271,53 +275,62 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                 </View>
 
                 {REQUESTS_DATA.map((item) => (
-                    <TouchableOpacity activeOpacity={0.8} key={item.id} style={styles.requestCard}>
+                    <TouchableOpacity
+                        activeOpacity={0.8}
+                        key={item.id}
+                        style={styles.requestCard}
+                        onPress={() => navigation.navigate('RequestDetail', { requestId: item.id })}
+                    >
                         <View style={styles.cardMain}>
-                            <View style={[styles.bloodBadge, item.type === 'closed' && styles.bloodBadgeClosed]}>
-                                <Text style={[styles.bloodBadgeText, item.type === 'closed' && styles.bloodBadgeTextClosed]}>
-                                    {item.bloodType}
+                            <View style={[styles.bloodBadge, item.status === 'completed' && styles.bloodBadgeClosed]}>
+                                <Text style={[styles.bloodBadgeText, item.status === 'completed' && styles.bloodBadgeTextClosed]}>
+                                    {item.bloodGroup}
                                 </Text>
                             </View>
-                            
+
                             <View style={styles.cardInfo}>
                                 <View style={styles.titleRow}>
-                                    <Text style={styles.requestTitle} numberOfLines={1}>{item.title}</Text>
+                                    <Text style={styles.requestTitle} numberOfLines={1}>{item.patientName}</Text>
                                     <Text style={styles.timeText}>{item.time}</Text>
                                 </View>
                                 <Text style={styles.requestSub} numberOfLines={1}>
-                                    {item.units} <Text style={styles.bullet}>•</Text> {item.hospital}
+                                    {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''} <Text style={styles.bullet}>•</Text> {item.hospitalName}
                                 </Text>
                                 <View style={styles.badgeRow}>
-                                    {item.status.map(renderStatusBadge)}
+                                    {item.urgencyLevel === 'urgent' && renderStatusBadge('EMERGENCY')}
+                                    {item.status === 'open' && renderStatusBadge('WAITING')}
+                                    {item.status === 'matched' && renderStatusBadge('MATCHED')}
+                                    {item.status === 'completed' && renderStatusBadge('CLOSED')}
                                 </View>
                             </View>
                         </View>
 
                         <View style={styles.cardFooter}>
                             <View style={styles.footerLeft}>
-                                {item.matches ? (
+                                {item.matchedDonorIds && item.matchedDonorIds.length > 0 ? (
                                     <View style={styles.matchesRow}>
-                                        <View style={styles.matchCircle}><Text style={styles.matchText}>JD</Text></View>
-                                        <View style={[styles.matchCircle, { backgroundColor: '#FEE2E2', marginLeft: -8 }]}><Text style={[styles.matchText, { color: '#DC2626' }]}>+1</Text></View>
-                                        <Text style={styles.matchLabel}>Matches found</Text>
+                                        <View style={styles.matchCircle}><Text style={styles.matchText}>{item.matchedDonorIds.length}</Text></View>
+                                        <Text style={styles.matchLabel}>Donor{item.matchedDonorIds.length > 1 ? 's' : ''} Found</Text>
                                     </View>
-                                ) : item.info ? (
+                                ) : item.status === 'completed' ? (
+                                    <Text style={[styles.matchLabel, { marginLeft: 0 }]}>Request Fulfilled</Text>
+                                ) : (
                                     <View style={styles.infoRow}>
                                         <View style={styles.greenDot} />
-                                        <Text style={styles.infoText}>{item.info}</Text>
+                                        <Text style={styles.infoText}>Searching for donors...</Text>
                                     </View>
-                                ) : <View />}
+                                )}
                             </View>
 
                             <View style={styles.footerRight}>
                                 <Text style={[
                                     styles.viewDetailsText,
-                                    item.type === 'closed' && styles.viewDetailsTextOutline
+                                    item.status === 'completed' && styles.viewDetailsTextOutline
                                 ]}>View Details</Text>
-                                <MaterialIcon 
-                                    name="chevron-right" 
-                                    size={20} 
-                                    color={item.type === 'closed' ? '#94A3B8' : '#DC2626'} 
+                                <MaterialIcon
+                                    name="chevron-right"
+                                    size={20}
+                                    color={item.status === 'completed' ? '#94A3B8' : '#B62022'}
                                 />
                             </View>
                         </View>
@@ -325,21 +338,16 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                 ))}
             </ScrollView>
 
-            {/* Nav Bar */}
-            <View style={[styles.navBar, { paddingBottom: insets.bottom + 10 }]}>
-                <TouchableOpacity style={styles.navItem}>
-                    <MaterialIcon name="home" size={28} color="#DC2626" />
-                    <Text style={[styles.navText, { color: '#DC2626' }]}>Home</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem}>
-                    <MaterialIcon name="list-alt" size={28} color="#94A3B8" />
-                    <Text style={styles.navText}>My Requests</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
-                    <MaterialIcon name="person" size={28} color="#94A3B8" />
-                    <Text style={styles.navText}>Profile</Text>
-                </TouchableOpacity>
-            </View>
+            <BottomTabBar
+                activeTab={activeTab}
+                tabs={[
+                    { key: 'home', label: 'Home', icon: 'home', activeIcon: 'home', onPress: () => setActiveTab('home') },
+                    { key: 'requests', label: 'Requests', icon: 'list-alt', onPress: () => setActiveTab('requests') },
+                    { key: 'create', label: 'New', icon: 'add', isFab: true, onPress: () => { navigation.navigate('CreateRequest'); } },
+                    { key: 'history', label: 'History', icon: 'history', onPress: () => setActiveTab('history') },
+                    { key: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person', onPress: () => { setActiveTab('profile'); navigation.navigate('Profile'); } },
+                ]}
+            />
         </View>
     );
 };
@@ -351,25 +359,25 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingBottom: 20,
+        paddingBottom: 14,
         backgroundColor: 'white',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
     },
-    headerInfo: { flexDirection: 'row', alignItems: 'center' },
-    avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#E2E8F0' },
-    headerTextContainer: { marginLeft: 12 },
-    welcomeText: { fontSize: 13, color: '#64748B', fontWeight: '500' },
-    userName: { fontSize: 20, fontWeight: '800', color: '#1E293B' },
-    notificationButton: { padding: 5 },
+    headerBrand: { flexDirection: 'row', alignItems: 'center' },
+    headerLogo: { width: 45, height: 45, marginRight: 8 },
+    headerBrandName: { fontSize: 20, fontWeight: '900', color: '#000000', letterSpacing: 0.5 },
+    menuButton: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
     scrollContent: { paddingHorizontal: 16, paddingTop: 20 },
     createRequestButton: {
-        backgroundColor: '#DC2626',
+        backgroundColor: '#B62022',
         borderRadius: 10,
-        height: 60,
+        height: 52,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 20,
-        shadowColor: '#DC2626',
+        shadowColor: '#B62022',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
         shadowRadius: 8,
@@ -384,28 +392,28 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 10,
     },
-    createRequestText: { color: 'white', fontSize: 17, fontWeight: '700' },
-    statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
+    createRequestText: { color: 'white', fontSize: 15, fontWeight: '700' },
+    statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
     statCard: {
         width: '48%',
         backgroundColor: 'white',
         borderRadius: 10,
-        padding: 16,
+        padding: 12,
         shadowColor: '#000',
         shadowOpacity: 0.05,
         shadowRadius: 10,
         elevation: 2,
     },
-    statLabel: { fontSize: 11, fontWeight: '700', color: '#64748B', marginBottom: 8 },
-    statValue: { fontSize: 28, fontWeight: '800' },
-    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+    statLabel: { fontSize: 11, fontWeight: '700', color: '#64748B', marginBottom: 6 },
+    statValue: { fontSize: 24, fontWeight: '800' },
+    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     sectionTitle: { fontSize: 19, fontWeight: '800', color: '#1E293B' },
-    seeAllText: { fontSize: 14, color: '#DC2626', fontWeight: '600' },
+    seeAllText: { fontSize: 14, color: '#B62022', fontWeight: '600' },
     requestCard: {
         backgroundColor: 'white',
         borderRadius: 10,
-        padding: 20,
-        marginBottom: 16,
+        padding: 16,
+        marginBottom: 14,
         shadowColor: '#64748B',
         shadowOpacity: 0.08,
         shadowOffset: { width: 0, height: 6 },
@@ -414,27 +422,27 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#F8FAFC',
     },
-    cardMain: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
+    cardMain: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 },
     bloodBadge: {
-        width: 56,
-        height: 56,
+        width: 44,
+        height: 44,
         backgroundColor: '#FDECEC',
-        borderRadius: 28,
+        borderRadius: 22,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
         borderColor: '#FEE2E2',
-        marginRight: 16,
-        marginTop: 4,
+        marginRight: 12,
+        marginTop: 2,
     },
     bloodBadgeClosed: { backgroundColor: '#F8FAFC', borderColor: '#F1F5F9' },
-    bloodBadgeText: { fontSize: 18, fontWeight: '800', color: '#DC2626' },
+    bloodBadgeText: { fontSize: 15, fontWeight: '800', color: '#B62022' },
     bloodBadgeTextClosed: { color: '#94A3B8' },
     cardInfo: { flex: 1 },
-    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-    requestTitle: { fontSize: 18, fontWeight: '800', color: '#1E293B', flex: 1, marginRight: 12 },
-    timeText: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
-    requestSub: { fontSize: 13, color: '#64748B', fontWeight: '500', marginBottom: 12 },
+    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+    requestTitle: { fontSize: 16, fontWeight: '800', color: '#1E293B', flex: 1, marginRight: 10 },
+    timeText: { fontSize: 11, color: '#94A3B8', fontWeight: '600' },
+    requestSub: { fontSize: 12, color: '#64748B', fontWeight: '500', marginBottom: 10 },
     bullet: { marginHorizontal: 6, color: '#CBD5E1' },
     badgeRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
     badge: {
@@ -449,7 +457,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingTop: 16,
+        paddingTop: 12,
         borderTopWidth: 1,
         borderTopColor: '#F1F5F9',
     },
@@ -471,7 +479,7 @@ const styles = StyleSheet.create({
     infoRow: { flexDirection: 'row', alignItems: 'center' },
     greenDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E', marginRight: 8 },
     infoText: { fontSize: 13, color: '#16A34A', fontWeight: '600' },
-    viewDetailsText: { color: '#DC2626', fontWeight: '700', fontSize: 14, marginRight: 2 },
+    viewDetailsText: { color: '#B62022', fontWeight: '700', fontSize: 14, marginRight: 2 },
     viewDetailsTextOutline: { color: '#94A3B8' },
     navBar: {
         position: 'absolute',
@@ -520,7 +528,7 @@ const styles = StyleSheet.create({
     profileEmail: { fontSize: 13, color: '#64748B', fontWeight: '500' },
     drawerBadgeRow: { flexDirection: 'row', alignItems: 'center' },
     bloodTypeBadge: {
-        backgroundColor: '#DC2626',
+        backgroundColor: '#B62022',
         paddingHorizontal: 12,
         paddingVertical: 5,
         borderRadius: 8,

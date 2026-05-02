@@ -8,6 +8,10 @@ import {
     StatusBar,
     Image,
     Dimensions,
+    Modal,
+    Animated,
+    Pressable,
+    ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
@@ -15,42 +19,16 @@ import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIc
 import { Colors } from '../theme/colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import LinearGradient from 'react-native-linear-gradient';
 import { useAuth } from '../context/AuthContext';
 import { getUserDocument, createUserDocument, subscribeToRequests, subscribeToMatchingRequests } from '../services/firestoreService';
 import { UserDocument, DonationRequest } from '../types/database';
 import { signOut } from '../services/authService';
 import { triggerLocalNotification } from '../services/notificationService';
-import { Modal, Animated, Pressable, ActivityIndicator } from 'react-native';
+import BottomTabBar from '../components/BottomTabBar';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DonorDashboard'>;
-
-const STATS_DATA = [
-    {
-        id: 1,
-        label: 'DONATIONS',
-        value: '5',
-        subtext: 'Total lifetime',
-        icon: 'volunteer-activism'
-    },
-    {
-        id: 2,
-        label: 'LIVES SAVED',
-        value: '15',
-        subtext: 'Impact estimated',
-        icon: 'favorite'
-    },
-];
-
-// Placeholder images for aesthetic consistency
-const REQUEST_IMAGES = [
-    'https://images.unsplash.com/photo-1587350859728-4476654a1809?q=80&w=2070&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=2053&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1579154235828-4519939f9392?q=80&w=2070&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1538108197017-c1a966bd7b3f?q=80&w=2024&auto=format&fit=crop'
-];
 
 const DonorDashboard: React.FC<Props> = ({ navigation }) => {
     const insets = useSafeAreaInsets();
@@ -59,6 +37,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
     const [nearbyRequests, setNearbyRequests] = React.useState<DonationRequest[]>([]);
     const [loadingRequests, setLoadingRequests] = React.useState(true);
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+    const [activeTab, setActiveTab] = React.useState('home');
     const slideAnim = React.useRef(new Animated.Value(-width * 0.75)).current;
 
     React.useEffect(() => {
@@ -84,7 +63,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
         if (!userData || !userData.bloodGroup || !userData.city) return;
 
         console.log(`Starting matching listener for ${userData.bloodGroup} in ${userData.city}`);
-        
+
         const unsubscribeMatching = subscribeToMatchingRequests(
             userData.bloodGroup,
             userData.city,
@@ -125,45 +104,33 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
         }
     };
 
+    const getUrgencyColor = (level: string) => level === 'urgent' ? '#B62022' : '#D97706';
+    const getUrgencyBg = (level: string) => level === 'urgent' ? '#FEE2E2' : '#FEF3C7';
+    const getUrgencyLabel = (level: string) => level === 'urgent' ? 'EMERGENCY' : 'NEEDED';
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-            {/* Sidebar Drawer Modal */}
-            <Modal
-                transparent
-                visible={isDrawerOpen}
-                onRequestClose={() => toggleDrawer(false)}
-                animationType="none"
-            >
+            {/* ── Sidebar Drawer ── */}
+            <Modal transparent visible={isDrawerOpen} onRequestClose={() => toggleDrawer(false)} animationType="none">
                 <View style={styles.modalOverlayOuter}>
-                    <Pressable
-                        style={styles.modalBackdrop}
-                        onPress={() => toggleDrawer(false)}
-                    />
-                    <Animated.View
-                        style={[
-                            styles.drawerContainer,
-                            { transform: [{ translateX: slideAnim }] }
-                        ]}
-                    >
+                    <Pressable style={styles.modalBackdrop} onPress={() => toggleDrawer(false)} />
+                    <Animated.View style={[styles.drawerContainer, { transform: [{ translateX: slideAnim }] }]}>
                         <View style={[styles.drawerHeader, { paddingTop: insets.top + 20 }]}>
-                            <View style={styles.profileSection}>
-                                <View style={styles.profileImageContainer}>
+                            <View style={styles.drawerAvatarRow}>
+                                <View style={styles.drawerAvatarBox}>
                                     {userData?.photoURL ? (
-                                        <Image source={{ uri: userData.photoURL }} style={styles.profileImage} />
+                                        <Image source={{ uri: userData.photoURL }} style={styles.drawerAvatar} />
                                     ) : (
-                                        <MaterialIcon name="person" size={40} color={Colors.primary} />
+                                        <MaterialIcon name="person" size={34} color="#B62022" />
                                     )}
                                 </View>
-                                <Text style={styles.profileName} numberOfLines={1}>
-                                    {userData?.name || 'Blood Donor'}
-                                </Text>
-                                <Text style={styles.profileEmail} numberOfLines={1}>
-                                    {user?.email || 'donor@bloodreach.com'}
-                                </Text>
+                                <View style={{ flex: 1, marginLeft: 14 }}>
+                                    <Text style={styles.drawerName} numberOfLines={1}>{userData?.name || 'Blood Donor'}</Text>
+                                    <Text style={styles.drawerEmail} numberOfLines={1}>{user?.email || 'donor@bloodreach.com'}</Text>
+                                </View>
                             </View>
-
                             <View style={styles.drawerBadgeRow}>
                                 <View style={styles.bloodTypeBadge}>
                                     <Text style={styles.bloodTypeBadgeText}>{userData?.bloodGroup || '--'}</Text>
@@ -175,34 +142,47 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                         </View>
 
                         <View style={styles.drawerItems}>
-                            <TouchableOpacity 
-                                style={styles.drawerItem} 
-                                onPress={async () => { 
-                                    toggleDrawer(false); 
+                            <TouchableOpacity
+                                style={styles.drawerItem}
+                                onPress={async () => {
+                                    toggleDrawer(false);
                                     if (user) await createUserDocument({ uid: user.uid, lastActiveRole: 'requester' });
-                                    navigation.replace('RequesterDashboard'); 
+                                    navigation.replace('RequesterDashboard');
                                 }}
                             >
-                                <MaterialIcon name="swap-horiz" size={22} color={Colors.primary} />
-                                <Text style={[styles.drawerItemText, { color: Colors.primary }]}>Switch to Requester Mode</Text>
+                                <View style={[styles.drawerIconBox, { backgroundColor: '#FEE2E2' }]}>
+                                    <MaterialIcon name="swap-horiz" size={20} color="#B62022" />
+                                </View>
+                                <Text style={[styles.drawerItemText, { color: '#B62022' }]}>Switch to Requester</Text>
                             </TouchableOpacity>
+
                             <View style={styles.drawerDivider} />
-                            
+
                             <TouchableOpacity style={styles.drawerItem}>
-                                <MaterialIcon name="edit" size={22} color="#64748B" />
+                                <View style={styles.drawerIconBox}>
+                                    <MaterialIcon name="edit" size={20} color="#64748B" />
+                                </View>
                                 <Text style={styles.drawerItemText}>Edit Profile</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.drawerItem}>
-                                <MaterialIcon name="history" size={22} color="#64748B" />
+                                <View style={styles.drawerIconBox}>
+                                    <MaterialIcon name="history" size={20} color="#64748B" />
+                                </View>
                                 <Text style={styles.drawerItemText}>Donation History</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.drawerItem}>
-                                <MaterialIcon name="settings" size={22} color="#64748B" />
+                                <View style={styles.drawerIconBox}>
+                                    <MaterialIcon name="settings" size={20} color="#64748B" />
+                                </View>
                                 <Text style={styles.drawerItemText}>Settings</Text>
                             </TouchableOpacity>
+
                             <View style={styles.drawerDivider} />
+
                             <TouchableOpacity style={styles.drawerItem} onPress={handleLogout}>
-                                <MaterialIcon name="logout" size={22} color="#EF4444" />
+                                <View style={[styles.drawerIconBox, { backgroundColor: '#FEF2F2' }]}>
+                                    <MaterialIcon name="logout" size={20} color="#EF4444" />
+                                </View>
                                 <Text style={[styles.drawerItemText, { color: '#EF4444' }]}>Logout</Text>
                             </TouchableOpacity>
                         </View>
@@ -212,264 +192,330 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                 </View>
             </Modal>
 
-            {/* Top Navbar */}
-            <View style={[styles.navbar, { paddingTop: insets.top + 10 }]}>
-                <TouchableOpacity onPress={() => toggleDrawer(true)}>
-                    <MaterialIcon name="menu" size={28} color="#1E293B" />
-                </TouchableOpacity>
-                <Text style={styles.platformTitle}>BloodReach</Text>
-                <TouchableOpacity>
-                    <MaterialIcon name="notifications" size={26} color="#1E293B" />
+            {/* ── Header ── */}
+            <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+                <View style={styles.headerBrand}>
+                    <Image source={require('../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />
+                    <Text style={styles.headerBrandName}>BloodReach</Text>
+                </View>
+                <TouchableOpacity onPress={() => toggleDrawer(true)} style={styles.headerIconBtn}>
+                    <MaterialIcon name="menu" size={24} color="#1E293B" />
                 </TouchableOpacity>
             </View>
 
             <ScrollView
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 90 }]}
             >
-                {/* Main Eligibility Card */}
-                <View style={styles.eligibilityContainer}>
-                    <LinearGradient
-                        colors={['#DC2626', '#991B1B']}
-                        style={styles.eligibilityCard}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                    >
-                        <View style={styles.eligibilityHeader}>
-                            <View style={styles.eligibleBadge}>
-                                <View style={styles.greenDot} />
-                                <Text style={styles.eligibleBadgeText}>ELIGIBLE</Text>
-                            </View>
-                            <MaterialIcon name="verified-user" size={24} color="white" />
+                {/* ── Eligibility Hero Card ── */}
+                <View style={styles.heroCard}>
+                    <View style={styles.heroTopRow}>
+                        <View style={styles.eligiblePill}>
+                            <View style={styles.greenDot} />
+                            <Text style={styles.eligiblePillText}>ELIGIBLE NOW</Text>
                         </View>
-
-                        <View style={styles.eligibilityBody}>
-                            <Text style={styles.eligibilityTitle}>You are eligible to donate</Text>
-                            <Text style={styles.eligibilitySub}>
-                                Your last donation was over 56 days ago. You can save up to 3 lives today.
-                            </Text>
+                        <View style={styles.bloodGroupCircle}>
+                            <Text style={styles.bloodGroupCircleText}>{userData?.bloodGroup || 'A+'}</Text>
                         </View>
-
-                        <TouchableOpacity style={styles.scheduleButton}>
-                            <Text style={styles.scheduleButtonText}>Schedule Donation</Text>
-                        </TouchableOpacity>
-                    </LinearGradient>
+                    </View>
+                    <Text style={styles.heroTitle}>You're ready{'\n'}to save lives</Text>
+                    <Text style={styles.heroSub}>Last donation was 56+ days ago. Each donation can save up to 3 lives.</Text>
+                    <TouchableOpacity style={styles.scheduleBtn}>
+                        <MaterialIcon name="event-available" size={18} color="#B62022" style={{ marginRight: 8 }} />
+                        <Text style={styles.scheduleBtnText}>Schedule a Donation</Text>
+                    </TouchableOpacity>
                 </View>
 
-                {/* Impact/Stats Row */}
+                {/* ── Stats Row ── */}
                 <View style={styles.statsRow}>
-                    {STATS_DATA.map((item) => (
-                        <View key={item.id} style={styles.statCard}>
-                            <View style={styles.statHeader}>
-                                <MaterialIcon name={item.icon} size={20} color="#DC2626" />
-                                <Text style={styles.statLabel}>{item.label}</Text>
-                            </View>
-                            <Text style={styles.statValue}>{item.value}</Text>
-                            <Text style={styles.statSub}>{item.subtext}</Text>
+                    <View style={styles.statCard}>
+                        <View style={styles.statIconBox}>
+                            <MaterialIcon name="volunteer-activism" size={20} color="#B62022" />
                         </View>
-                    ))}
+                        <Text style={styles.statValue}>5</Text>
+                        <Text style={styles.statLabel}>Donations</Text>
+                    </View>
+                    <View style={[styles.statCard, { backgroundColor: '#FEF2F2' }]}>
+                        <View style={[styles.statIconBox, { backgroundColor: '#fff' }]}>
+                            <MaterialIcon name="favorite" size={20} color="#B62022" />
+                        </View>
+                        <Text style={[styles.statValue, { color: '#B62022' }]}>15</Text>
+                        <Text style={styles.statLabel}>Lives Saved</Text>
+                    </View>
+                    <View style={styles.statCard}>
+                        <View style={styles.statIconBox}>
+                            <MaterialIcon name="emoji-events" size={20} color="#B62022" />
+                        </View>
+                        <Text style={styles.statValue}>Gold</Text>
+                        <Text style={styles.statLabel}>Rank</Text>
+                    </View>
                 </View>
 
-                {/* Nearby Requests Section */}
+                {/* ── Nearby Requests ── */}
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Nearby Blood Requests</Text>
+                    <Text style={styles.sectionTitle}>Nearby Requests</Text>
                 </View>
 
                 {loadingRequests ? (
-                    <View style={{ height: 180, justifyContent: 'center', alignItems: 'center' }}>
-                        <ActivityIndicator size="small" color={Colors.primary} />
+                    <View style={styles.loadingBox}>
+                        <ActivityIndicator size="small" color="#B62022" />
+                        <Text style={styles.loadingText}>Finding requests near you...</Text>
                     </View>
-                ) : (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.requestsList}>
-                        {nearbyRequests.length > 0 ? (
-                            nearbyRequests.map((item: DonationRequest, index: number) => (
-                                <View key={item.id} style={styles.requestCard}>
-                                    <View style={styles.requestImageContainer}>
-                                        <Image 
-                                            source={{ uri: REQUEST_IMAGES[index % REQUEST_IMAGES.length] }} 
-                                            style={styles.requestImage} 
-                                        />
-                                        <View style={styles.emergencyBadge}>
-                                            <MaterialIcon name="priority-high" size={12} color="white" />
-                                            <Text style={styles.emergencyText}>
-                                                {item.urgencyLevel === 'urgent' ? 'EMERGENCY' : 'BLOOD NEEDED'}
-                                            </Text>
-                                        </View>
+                ) : nearbyRequests.length > 0 ? (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.requestsScroll}>
+                        {nearbyRequests.map((item: DonationRequest) => (
+                            <TouchableOpacity
+                                key={item.id}
+                                style={styles.requestCard}
+                                activeOpacity={0.85}
+                                onPress={() => navigation.navigate('RequestDetail', { requestId: item.id! })}
+                            >
+                                <View style={styles.requestCardTop}>
+                                    <View style={styles.requestBloodBadge}>
+                                        <Text style={styles.requestBloodText}>{item.bloodGroup}</Text>
                                     </View>
-
-                                    <View style={styles.requestInfo}>
-                                        <View style={styles.typeRow}>
-                                            <Text style={styles.bloodType}>{item.bloodGroup}</Text>
-                                            <View style={styles.distanceBadge}>
-                                                <Text style={styles.distanceText}>{item.city}</Text>
-                                            </View>
-                                        </View>
-                                        <Text style={styles.hospitalName} numberOfLines={1}>{item.hospitalName}</Text>
-                                        <Text style={styles.reasonText} numberOfLines={1}>For {item.patientName}</Text>
-
-                                        <TouchableOpacity 
-                                            style={styles.viewDetailsBtn}
-                                            onPress={() => navigation.navigate('RequestDetail', { requestId: item.id! })}
-                                        >
-                                            <Text style={styles.viewDetailsBtnText}>Help Now</Text>
-                                        </TouchableOpacity>
+                                    <View style={[styles.urgencyTag, { backgroundColor: getUrgencyBg(item.urgencyLevel) }]}>
+                                        <Text style={[styles.urgencyTagText, { color: getUrgencyColor(item.urgencyLevel) }]}>
+                                            {getUrgencyLabel(item.urgencyLevel)}
+                                        </Text>
                                     </View>
                                 </View>
-                            ))
-                        ) : (
-                            <View style={styles.emptyRequestsBox}>
-                                <MaterialCommunityIcon name="water-off" size={40} color="#E2E8F0" />
-                                <Text style={styles.emptyRequestsText}>No active requests nearby</Text>
-                            </View>
-                        )}
+
+                                <Text style={styles.requestHospital} numberOfLines={1}>{item.hospitalName}</Text>
+                                <Text style={styles.requestPatient} numberOfLines={1}>For {item.patientName}</Text>
+
+                                <View style={styles.requestMeta}>
+                                    <MaterialIcon name="location-on" size={13} color="#94A3B8" />
+                                    <Text style={styles.requestMetaText}>{item.city}</Text>
+                                    <Text style={styles.requestMetaDot}>•</Text>
+                                    <Text style={styles.requestMetaText}>{item.unitsRequired} unit{item.unitsRequired > 1 ? 's' : ''}</Text>
+                                </View>
+
+                                <View style={styles.helpBtn}>
+                                    <Text style={styles.helpBtnText}>Help Now</Text>
+                                    <MaterialIcon name="chevron-right" size={16} color="#B62022" />
+                                </View>
+                            </TouchableOpacity>
+                        ))}
                     </ScrollView>
+                ) : (
+                    <View style={styles.emptyBox}>
+                        <MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" />
+                        <Text style={styles.emptyText}>No active requests nearby</Text>
+                    </View>
                 )}
 
-                {/* Future Window Info */}
-                <View style={styles.futureContainer}>
-                    <View style={styles.futureCard}>
-                        <View style={styles.calendarIconBox}>
-                            <MaterialIcon name="calendar-today" size={24} color="#64748B" />
-                        </View>
-                        <View style={styles.futureInfo}>
-                            <View style={styles.futureBadge}>
-                                <Text style={styles.futureBadgeText}>FUTURE DATE</Text>
-                            </View>
-                            <Text style={styles.futureTitle}>
-                                Next eligibility window opens after your planned donation cycle ends.
-                            </Text>
-                            <Text style={styles.futureDateText}>Next window: March 25, 2026</Text>
-                        </View>
+                {/* ── Next Eligibility Card ── */}
+                <View style={styles.nextCard}>
+                    <View style={styles.nextIconBox}>
+                        <MaterialIcon name="calendar-today" size={22} color="#64748B" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.nextLabel}>NEXT ELIGIBILITY WINDOW</Text>
+                        <Text style={styles.nextDate}>March 25, 2026</Text>
+                        <Text style={styles.nextSub}>Your planned donation cycle ends then.</Text>
                     </View>
                 </View>
             </ScrollView>
 
-            {/* Bottom Navigation */}
-            <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 10 }]}>
-                <TouchableOpacity style={styles.navItem}>
-                    <MaterialIcon name="home" size={28} color="#DC2626" />
-                    <Text style={[styles.navText, { color: '#DC2626' }]}>Home</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem}>
-                    <MaterialIcon name="water-drop" size={28} color="#94A3B8" />
-                    <Text style={styles.navText}>Requests</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem}>
-                    <MaterialIcon name="history" size={28} color="#94A3B8" />
-                    <Text style={styles.navText}>History</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
-                    <MaterialIcon name="person" size={28} color="#94A3B8" />
-                    <Text style={styles.navText}>Profile</Text>
-                </TouchableOpacity>
-            </View>
+            <BottomTabBar
+                activeTab={activeTab}
+                tabs={[
+                    { key: 'home', label: 'Home', icon: 'home', activeIcon: 'home', onPress: () => setActiveTab('home') },
+                    { key: 'requests', label: 'Requests', icon: 'water-drop', onPress: () => setActiveTab('requests') },
+                    { key: 'donate', label: 'Donate', icon: 'favorite', isFab: true, onPress: () => setActiveTab('donate') },
+                    { key: 'history', label: 'History', icon: 'history', onPress: () => setActiveTab('history') },
+                    { key: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person', onPress: () => { setActiveTab('profile'); navigation.navigate('Profile'); } },
+                ]}
+            />
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFFFFF' },
-    navbar: {
+    container: { flex: 1, backgroundColor: '#F8FAFC' },
+
+    // ─── Header ───
+    header: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
+        justifyContent: 'space-between',
         paddingHorizontal: 20,
-        backgroundColor: 'white',
-        paddingBottom: 15
+        paddingBottom: 14,
+        backgroundColor: '#FFFFFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
     },
-    platformTitle: { fontSize: 22, fontWeight: '700', color: '#1E293B' },
-    scrollContent: { paddingTop: 10 },
-    eligibilityContainer: { paddingHorizontal: 20, marginBottom: 25 },
-    eligibilityCard: { borderRadius: 24, padding: 24 },
-    eligibilityHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    eligibleBadge: {
+    headerIconBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
+    headerBrand: { flexDirection: 'row', alignItems: 'center' },
+    headerLogo: { width: 45, height: 45, marginRight: 8 },
+    headerBrandName: { fontSize: 20, fontWeight: '900', color: '#000000', letterSpacing: 0.5 },
+
+    scrollContent: { paddingTop: 20 },
+
+    // ─── Hero Eligibility Card ───
+    heroCard: {
+        marginHorizontal: 16,
+        backgroundColor: '#B62022',
+        borderRadius: 20,
+        padding: 22,
+        marginBottom: 20,
+    },
+    heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+    eligiblePill: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(255,255,255,0.2)',
         paddingHorizontal: 12,
         paddingVertical: 6,
-        borderRadius: 20
+        borderRadius: 20,
     },
     greenDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E', marginRight: 8 },
-    eligibleBadgeText: { color: 'white', fontSize: 12, fontWeight: '800' },
-    eligibilityBody: { marginBottom: 25 },
-    eligibilityTitle: { color: 'white', fontSize: 26, fontWeight: '800', marginBottom: 8 },
-    eligibilitySub: { color: 'rgba(255,255,255,0.85)', fontSize: 15, lineHeight: 22 },
-    scheduleButton: { backgroundColor: 'white', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
-    scheduleButtonText: { color: '#DC2626', fontSize: 17, fontWeight: '700' },
-    statsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 30 },
-    statCard: {
-        width: (width - 55) / 2,
-        backgroundColor: 'white',
-        borderRadius: 20,
-        padding: 20,
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOpacity: 0.08,
-        shadowRadius: 15
-    },
-    statHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-    statLabel: { fontSize: 12, fontWeight: '700', color: '#64748B', marginLeft: 8 },
-    statValue: { fontSize: 32, fontWeight: '800', color: '#1E293B', marginBottom: 4 },
-    statSub: { fontSize: 13, color: '#94A3B8', fontWeight: '500' },
-    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 15 },
-    sectionTitle: { fontSize: 20, fontWeight: '800', color: '#1E293B' },
-    seeAllText: { fontSize: 15, color: '#DC2626', fontWeight: '600' },
-    requestsList: { paddingLeft: 20, paddingBottom: 15 },
-    requestCard: {
-        width: 260,
-        backgroundColor: 'white',
+    eligiblePillText: { color: 'white', fontSize: 11, fontWeight: '800' },
+    bloodGroupCircle: {
+        width: 48,
+        height: 48,
         borderRadius: 24,
-        marginRight: 20,
-        elevation: 10,
-        shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        overflow: 'hidden'
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.4)',
     },
-    requestImageContainer: { position: 'relative' },
-    requestImage: { width: '100%', height: 140 },
-    emergencyBadge: {
-        position: 'absolute',
-        top: 15,
-        left: 15,
-        backgroundColor: '#DC2626',
+    bloodGroupCircleText: { color: 'white', fontSize: 15, fontWeight: '900' },
+    heroTitle: { fontSize: 26, fontWeight: '900', color: 'white', lineHeight: 32, marginBottom: 10 },
+    heroSub: { fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 20, marginBottom: 20 },
+    scheduleBtn: {
+        backgroundColor: 'white',
+        borderRadius: 10,
+        height: 46,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scheduleBtnText: { color: '#B62022', fontSize: 15, fontWeight: '800' },
+
+    // ─── Stats ───
+    statsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 24, gap: 10 },
+    statCard: {
+        flex: 1,
+        backgroundColor: 'white',
+        borderRadius: 16,
+        padding: 14,
+        alignItems: 'flex-start',
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+        shadowColor: '#000',
+        shadowOpacity: 0.03,
+        shadowRadius: 6,
+        elevation: 1,
+    },
+    statIconBox: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: '#FEE2E2',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    statValue: { fontSize: 22, fontWeight: '900', color: '#1E293B', marginBottom: 2 },
+    statLabel: { fontSize: 11, fontWeight: '700', color: '#94A3B8' },
+
+    // ─── Section Header ───
+    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 14 },
+    sectionTitle: { fontSize: 18, fontWeight: '900', color: '#1E293B' },
+
+    // ─── Loading ───
+    loadingBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 30 },
+    loadingText: { marginLeft: 12, fontSize: 14, color: '#94A3B8', fontWeight: '600' },
+
+    // ─── Request Cards ───
+    requestsScroll: { paddingLeft: 16, paddingBottom: 8 },
+    requestCard: {
+        width: 220,
+        backgroundColor: 'white',
+        borderRadius: 16,
+        padding: 16,
+        marginRight: 14,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+        shadowColor: '#000',
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    requestCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+    requestBloodBadge: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#FDECEC',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
+    },
+    requestBloodText: { fontSize: 16, fontWeight: '900', color: '#B62022' },
+    urgencyTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+    urgencyTagText: { fontSize: 10, fontWeight: '900' },
+    requestHospital: { fontSize: 15, fontWeight: '800', color: '#1E293B', marginBottom: 4 },
+    requestPatient: { fontSize: 13, color: '#64748B', fontWeight: '500', marginBottom: 12 },
+    requestMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+    requestMetaText: { fontSize: 12, fontWeight: '600', color: '#94A3B8' },
+    requestMetaDot: { marginHorizontal: 6, color: '#CBD5E1', fontSize: 12 },
+    helpBtn: {
+        backgroundColor: '#FEF2F2',
+        borderRadius: 10,
+        height: 38,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    helpBtnText: { color: '#B62022', fontSize: 14, fontWeight: '800' },
+
+    // ─── Empty State ───
+    emptyBox: {
+        marginHorizontal: 16,
+        height: 140,
+        backgroundColor: 'white',
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1.5,
+        borderColor: '#F1F5F9',
+        borderStyle: 'dashed',
+        marginBottom: 24,
+    },
+    emptyText: { fontSize: 14, color: '#94A3B8', fontWeight: '600', marginTop: 10 },
+
+    // ─── Next Eligibility Card ───
+    nextCard: {
+        marginHorizontal: 16,
+        marginTop: 8,
+        backgroundColor: 'white',
+        borderRadius: 16,
+        padding: 18,
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 8
-    },
-    emergencyText: { color: 'white', fontSize: 11, fontWeight: '800', marginLeft: 4 },
-    requestInfo: { padding: 16 },
-    typeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-    bloodType: { fontSize: 22, fontWeight: '800', color: '#DC2626' },
-    distanceBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-    distanceText: { fontSize: 12, fontWeight: '700', color: '#475569' },
-    hospitalName: { fontSize: 15, fontWeight: '700', color: '#1E293B', marginBottom: 4 },
-    reasonText: { fontSize: 14, color: '#64748B', marginBottom: 16, fontWeight: '500' },
-    viewDetailsBtn: { backgroundColor: '#FDECEC', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-    viewDetailsBtnText: { color: '#DC2626', fontSize: 14, fontWeight: '700' },
-    futureContainer: { paddingHorizontal: 20, marginBottom: 20 },
-    futureCard: {
-        flexDirection: 'row',
-        backgroundColor: 'white',
-        borderRadius: 20,
-        padding: 20,
-        elevation: 6,
-        shadowColor: '#000',
-        shadowOpacity: 0.05,
-        shadowRadius: 15,
         borderWidth: 1,
-        borderColor: '#F1F5F9'
+        borderColor: '#F1F5F9',
     },
-    calendarIconBox: { width: 50, height: 50, borderRadius: 12, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-    futureInfo: { flex: 1 },
-    futureBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start', marginBottom: 8 },
-    futureBadgeText: { fontSize: 10, fontWeight: '800', color: '#64748B' },
-    futureTitle: { fontSize: 15, fontWeight: '700', color: '#1E293B', lineHeight: 22, marginBottom: 8 },
-    futureDateText: { fontSize: 13, color: '#DC2626', fontWeight: '600' },
-    bottomNavBar: {
+    nextIconBox: {
+        width: 46,
+        height: 46,
+        borderRadius: 12,
+        backgroundColor: '#F8FAFC',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 14,
+    },
+    nextLabel: { fontSize: 10, fontWeight: '800', color: '#94A3B8', marginBottom: 4 },
+    nextDate: { fontSize: 16, fontWeight: '900', color: '#B62022', marginBottom: 2 },
+    nextSub: { fontSize: 12, color: '#64748B', fontWeight: '500' },
+
+    // ─── Bottom Nav ───
+    navBar: {
         position: 'absolute',
         bottom: 0,
         left: 0,
@@ -477,94 +523,67 @@ const styles = StyleSheet.create({
         backgroundColor: 'white',
         flexDirection: 'row',
         justifyContent: 'space-around',
-        paddingTop: 15,
+        paddingTop: 12,
         borderTopWidth: 1,
-        borderTopColor: '#F1F5F9'
+        borderTopColor: '#F1F5F9',
     },
     navItem: { alignItems: 'center' },
-    navText: { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginTop: 4 },
-    // Side Drawer Styles
+    navText: { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginTop: 3 },
+
+    // ─── Drawer ───
     modalOverlayOuter: { flex: 1, flexDirection: 'row' },
-    modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
+    modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
     drawerContainer: {
         width: width * 0.75,
         height: '100%',
         backgroundColor: 'white',
-        borderTopRightRadius: 30,
-        borderBottomRightRadius: 30,
+        borderTopRightRadius: 24,
+        borderBottomRightRadius: 24,
         paddingHorizontal: 20,
         elevation: 16,
         shadowColor: '#000',
-        shadowOpacity: 0.15,
-        shadowRadius: 25,
+        shadowOpacity: 0.12,
+        shadowRadius: 20,
     },
-    drawerHeader: { paddingVertical: 30, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-    profileSection: { marginBottom: 20 },
-    profileImageContainer: {
-        width: 70,
-        height: 70,
-        borderRadius: 22,
+    drawerHeader: { paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginBottom: 10 },
+    drawerAvatarRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+    drawerAvatarBox: {
+        width: 60,
+        height: 60,
+        borderRadius: 16,
         backgroundColor: '#FDECEC',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 16,
         borderWidth: 2,
         borderColor: '#FEE2E2',
     },
-    profileImage: { width: '100%', height: '100%', borderRadius: 20 },
-    profileName: { fontSize: 18, fontWeight: '800', color: '#1E293B', marginBottom: 4 },
-    profileEmail: { fontSize: 13, color: '#64748B', fontWeight: '500' },
-    drawerBadgeRow: { flexDirection: 'row', alignItems: 'center' },
+    drawerAvatar: { width: '100%', height: '100%', borderRadius: 14 },
+    drawerName: { fontSize: 17, fontWeight: '900', color: '#1E293B', marginBottom: 4 },
+    drawerEmail: { fontSize: 12, color: '#64748B', fontWeight: '500' },
+    drawerBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     bloodTypeBadge: {
-        backgroundColor: '#DC2626',
+        backgroundColor: '#B62022',
         paddingHorizontal: 12,
         paddingVertical: 5,
         borderRadius: 8,
-        marginRight: 10,
     },
-    bloodTypeBadgeText: { color: 'white', fontSize: 14, fontWeight: '800' },
-    statusBadge: {
-        backgroundColor: '#F1F5F9',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
+    bloodTypeBadgeText: { color: 'white', fontSize: 13, fontWeight: '800' },
+    statusBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
     statusBadgeText: { fontSize: 10, fontWeight: '800', color: '#64748B' },
-    drawerItems: { marginTop: 25 },
-    drawerItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 14,
-        marginBottom: 8,
-    },
-    drawerItemText: { fontSize: 15, fontWeight: '600', color: '#475569', marginLeft: 14 },
-    drawerDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 15 },
-    versionText: {
-        position: 'absolute',
-        bottom: 30,
-        left: 20,
-        fontSize: 11,
-        color: '#94A3B8',
-        fontWeight: '600',
-    },
-    emptyRequestsBox: {
-        width: 260,
-        height: 180,
+    drawerItems: { marginTop: 16 },
+    drawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, marginBottom: 4 },
+    drawerIconBox: {
+        width: 38,
+        height: 38,
+        borderRadius: 10,
         backgroundColor: '#F8FAFC',
-        borderRadius: 24,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: '#F1F5F9',
-        borderStyle: 'dashed',
+        marginRight: 14,
     },
-    emptyRequestsText: {
-        fontSize: 14,
-        color: '#94A3B8',
-        fontWeight: '600',
-        marginTop: 10,
-        textAlign: 'center',
-    },
+    drawerItemText: { fontSize: 15, fontWeight: '700', color: '#475569' },
+    drawerDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 10 },
+    versionText: { position: 'absolute', bottom: 30, left: 20, fontSize: 11, color: '#94A3B8', fontWeight: '600' },
 });
 
 export default DonorDashboard;

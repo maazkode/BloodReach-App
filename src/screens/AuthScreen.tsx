@@ -118,7 +118,7 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
                             <ActivityIndicator color={Colors.primary} />
                         ) : (
                             <>
-                                <FAIcon name="google" size={20} color="#4285F4" />
+                                <FAIcon name="google" size={25} color={Colors.primary} />
                                 <Text style={styles.googleText}>
                                     Continue with Google
                                 </Text>

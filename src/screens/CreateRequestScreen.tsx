@@ -178,7 +178,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
 
                 <View style={styles.emergencyCard}>
                     <View style={styles.warningBox}>
-                        <MaterialIcon name="report-problem" size={20} color="#DC2626" />
+                        <MaterialIcon name="report-problem" size={20} color="#B62022" />
                     </View>
                     <View style={{ flex: 1, marginHorizontal: 10 }}>
                         <Text style={styles.emergencyTitle}>Emergency Request</Text>
@@ -244,10 +244,10 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                             style={styles.locationButton}
                         >
                             {fetchingLocation ? (
-                                <ActivityIndicator size="small" color="#DC2626" />
+                                <ActivityIndicator size="small" color="#B62022" />
                             ) : (
                                 <>
-                                    <MaterialIcon name="my-location" size={16} color="#DC2626" />
+                                    <MaterialIcon name="my-location" size={16} color="#B62022" />
                                     <Text style={styles.locationButtonText}>Fetch</Text>
                                 </>
                             )}
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
     locationButtonText: {
-        color: '#DC2626',
+        color: '#B62022',
         fontSize: 12,
         fontWeight: '700',
         marginLeft: 4,
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
     submitButton: {
         height: 50,
         borderRadius: 10,
-        backgroundColor: '#DC2626',
+        backgroundColor: '#B62022',
         justifyContent: 'center',
         alignItems: 'center',
     },
