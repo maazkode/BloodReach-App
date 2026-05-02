@@ -64,7 +64,7 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
     const { user } = useAuth();
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
-    const slideAnim = React.useRef(new Animated.Value(-width * 0.75)).current;
+    const slideAnim = React.useRef(new Animated.Value(width * 0.75)).current;
 
     React.useEffect(() => {
         const fetchUserData = async () => {
@@ -86,7 +86,7 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
             }).start();
         } else {
             Animated.timing(slideAnim, {
-                toValue: -width * 0.75,
+                toValue: width * 0.75,
                 duration: 250,
                 useNativeDriver: true,
             }).start(() => setIsDrawerOpen(false));
@@ -179,12 +179,12 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                         </View>
 
                         <View style={styles.drawerItems}>
-                            <TouchableOpacity 
-                                style={styles.drawerItem} 
-                                onPress={async () => { 
-                                    toggleDrawer(false); 
+                            <TouchableOpacity
+                                style={styles.drawerItem}
+                                onPress={async () => {
+                                    toggleDrawer(false);
                                     if (user) await createUserDocument({ uid: user.uid, lastActiveRole: 'donor' });
-                                    navigation.replace('DonorDashboard'); 
+                                    navigation.replace('DonorDashboard');
                                 }}
                             >
                                 <MaterialIcon name="volunteer-activism" size={22} color={Colors.primary} />
@@ -218,18 +218,18 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
 
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-                <TouchableOpacity onPress={() => toggleDrawer(true)} style={styles.headerInfo}>
+                <View style={styles.headerInfo}>
                     <Image
                         source={{ uri: userData?.photoURL || 'https://i.pravatar.cc/100?u=user' }}
                         style={styles.avatar}
                     />
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.welcomeText}>Welcome back,</Text>
-                        <Text style={styles.userName}>Hello, {userData?.name?.split(' ')[0] || 'User'}</Text>
+                        <Text style={styles.userName}>{userData?.name?.split(' ')[0] || 'User'}</Text>
                     </View>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.notificationButton}>
-                    <MaterialIcon name="notifications" size={26} color="#475569" />
+                </View>
+                <TouchableOpacity onPress={() => toggleDrawer(true)} style={styles.notificationButton}>
+                    <MaterialIcon name="menu" size={26} color="#475569" />
                 </TouchableOpacity>
             </View>
 
@@ -486,14 +486,14 @@ const styles = StyleSheet.create({
     navItem: { alignItems: 'center' },
     navText: { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginTop: 4 },
     // Side Drawer Styles
-    modalOverlayOuter: { flex: 1, flexDirection: 'row' },
+    modalOverlayOuter: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end' },
     modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
     drawerContainer: {
         width: width * 0.75,
         height: '100%',
         backgroundColor: 'white',
-        borderTopRightRadius: 30,
-        borderBottomRightRadius: 30,
+        borderTopLeftRadius: 30,
+        borderBottomLeftRadius: 30,
         paddingHorizontal: 20,
         elevation: 16,
         shadowColor: '#000',

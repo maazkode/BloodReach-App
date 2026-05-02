@@ -60,7 +60,6 @@ const RootNavigator = () => {
       >
         {user ? (
           <>
-            <Stack.Screen name="Splash" component={SplashScreen} />
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="UnifiedRegistration" component={UnifiedRegistrationScreen} />
             <Stack.Screen name="DonorDashboard" component={DonorDashboard} />
