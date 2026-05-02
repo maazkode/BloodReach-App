@@ -20,7 +20,7 @@ import { Colors } from '../theme/colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument, createUserDocument, subscribeToRequests, subscribeToMatchingRequests } from '../services/firestoreService';
+import { getUserDocument, createUserDocument, subscribeToRequests, subscribeToMatchingRequests, checkAndRefreshEligibility } from '../services/firestoreService';
 import { UserDocument, DonationRequest } from '../types/database';
 import { signOut } from '../services/authService';
 import { triggerLocalNotification } from '../services/notificationService';
@@ -43,7 +43,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
     React.useEffect(() => {
         const fetchUserData = async () => {
             if (user) {
-                const data = await getUserDocument(user.uid);
+                const data = await checkAndRefreshEligibility(user.uid);
                 setUserData(data);
             }
         };
@@ -60,24 +60,25 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
 
     // Separate effect for matching request notifications
     React.useEffect(() => {
-        if (!userData || !userData.bloodGroup || !userData.city) return;
+        if (!userData || !userData.bloodGroup || !userData.location || !userData.isEligibleToDonate) return;
 
-        console.log(`Starting matching listener for ${userData.bloodGroup} in ${userData.city}`);
+        console.log(`Starting matching listener for ${userData.bloodGroup} within 10KM`);
 
         const unsubscribeMatching = subscribeToMatchingRequests(
             userData.bloodGroup,
-            userData.city,
+            userData.location.latitude,
+            userData.location.longitude,
             (newRequest) => {
                 triggerLocalNotification(
                     'Urgent Blood Request!',
-                    `A new ${newRequest.bloodGroup} request has been posted in ${newRequest.city}.`,
+                    `A new ${newRequest.bloodGroup} request has been posted nearby.`,
                     newRequest.id
                 );
             }
         );
 
         return () => unsubscribeMatching();
-    }, [userData?.bloodGroup, userData?.city]);
+    }, [userData?.bloodGroup, userData?.location?.latitude, userData?.location?.longitude, userData?.isEligibleToDonate]);
 
     const toggleDrawer = (open: boolean) => {
         if (open) {
@@ -208,22 +209,32 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 90 }]}
             >
                 {/* ── Eligibility Hero Card ── */}
-                <View style={styles.heroCard}>
+                <View style={[styles.heroCard, userData?.isEligibleToDonate === false && styles.heroCardCooldown]}>
                     <View style={styles.heroTopRow}>
-                        <View style={styles.eligiblePill}>
-                            <View style={styles.greenDot} />
-                            <Text style={styles.eligiblePillText}>ELIGIBLE NOW</Text>
+                        <View style={[styles.eligiblePill, userData?.isEligibleToDonate === false && styles.cooldownPill]}>
+                            <View style={[styles.greenDot, userData?.isEligibleToDonate === false && styles.redDot]} />
+                            <Text style={[styles.eligiblePillText, userData?.isEligibleToDonate === false && styles.cooldownPillText]}>
+                                {userData?.isEligibleToDonate === false ? 'COOLDOWN PERIOD' : 'ELIGIBLE NOW'}
+                            </Text>
                         </View>
                         <View style={styles.bloodGroupCircle}>
                             <Text style={styles.bloodGroupCircleText}>{userData?.bloodGroup || 'A+'}</Text>
                         </View>
                     </View>
-                    <Text style={styles.heroTitle}>You're ready{'\n'}to save lives</Text>
-                    <Text style={styles.heroSub}>Last donation was 56+ days ago. Each donation can save up to 3 lives.</Text>
-                    <TouchableOpacity style={styles.scheduleBtn}>
-                        <MaterialIcon name="event-available" size={18} color="#B62022" style={{ marginRight: 8 }} />
-                        <Text style={styles.scheduleBtnText}>Schedule a Donation</Text>
-                    </TouchableOpacity>
+                    <Text style={styles.heroTitle}>
+                        {userData?.isEligibleToDonate === false ? 'Time to recover' : 'You\'re ready\nto save lives'}
+                    </Text>
+                    <Text style={styles.heroSub}>
+                        {userData?.isEligibleToDonate === false 
+                            ? `You can donate again after ${userData.donationCooldownUntil ? (userData.donationCooldownUntil as any).toDate().toLocaleDateString() : 'the cooldown period'}.`
+                            : 'Thank you for your life-saving contributions. Each donation can save up to 3 lives.'}
+                    </Text>
+                    {userData?.isEligibleToDonate !== false && (
+                        <TouchableOpacity style={styles.scheduleBtn}>
+                            <MaterialIcon name="event-available" size={18} color="#B62022" style={{ marginRight: 8 }} />
+                            <Text style={styles.scheduleBtnText}>Schedule a Donation</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* ── Stats Row ── */}
@@ -361,6 +372,9 @@ const styles = StyleSheet.create({
         padding: 22,
         marginBottom: 20,
     },
+    heroCardCooldown: {
+        backgroundColor: '#64748B',
+    },
     heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
     eligiblePill: {
         flexDirection: 'row',
@@ -370,8 +384,13 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
         borderRadius: 20,
     },
+    cooldownPill: {
+        backgroundColor: 'rgba(0,0,0,0.1)',
+    },
     greenDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E', marginRight: 8 },
+    redDot: { backgroundColor: '#F87171' },
     eligiblePillText: { color: 'white', fontSize: 11, fontWeight: '800' },
+    cooldownPillText: { color: '#E2E8F0' },
     bloodGroupCircle: {
         width: 48,
         height: 48,

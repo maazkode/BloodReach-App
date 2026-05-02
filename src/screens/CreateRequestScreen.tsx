@@ -41,6 +41,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const [date, setDate] = useState(new Date());
     const [isEmergency, setIsEmergency] = useState(false);
     const [phone, setPhone] = useState('');
+    const [coordinates, setCoordinates] = useState<{ latitude: number, longitude: number, geohash: string } | null>(null);
 
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showBloodGroupPicker, setShowBloodGroupPicker] = useState(false);
@@ -58,6 +59,11 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
         try {
             const locationData = await getFullLocationData();
             setAddress(locationData.address);
+            setCoordinates({
+                latitude: locationData.latitude,
+                longitude: locationData.longitude,
+                geohash: locationData.geohash
+            });
         } catch (error: any) {
             Alert.alert('Location Error', error.message || 'Could not fetch location');
         } finally {
@@ -85,6 +91,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 hospitalName: hospital,
                 hospitalAddress: hospital,
                 city: address,
+                location: coordinates || { latitude: 0, longitude: 0, geohash: '' },
                 urgencyLevel: isEmergency ? 'urgent' : 'normal',
                 status: 'open',
                 matchedDonorIds: [],

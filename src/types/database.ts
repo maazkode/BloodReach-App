@@ -15,7 +15,9 @@ export interface UserDocument {
     city: string;
     address?: string;
     isAvailable: boolean;
+    isEligibleToDonate: boolean;
     lastDonationDate: FirebaseFirestoreTypes.Timestamp | null;
+    donationCooldownUntil: FirebaseFirestoreTypes.Timestamp | null;
     location: {
         latitude: number;
         longitude: number;
@@ -26,8 +28,8 @@ export interface UserDocument {
     email: string;
     photoURL: string;
     isVerified: boolean;
-    createdAt: FirebaseFirestoreTypes.FieldValue;
-    updatedAt: FirebaseFirestoreTypes.FieldValue;
+    createdAt: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
+    updatedAt: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
 }
 
 export interface DonationRequest {
@@ -38,6 +40,11 @@ export interface DonationRequest {
     hospitalName: string;
     hospitalAddress: string;
     city: string;
+    location: {
+        latitude: number;
+        longitude: number;
+        geohash: string;
+    };
     patientName: string;
     phone: string;
     urgencyLevel: 'normal' | 'urgent' | 'critical';
@@ -53,6 +60,6 @@ export interface Donation {
     donorId: string;
     requesterId: string;
     status: 'pending' | 'approved' | 'completed';
-    donationDate: FirebaseFirestoreTypes.Timestamp | null;
+    donationDate: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue | null;
     createdAt: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
 }

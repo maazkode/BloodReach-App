@@ -13,254 +13,359 @@ import {
     where,
     getDocs,
     startAt,
-    endAt
+    endAt,
+    Unsubscribe,
+    Timestamp,
+    FirebaseFirestoreTypes,
 } from '@react-native-firebase/firestore';
+
 import { geohashQueryBounds, distanceBetween } from 'geofire-common';
 import { UserDocument, DonationRequest, Donation } from '../types/database';
 
-/**
- * Initialize Firestore instance
- */
 const db = getFirestore();
 
+// ─── UTILS ─────────────────────────────────────────────
+
 /**
- * Checks if a user document exists in Firestore using UID.
- * @param uid - Firebase Auth UID
- * @returns Promise<boolean>
+ * Calculates distance between two points in KM.
  */
-export const checkUserExists = async (uid: string): Promise<boolean> => {
-    try {
-        const userRef = doc(db, 'users', uid);
-        const userSnap = await getDoc(userRef);
-        return userSnap.exists();
-    } catch (error) {
-        console.error('Error checking user existence:', error);
-        throw error;
-    }
+export const getDistance = (
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number
+): number => {
+    return distanceBetween([lat1, lng1], [lat2, lng2]);
+};
+
+// ─── USER SERVICE ─────────────────────────────────────
+
+/**
+ * Fetches a user document by UID. 
+ * Automatically checks and refreshes eligibility if the cooldown has expired.
+ */
+export const getUserDocument = async (
+    uid: string
+): Promise<UserDocument | null> => {
+    return checkAndRefreshEligibility(uid);
 };
 
 /**
- * Fetches a user document from Firestore.
- * @param uid - Firebase Auth UID
- * @returns Promise<UserDocument | null>
+ * Creates or updates a user document with production-ready field defaults.
  */
-export const getUserDocument = async (uid: string): Promise<UserDocument | null> => {
-    try {
-        const userRef = doc(db, 'users', uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-            return userSnap.data() as UserDocument;
-        }
-        return null;
-    } catch (error) {
-        console.error('Error fetching user document:', error);
-        throw error;
-    }
-};
-
-/**
- * Creates or updates a user document in the "users" collection.
- * @param userData - Partial user data to save
- */
-export const createUserDocument = async (userData: Partial<UserDocument>): Promise<void> => {
+export const createUserDocument = async (
+    userData: Partial<UserDocument>
+): Promise<void> => {
     if (!userData.uid) throw new Error('UID is required to create a user document');
 
     try {
-        const userRef = doc(db, 'users', userData.uid);
+        const ref = doc(db, 'users', userData.uid);
+        const snap = await getDoc(ref);
 
-        const finalData = {
+        const dataToSave: Partial<UserDocument> = {
             ...userData,
             isAvailable: userData.isAvailable ?? false,
             roles: userData.roles || ['requester'],
             lastActiveRole: userData.lastActiveRole || 'requester',
-            lastDonationDate: userData.lastDonationDate || null,
             isVerified: userData.isVerified || false,
+            isEligibleToDonate: userData.isEligibleToDonate ?? true,
+            donationCooldownUntil: userData.donationCooldownUntil || null,
+            lastDonationDate: userData.lastDonationDate || null,
             updatedAt: serverTimestamp(),
         };
 
-        // If it's the first time creating, we should ensure createdAt is set
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) {
-            (finalData as any).createdAt = serverTimestamp();
+        if (!snap.exists()) {
+            dataToSave.createdAt = serverTimestamp();
         }
 
-        await setDoc(userRef, finalData, { merge: true });
-        console.log('User document saved successfully');
+        await setDoc(ref, dataToSave, { merge: true });
     } catch (error) {
-        console.error('Error creating user document:', error);
+        console.error('[Firestore] createUserDocument error:', error);
         throw error;
     }
 };
 
+// ─── REQUEST SERVICE ─────────────────────────────────
+
 /**
- * Creates a new blood request in the "requests" collection.
- * @param requestData - Donation request data
+ * Creates a new blood donation request.
  */
-export const createDonationRequest = async (requestData: Omit<DonationRequest, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+export const createDonationRequest = async (
+    requestData: Omit<DonationRequest, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<string> => {
     try {
-        const colRef = collection(db, 'requests');
-        const docRef = await addDoc(colRef, {
+        const ref = await addDoc(collection(db, 'requests'), {
             ...requestData,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
-        } as any);
-        return docRef.id;
+        });
+        return ref.id;
     } catch (error) {
-        console.error('Error creating request:', error);
+        console.error('[Firestore] createDonationRequest error:', error);
         throw error;
     }
 };
 
 /**
- * Listens for real-time updates on blood donation requests.
- * @param callback - Function to handle the requests list updates
- * @returns Unsubscribe function
+ * Subscribes to recent open requests for the global dashboard.
  */
-export const subscribeToRequests = (callback: (requests: DonationRequest[]) => void) => {
-    const colRef = collection(db, 'requests');
+export const subscribeToRequests = (
+    callback: (requests: DonationRequest[]) => void
+): Unsubscribe => {
     const q = query(
-        colRef,
+        collection(db, 'requests'),
         where('status', '==', 'open'),
         orderBy('createdAt', 'desc'),
         limit(50)
     );
 
-    return onSnapshot(q, (snapshot) => {
-        const requestsList: DonationRequest[] = snapshot.docs.map((doc: any) => ({
-            id: doc.id,
-            ...doc.data()
-        } as DonationRequest));
-        callback(requestsList);
-    }, (error) => {
-        console.error('Real-time listener error:', error);
-    });
+    return onSnapshot(
+        q,
+        (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
+            if (!snapshot) return;
+            const requests = snapshot.docs.map(
+                (d: FirebaseFirestoreTypes.QueryDocumentSnapshot) =>
+                    ({ id: d.id, ...d.data() } as DonationRequest)
+            );
+            callback(requests);
+        },
+        (error) => {
+            console.error('[Firestore] subscribeToRequests error:', error);
+        }
+    );
 };
 
+// ─── MATCHING ENGINE ─────────────────────────────────
+
 /**
- * Listens for NEW blood requests matching donor's criteria (Blood Group + City)
- * This is used for triggering local notifications/alerts.
+ * A highly optimized proximity-based matching listener.
+ * Uses geohash bounds and a timestamp guard to ensure real-time accuracy.
  */
 export const subscribeToMatchingRequests = (
     bloodGroup: string,
-    city: string,
-    callback: (newRequest: DonationRequest) => void
-) => {
-    const colRef = collection(db, 'requests');
+    lat: number,
+    lng: number,
+    callback: (req: DonationRequest) => void,
+    radiusKm: number = 10
+): Unsubscribe => {
+    const radiusInM = radiusKm * 1000;
+    const bounds = geohashQueryBounds([lat, lng], radiusInM);
+    
+    // Capture the exact time the listener starts to skip stale/initial results
+    const listenerStartTime = Date.now();
 
-    // Query for open requests in the same city and matching blood group
-    const q = query(
-        colRef,
-        where('status', '==', 'open'),
-        where('bloodGroup', '==', bloodGroup),
-        where('city', '==', city),
-        orderBy('createdAt', 'desc'),
-        limit(1) // Only look at the most recent one
-    );
+    const unsubs = bounds.map((b) => {
+        const q = query(
+            collection(db, 'requests'),
+            where('status', '==', 'open'),
+            where('bloodGroup', '==', bloodGroup),
+            orderBy('location.geohash'),
+            startAt(b[0]),
+            endAt(b[1])
+        );
 
-    let isInitial = true;
+        return onSnapshot(q, (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
+            if (!snapshot) return;
+            snapshot.docChanges().forEach(
+                (change: FirebaseFirestoreTypes.DocumentChange) => {
+                    if (change.type === 'added') {
+                        const data = change.doc.data() as DonationRequest;
+                        
+                        // Production-grade initial result skip:
+                        // Convert Firestore timestamp to millis and compare to listener start time
+                        const createdAt = (data.createdAt as any)?.toMillis?.() || 0;
+                        if (createdAt < listenerStartTime - 5000) {
+                            // Skip if request was created more than 5 seconds before subscription
+                            return;
+                        }
 
-    return onSnapshot(q, (snapshot) => {
-        // Skip the first run so we don't notify for existing old requests
-        if (isInitial) {
-            isInitial = false;
-            return;
-        }
+                        if (data.location?.latitude && data.location?.longitude) {
+                            const distance = getDistance(
+                                lat,
+                                lng,
+                                data.location.latitude,
+                                data.location.longitude
+                            );
 
-        // Only notify on 'added' changes
-        snapshot.docChanges().forEach((change: any) => {
-            if (change.type === 'added') {
-                const data = change.doc.data() as DonationRequest;
-                callback({ id: change.doc.id, ...data });
-            }
+                            if (distance <= radiusKm) {
+                                callback({
+                                    id: change.doc.id,
+                                    ...data,
+                                });
+                            }
+                        }
+                    }
+                }
+            );
         });
-    }, (error) => {
-        console.error('Matching listener error:', error);
     });
+
+    return () => unsubs.forEach((u) => u());
 };
 
+// ─── DONOR SERVICE ───────────────────────────────────
+
 /**
- * Find nearby donors for specific blood group
+ * Finds donors within a specific radius and blood group.
  */
 export const getNearbyDonors = async ({
     latitude,
     longitude,
     radiusInKm,
-    bloodGroup
+    bloodGroup,
 }: {
-    latitude: number,
-    longitude: number,
-    radiusInKm: number,
-    bloodGroup: string
-}) => {
+    latitude: number;
+    longitude: number;
+    radiusInKm: number;
+    bloodGroup: string;
+}): Promise<any[]> => {
     try {
         const center: [number, number] = [latitude, longitude];
         const radiusInM = radiusInKm * 1000;
-
-        // Get the bounds for our geohash query
         const bounds = geohashQueryBounds(center, radiusInM);
-        const promises = [];
 
-        for (const b of bounds) {
-            const q = query(
-                collection(db, 'users'),
-                where('roles', 'array-contains', 'donor'),
-                where('isAvailable', '==', true),
-                where('bloodGroup', '==', bloodGroup),
-                orderBy('location.geohash'),
-                startAt(b[0]),
-                endAt(b[1])
-            );
-            promises.push(getDocs(q));
-        }
+        const promises = bounds.map((b) =>
+            getDocs(
+                query(
+                    collection(db, 'users'),
+                    where('roles', 'array-contains', 'donor'),
+                    where('isAvailable', '==', true),
+                    where('isEligibleToDonate', '==', true),
+                    where('bloodGroup', '==', bloodGroup),
+                    orderBy('location.geohash'),
+                    startAt(b[0]),
+                    endAt(b[1])
+                )
+            )
+        );
 
-        // Wait for all queries to finish
         const snapshots = await Promise.all(promises);
-        const matchingDocs: any[] = [];
+        const donors: any[] = [];
 
-        for (const snap of snapshots) {
-            for (const docSnapshot of snap.docs) {
-                const data = docSnapshot.data() as UserDocument;
-                const lat = data.location.latitude;
-                const lng = data.location.longitude;
+        snapshots.forEach((snap: FirebaseFirestoreTypes.QuerySnapshot) => {
+            snap.docs.forEach((d: FirebaseFirestoreTypes.QueryDocumentSnapshot) => {
+                const data = d.data() as UserDocument;
 
-                // We have to filter out false positives due to geohash accuracy (square bounds vs radius)
-                const distanceInKm = distanceBetween([lat, lng], center);
-                const distanceInM = distanceInKm * 1000;
+                if (!data.location?.latitude || !data.location?.longitude) return;
 
-                if (distanceInM <= radiusInM) {
-                    matchingDocs.push({
+                const distance = getDistance(
+                    latitude,
+                    longitude,
+                    data.location.latitude,
+                    data.location.longitude
+                );
+
+                if (distance <= radiusInKm) {
+                    donors.push({
                         uid: data.uid,
                         name: data.name,
                         phone: data.phone,
                         bloodGroup: data.bloodGroup,
-                        distance: Math.round(distanceInKm * 10) / 10, // Round to 1 decimal place
+                        distance: Math.round(distance * 10) / 10,
                     });
                 }
-            }
-        }
+            });
+        });
 
-        // Sort by distance and return
-        return matchingDocs.sort((a, b) => a.distance - b.distance);
+        return donors.sort((a, b) => a.distance - b.distance);
     } catch (error) {
-        console.error('Error finding nearby donors:', error);
+        console.error('[Firestore] getNearbyDonors error:', error);
+        throw error;
+    }
+};
+
+// ─── DONATION SERVICE ────────────────────────────────
+
+/**
+ * Records a donation between a donor and requester.
+ */
+export const createDonation = async (
+    donationData: Omit<Donation, 'id' | 'createdAt'>
+): Promise<string> => {
+    try {
+        const ref = await addDoc(collection(db, 'donations'), {
+            ...donationData,
+            createdAt: serverTimestamp(),
+        });
+        return ref.id;
+    } catch (error) {
+        console.error('[Firestore] createDonation error:', error);
         throw error;
     }
 };
 
 /**
- * Creates a new donation record in the "donations" collection.
- * @param donationData - Donation data
+ * Completes a donation and sets the donor's 3-month cooldown.
  */
-export const createDonation = async (donationData: Omit<Donation, 'id' | 'createdAt'>): Promise<string> => {
+export const completeDonation = async (
+    donationId: string,
+    donorId: string,
+    requestId: string
+): Promise<void> => {
     try {
-        const colRef = collection(db, 'donations');
-        const docRef = await addDoc(colRef, {
-            ...donationData,
-            createdAt: serverTimestamp(),
-        } as any);
-        return docRef.id;
+        const now = new Date();
+        const cooldownDate = new Date();
+        cooldownDate.setDate(now.getDate() + 90); // 90 days cooldown
+
+        // 1. Update Donation Status
+        await setDoc(doc(db, 'donations', donationId), {
+            status: 'completed',
+            donationDate: Timestamp.fromDate(now),
+        }, { merge: true });
+
+        // 2. Update Request Status
+        await setDoc(doc(db, 'requests', requestId), {
+            status: 'completed',
+            updatedAt: serverTimestamp(),
+        }, { merge: true });
+
+        // 3. Update Donor Cooldown
+        await setDoc(doc(db, 'users', donorId), {
+            isAvailable: false,
+            isEligibleToDonate: false,
+            lastDonationDate: Timestamp.fromDate(now),
+            donationCooldownUntil: Timestamp.fromDate(cooldownDate),
+            updatedAt: serverTimestamp(),
+        }, { merge: true });
+
+        console.log(`Donation ${donationId} completed. Donor ${donorId} on cooldown until ${cooldownDate.toDateString()}`);
     } catch (error) {
-        console.error('Error creating donation:', error);
+        console.error('[Firestore] completeDonation error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Checks if a donor's cooldown has expired and updates their eligibility if needed.
+ */
+export const checkAndRefreshEligibility = async (uid: string): Promise<UserDocument | null> => {
+    try {
+        const userRef = doc(db, 'users', uid);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) return null;
+
+        const userData = userSnap.data() as UserDocument;
+
+        // If currently not eligible, check if cooldown date has passed
+        if (!userData.isEligibleToDonate && userData.donationCooldownUntil) {
+            const cooldownDate = (userData.donationCooldownUntil as FirebaseFirestoreTypes.Timestamp).toDate();
+            const now = new Date();
+
+            if (now >= cooldownDate) {
+                console.log(`Donor ${uid} cooldown expired. Re-enabling eligibility.`);
+                await setDoc(userRef, {
+                    isEligibleToDonate: true,
+                    isAvailable: true, 
+                    updatedAt: serverTimestamp(),
+                }, { merge: true });
+
+                return { ...userData, isEligibleToDonate: true, isAvailable: true };
+            }
+        }
+
+        return userData;
+    } catch (error) {
+        console.error('[Firestore] checkAndRefreshEligibility error:', error);
         throw error;
     }
 };
