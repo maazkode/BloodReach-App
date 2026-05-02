@@ -63,15 +63,15 @@ export const getCurrentLocation = (): Promise<{ latitude: number; longitude: num
 export const reverseGeocode = async (latitude: number, longitude: number): Promise<string> => {
     try {
         const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`,
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=en`,
             {
                 headers: {
                     'User-Agent': 'BloodReachApp/1.0',
                 },
             }
         );
-        const data = await response.json();
-        return data.display_name || 'Address not found';
+        const data: any = await response.json();
+        return data?.display_name || 'Address not found';
     } catch (error) {
         console.error('Reverse Geocoding Error:', error);
         return 'Unknown Location';
@@ -104,15 +104,15 @@ export const getFullLocationData = async (): Promise<LocationData> => {
 export const forwardGeocode = async (address: string): Promise<{ latitude: number, longitude: number, address: string } | null> => {
     try {
         const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`,
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&accept-language=en`,
             {
                 headers: {
                     'User-Agent': 'BloodReachApp/1.0',
                 },
             }
         );
-        const data = await response.json();
-        if (data && data.length > 0) {
+        const data: any = await response.json();
+        if (data && Array.isArray(data) && data.length > 0) {
             return {
                 latitude: parseFloat(data[0].lat),
                 longitude: parseFloat(data[0].lon),

@@ -10,6 +10,8 @@ import {
     StatusBar,
     Alert,
     ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
@@ -48,6 +50,8 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
         setShowDatePicker(false);
         if (selectedDate) setDate(selectedDate);
     };
+
+
 
     const handleFetchLocation = async () => {
         setFetchingLocation(true);
@@ -110,10 +114,14 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={{ width: 24 }} />
             </View>
 
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ flex: 1 }}
             >
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.mainContent}
+                >
                 {/* BLOOD GROUP + DROPDOWN FIX */}
                 <View style={styles.row}>
                     <View style={[styles.inputGroup, { flex: 1.3, marginRight: 8 }]}>
@@ -229,8 +237,20 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                             style={styles.input}
                             placeholderTextColor="#94A3B8"
                         />
-                        <TouchableOpacity onPress={handleFetchLocation}>
-                            <MaterialIcon name="my-location" size={22} color="#DC2626" />
+                        <TouchableOpacity 
+                            onPress={handleFetchLocation} 
+                            disabled={fetchingLocation}
+                            activeOpacity={0.7}
+                            style={styles.locationButton}
+                        >
+                            {fetchingLocation ? (
+                                <ActivityIndicator size="small" color="#DC2626" />
+                            ) : (
+                                <>
+                                    <MaterialIcon name="my-location" size={16} color="#DC2626" />
+                                    <Text style={styles.locationButtonText}>Fetch</Text>
+                                </>
+                            )}
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -252,24 +272,22 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                     </TouchableOpacity>
                 </View>
 
-                <Text style={styles.agreementText}>
-                    By continuing, you agree to Terms & Privacy Policy
-                </Text>
-            </ScrollView>
 
-            <View style={styles.bottomBar}>
-                <TouchableOpacity
-                    style={styles.submitButton}
-                    onPress={handleSubmit}
-                    disabled={loading}
-                >
-                    {loading ? (
-                        <ActivityIndicator color="#fff" />
-                    ) : (
-                        <Text style={styles.submitText}>Submit Request</Text>
-                    )}
-                </TouchableOpacity>
-            </View>
+                <View style={{ marginTop: 20 }}>
+                    <TouchableOpacity
+                        style={styles.submitButton}
+                        onPress={handleSubmit}
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={styles.submitText}>Submit Request</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
 
             {showDatePicker && (
                 <DateTimePicker
@@ -303,9 +321,9 @@ const styles = StyleSheet.create({
         color: '#1E293B',
     },
 
-    scrollContent: {
+    mainContent: {
+        flexGrow: 1,
         padding: 20,
-        paddingBottom: 120,
     },
 
     row: { flexDirection: 'row' },
@@ -320,8 +338,8 @@ const styles = StyleSheet.create({
     },
 
     inputBox: {
-        height: 50,
-        borderRadius: 14,
+        height: 45,
+        borderRadius: 10,
         borderWidth: 1,
         borderColor: '#E2E8F0',
         backgroundColor: '#F8FAFC',
@@ -335,6 +353,23 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 14,
         color: '#1E293B',
+    },
+
+    locationButton: {
+        backgroundColor: '#FEE2E2',
+        paddingHorizontal: 12,
+        height: 34,
+        borderRadius: 8,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 8,
+    },
+    locationButtonText: {
+        color: '#DC2626',
+        fontSize: 12,
+        fontWeight: '700',
+        marginLeft: 4,
     },
 
     valueText: {
@@ -379,20 +414,11 @@ const styles = StyleSheet.create({
         marginTop: 8,
     },
 
-    bottomBar: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        padding: 16,
-        backgroundColor: '#fff',
-        borderTopWidth: 1,
-        borderTopColor: '#F1F5F9',
-    },
+
 
     submitButton: {
-        height: 54,
-        borderRadius: 16,
+        height: 50,
+        borderRadius: 10,
         backgroundColor: '#DC2626',
         justifyContent: 'center',
         alignItems: 'center',

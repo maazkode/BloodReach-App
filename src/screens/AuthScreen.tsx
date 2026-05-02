@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     StyleSheet,
     View,
@@ -7,6 +7,7 @@ import {
     Image,
     Alert,
     ActivityIndicator,
+    Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FAIcon from 'react-native-vector-icons/FontAwesome';
@@ -23,6 +24,24 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 
 const AuthScreen: React.FC<Props> = ({ navigation }) => {
     const [loading, setLoading] = useState(false);
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        const pulse = Animated.sequence([
+            Animated.timing(pulseAnim, {
+                toValue: 1.08,
+                duration: 1000,
+                useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+                toValue: 1,
+                duration: 1000,
+                useNativeDriver: true,
+            }),
+        ]);
+
+        Animated.loop(pulse).start();
+    }, [pulseAnim]);
 
     const handleGoogleSignIn = async () => {
         if (loading) return;
@@ -64,13 +83,13 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={styles.brandingContainer}>
 
                     {/* Logo */}
-                    <View style={styles.logoWrapper}>
+                    <Animated.View style={[styles.logoWrapper, { transform: [{ scale: pulseAnim }] }]}>
                         <Image
                             source={require('../assets/logo.png')} // ✅ clean path
                             style={styles.logo}
                             resizeMode="contain"
                         />
-                    </View>
+                    </Animated.View>
 
                     {/* Text */}
                     <View style={styles.textContainer}>
@@ -85,15 +104,7 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
 
                 </View>
 
-                {/* Impact Section - Fills the middle space elegantly */}
-                <View style={styles.impactContainer}>
-                    <View style={styles.impactLine} />
-                    <View style={styles.impactBadge}>
-                        <MaterialIcon name="favorite" size={20} color={Colors.primary} />
-                        <Text style={styles.impactText}>Save Lives in Real-time</Text>
-                    </View>
-                    <View style={styles.impactLine} />
-                </View>
+
 
                 {/* Actions */}
                 <View style={styles.actionContainer}>
@@ -145,23 +156,13 @@ const styles = StyleSheet.create({
     },
 
     logoWrapper: {
-        width: 110,
-        height: 110,
-        borderRadius: 32,
-        backgroundColor: '#FFFFFF',
         alignItems: 'center',
         justifyContent: 'center',
-        // Premium Shadow
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        elevation: 8,
     },
 
     logo: {
-        width: 80,
-        height: 80,
+        width: 150,
+        height: 150,
     },
 
     textContainer: {
@@ -227,7 +228,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         backgroundColor: '#FFFFFF',
         height: 56,
-        borderRadius: 14,
+        borderRadius: 10,
         borderWidth: 1,
         borderColor: '#E5E7EB',
         marginBottom: 16,

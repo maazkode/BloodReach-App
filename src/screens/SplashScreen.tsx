@@ -43,24 +43,14 @@ const styles = StyleSheet.create({
     },
 
     logoWrapper: {
-        width: 110,
-        height: 110,
-        borderRadius: 32,
-        backgroundColor: '#FFFFFF',
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 20,
-        // Premium Shadow
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        elevation: 8,
     },
 
     logo: {
-        width: 80,
-        height: 80,
+        width: 160,
+        height: 160,
     },
 
     title: {

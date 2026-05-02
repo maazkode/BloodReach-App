@@ -271,52 +271,57 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                 </View>
 
                 {REQUESTS_DATA.map((item) => (
-                    <View key={item.id} style={styles.requestCard}>
-                        <View style={styles.cardHeader}>
-                            <View style={styles.badgeRow}>
-                                {item.status.map(renderStatusBadge)}
-                            </View>
-                            <Text style={styles.timeText}>{item.time}</Text>
-                        </View>
-
+                    <TouchableOpacity activeOpacity={0.8} key={item.id} style={styles.requestCard}>
                         <View style={styles.cardMain}>
-                            <View style={styles.cardInfo}>
-                                <Text style={styles.requestTitle}>{item.title}</Text>
-                                <Text style={styles.requestSub}>
-                                    {item.units} <Text style={styles.bullet}>•</Text> {item.hospital}
-                                </Text>
-                            </View>
                             <View style={[styles.bloodBadge, item.type === 'closed' && styles.bloodBadgeClosed]}>
                                 <Text style={[styles.bloodBadgeText, item.type === 'closed' && styles.bloodBadgeTextClosed]}>
                                     {item.bloodType}
                                 </Text>
                             </View>
+                            
+                            <View style={styles.cardInfo}>
+                                <View style={styles.titleRow}>
+                                    <Text style={styles.requestTitle} numberOfLines={1}>{item.title}</Text>
+                                    <Text style={styles.timeText}>{item.time}</Text>
+                                </View>
+                                <Text style={styles.requestSub} numberOfLines={1}>
+                                    {item.units} <Text style={styles.bullet}>•</Text> {item.hospital}
+                                </Text>
+                                <View style={styles.badgeRow}>
+                                    {item.status.map(renderStatusBadge)}
+                                </View>
+                            </View>
                         </View>
 
                         <View style={styles.cardFooter}>
-                            {item.matches ? (
-                                <View style={styles.matchesRow}>
-                                    <View style={styles.matchCircle}><Text style={styles.matchText}>JD</Text></View>
-                                    <View style={[styles.matchCircle, { backgroundColor: '#FEE2E2', marginLeft: -8 }]}><Text style={[styles.matchText, { color: '#DC2626' }]}>+1</Text></View>
-                                </View>
-                            ) : item.info ? (
-                                <View style={styles.infoRow}>
-                                    <View style={styles.greenDot} />
-                                    <Text style={styles.infoText}>{item.info}</Text>
-                                </View>
-                            ) : <View />}
+                            <View style={styles.footerLeft}>
+                                {item.matches ? (
+                                    <View style={styles.matchesRow}>
+                                        <View style={styles.matchCircle}><Text style={styles.matchText}>JD</Text></View>
+                                        <View style={[styles.matchCircle, { backgroundColor: '#FEE2E2', marginLeft: -8 }]}><Text style={[styles.matchText, { color: '#DC2626' }]}>+1</Text></View>
+                                        <Text style={styles.matchLabel}>Matches found</Text>
+                                    </View>
+                                ) : item.info ? (
+                                    <View style={styles.infoRow}>
+                                        <View style={styles.greenDot} />
+                                        <Text style={styles.infoText}>{item.info}</Text>
+                                    </View>
+                                ) : <View />}
+                            </View>
 
-                            <TouchableOpacity style={[
-                                styles.viewDetailsButton,
-                                item.type === 'closed' && styles.viewDetailsButtonOutline
-                            ]}>
+                            <View style={styles.footerRight}>
                                 <Text style={[
                                     styles.viewDetailsText,
                                     item.type === 'closed' && styles.viewDetailsTextOutline
                                 ]}>View Details</Text>
-                            </TouchableOpacity>
+                                <MaterialIcon 
+                                    name="chevron-right" 
+                                    size={20} 
+                                    color={item.type === 'closed' ? '#94A3B8' : '#DC2626'} 
+                                />
+                            </View>
                         </View>
-                    </View>
+                    </TouchableOpacity>
                 ))}
             </ScrollView>
 
@@ -358,7 +363,7 @@ const styles = StyleSheet.create({
     scrollContent: { paddingHorizontal: 16, paddingTop: 20 },
     createRequestButton: {
         backgroundColor: '#DC2626',
-        borderRadius: 16,
+        borderRadius: 10,
         height: 60,
         flexDirection: 'row',
         alignItems: 'center',
@@ -384,7 +389,7 @@ const styles = StyleSheet.create({
     statCard: {
         width: '48%',
         backgroundColor: 'white',
-        borderRadius: 16,
+        borderRadius: 10,
         padding: 16,
         shadowColor: '#000',
         shadowOpacity: 0.05,
@@ -398,16 +403,40 @@ const styles = StyleSheet.create({
     seeAllText: { fontSize: 14, color: '#DC2626', fontWeight: '600' },
     requestCard: {
         backgroundColor: 'white',
-        borderRadius: 20,
-        padding: 16,
+        borderRadius: 10,
+        padding: 20,
         marginBottom: 16,
-        shadowColor: '#000',
-        shadowOpacity: 0.05,
-        shadowRadius: 15,
-        elevation: 3,
+        shadowColor: '#64748B',
+        shadowOpacity: 0.08,
+        shadowOffset: { width: 0, height: 6 },
+        shadowRadius: 20,
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: '#F8FAFC',
     },
-    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    badgeRow: { flexDirection: 'row', gap: 8 },
+    cardMain: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
+    bloodBadge: {
+        width: 56,
+        height: 56,
+        backgroundColor: '#FDECEC',
+        borderRadius: 28,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
+        marginRight: 16,
+        marginTop: 4,
+    },
+    bloodBadgeClosed: { backgroundColor: '#F8FAFC', borderColor: '#F1F5F9' },
+    bloodBadgeText: { fontSize: 18, fontWeight: '800', color: '#DC2626' },
+    bloodBadgeTextClosed: { color: '#94A3B8' },
+    cardInfo: { flex: 1 },
+    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+    requestTitle: { fontSize: 18, fontWeight: '800', color: '#1E293B', flex: 1, marginRight: 12 },
+    timeText: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
+    requestSub: { fontSize: 13, color: '#64748B', fontWeight: '500', marginBottom: 12 },
+    bullet: { marginHorizontal: 6, color: '#CBD5E1' },
+    badgeRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
     badge: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -415,62 +444,35 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         borderRadius: 6,
     },
-    badgeText: { fontSize: 11, fontWeight: '800' },
-    timeText: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
-    cardMain: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-    cardInfo: { flex: 1 },
-    requestTitle: { fontSize: 22, fontWeight: '800', color: '#1E293B', marginBottom: 4 },
-    requestSub: { fontSize: 14, color: '#64748B', fontWeight: '500' },
-    bullet: { marginHorizontal: 4, color: '#CBD5E1' },
-    bloodBadge: {
-        width: 60,
-        height: 60,
-        backgroundColor: '#FDECEC',
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#FEE2E2',
-    },
-    bloodBadgeClosed: { backgroundColor: '#F8FAFC', borderColor: '#F1F5F9' },
-    bloodBadgeText: { fontSize: 20, fontWeight: '800', color: '#DC2626' },
-    bloodBadgeTextClosed: { color: '#CBD5E1' },
+    badgeText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
     cardFooter: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingTop: 12,
+        paddingTop: 16,
         borderTopWidth: 1,
-        borderTopColor: '#F8FAFC',
+        borderTopColor: '#F1F5F9',
     },
+    footerLeft: { flex: 1 },
+    footerRight: { flexDirection: 'row', alignItems: 'center' },
     matchesRow: { flexDirection: 'row', alignItems: 'center' },
     matchCircle: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
         backgroundColor: '#F1F5F9',
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 2,
         borderColor: 'white',
     },
-    matchText: { fontSize: 10, fontWeight: '800', color: '#1E293B' },
+    matchText: { fontSize: 11, fontWeight: '800', color: '#1E293B' },
+    matchLabel: { marginLeft: 10, fontSize: 13, color: '#64748B', fontWeight: '600' },
     infoRow: { flexDirection: 'row', alignItems: 'center' },
     greenDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E', marginRight: 8 },
     infoText: { fontSize: 13, color: '#16A34A', fontWeight: '600' },
-    viewDetailsButton: {
-        backgroundColor: '#FDECEC',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 10,
-    },
-    viewDetailsButtonOutline: {
-        backgroundColor: 'transparent',
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-    },
-    viewDetailsText: { color: '#DC2626', fontWeight: '700', fontSize: 14 },
-    viewDetailsTextOutline: { color: '#64748B' },
+    viewDetailsText: { color: '#DC2626', fontWeight: '700', fontSize: 14, marginRight: 2 },
+    viewDetailsTextOutline: { color: '#94A3B8' },
     navBar: {
         position: 'absolute',
         bottom: 0,

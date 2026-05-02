@@ -42,7 +42,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const goHome = () => {
-    if (userData?.role === 'donor') navigation.navigate('DonorDashboard');
+    if (userData?.lastActiveRole === 'donor') navigation.navigate('DonorDashboard');
     else navigation.navigate('RequesterDashboard');
   };
 
