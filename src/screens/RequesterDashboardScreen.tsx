@@ -36,7 +36,6 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
     const [loadingRequests, setLoadingRequests] = React.useState(true);
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
     const [activeTab, setActiveTab] = React.useState('home');
-    const slideAnim = React.useRef(new Animated.Value(width * 0.75)).current;
 
     const activeMatchesCount = myRequests.filter(r => r.status === 'matched').length;
     const pendingUnitsTotal = myRequests
@@ -57,23 +56,6 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
 
         return () => unsubscribe();
     }, [user]);
-
-    const toggleDrawer = (open: boolean) => {
-        if (open) {
-            setIsDrawerOpen(true);
-            Animated.timing(slideAnim, {
-                toValue: 0,
-                duration: 300,
-                useNativeDriver: true,
-            }).start();
-        } else {
-            Animated.timing(slideAnim, {
-                toValue: width * 0.75,
-                duration: 250,
-                useNativeDriver: true,
-            }).start(() => setIsDrawerOpen(false));
-        }
-    };
 
     const handleLogout = async () => {
         try {
@@ -263,89 +245,6 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-            {/* Sidebar Drawer Modal */}
-            <Modal
-                transparent
-                visible={isDrawerOpen}
-                onRequestClose={() => toggleDrawer(false)}
-                animationType="none"
-            >
-                <View style={styles.modalOverlayOuter}>
-                    <Pressable
-                        style={styles.modalBackdrop}
-                        onPress={() => toggleDrawer(false)}
-                    />
-                    <Animated.View
-                        style={[
-                            styles.drawerContainer,
-                            { transform: [{ translateX: slideAnim }] }
-                        ]}
-                    >
-                        <View style={[styles.drawerHeader, { paddingTop: insets.top + 20 }]}>
-                            <View style={styles.profileSection}>
-                                <View style={styles.profileImageContainer}>
-                                    {userData?.photoURL ? (
-                                        <Image source={{ uri: userData.photoURL }} style={styles.profileImage} />
-                                    ) : (
-                                        <MaterialIcon name="person" size={40} color={Colors.primary} />
-                                    )}
-                                </View>
-                                <Text style={styles.profileName} numberOfLines={1}>
-                                    {userData?.name || 'Requester'}
-                                </Text>
-                                <Text style={styles.profileEmail} numberOfLines={1}>
-                                    {user?.email || 'user@bloodreach.com'}
-                                </Text>
-                            </View>
-
-                            <View style={styles.drawerBadgeRow}>
-                                <View style={styles.bloodTypeBadge}>
-                                    <Text style={styles.bloodTypeBadgeText}>{userData?.bloodGroup || '--'}</Text>
-                                </View>
-                                <View style={styles.statusBadge}>
-                                    <Text style={styles.statusBadgeText}>REQUESTER</Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <View style={styles.drawerItems}>
-                            <TouchableOpacity
-                                style={styles.drawerItem}
-                                onPress={async () => {
-                                    toggleDrawer(false);
-                                    if (user) await createUserDocument({ uid: user.uid, lastActiveRole: 'donor' });
-                                    navigation.replace('DonorDashboard');
-                                }}
-                            >
-                                <MaterialIcon name="volunteer-activism" size={22} color={Colors.primary} />
-                                <Text style={[styles.drawerItemText, { color: Colors.primary }]}>Switch to Donor Mode</Text>
-                            </TouchableOpacity>
-                            <View style={styles.drawerDivider} />
-
-                            <TouchableOpacity style={styles.drawerItem}>
-                                <MaterialIcon name="edit" size={22} color="#64748B" />
-                                <Text style={styles.drawerItemText}>Edit Profile</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.drawerItem}>
-                                <MaterialIcon name="list-alt" size={22} color="#64748B" />
-                                <Text style={styles.drawerItemText}>My Requests</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.drawerItem}>
-                                <MaterialIcon name="settings" size={22} color="#64748B" />
-                                <Text style={styles.drawerItemText}>Settings</Text>
-                            </TouchableOpacity>
-                            <View style={styles.drawerDivider} />
-                            <TouchableOpacity style={styles.drawerItem} onPress={handleLogout}>
-                                <MaterialIcon name="logout" size={22} color="#EF4444" />
-                                <Text style={[styles.drawerItemText, { color: '#EF4444' }]}>Logout</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        <Text style={styles.versionText}>Version 1.0.0</Text>
-                    </Animated.View>
-                </View>
-            </Modal>
-
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
                 <View style={styles.headerBrand}>
@@ -356,9 +255,6 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                     />
                     <Text style={styles.headerBrandName}>BloodReach</Text>
                 </View>
-                <TouchableOpacity onPress={() => toggleDrawer(true)} style={styles.menuButton}>
-                    <MaterialIcon name="menu" size={26} color="#475569" />
-                </TouchableOpacity>
             </View>
 
             <ScrollView
@@ -373,9 +269,8 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                 tabs={[
                     { key: 'home', label: 'Home', icon: 'home', activeIcon: 'home', onPress: () => setActiveTab('home') },
                     { key: 'requests', label: 'Requests', icon: 'list-alt', onPress: () => setActiveTab('requests') },
-                    { key: 'create', label: 'New', icon: 'add', isFab: true, onPress: () => { navigation.navigate('CreateRequest'); } },
                     { key: 'history', label: 'History', icon: 'history', onPress: () => setActiveTab('history') },
-                    { key: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person', onPress: () => { setActiveTab('profile'); navigation.navigate('Profile'); } },
+                    { key: 'settings', label: 'Settings', icon: 'settings', activeIcon: 'settings', onPress: () => { setActiveTab('settings'); navigation.navigate('Settings'); } },
                 ]}
             />
         </View>

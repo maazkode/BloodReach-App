@@ -59,7 +59,7 @@ export interface DonationMatch {
     requestId: string;
     donorId: string;
     requesterId: string;
-    status: 'pending' | 'accepted' | 'rejected' | 'completed';
+    status: 'pending' | 'accepted' | 'rejected' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
     donorPhone?: string;
     requesterPhone?: string;
     createdAt: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;

@@ -15,6 +15,7 @@ import CreateRequestScreen from './src/screens/CreateRequestScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import RequestDetailScreen from './src/screens/RequestDetailScreen';
 import DonorHelpDetailScreen from './src/screens/DonorHelpDetailScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import {
   navigationRef,
   subscribeToForegroundMessages,
@@ -33,6 +34,7 @@ export type RootStackParamList = {
   Profile: undefined;
   RequestDetail: { requestId: string };
   DonorHelpDetail: { requestId: string };
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -84,6 +86,7 @@ const RootNavigator = () => {
             <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
             <Stack.Screen name="DonorHelpDetail" component={DonorHelpDetailScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="Auth" component={AuthScreen} options={{ animation: 'fade' }} />
           </>
         ) : (

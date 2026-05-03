@@ -20,7 +20,8 @@ import {
     createDonationMatch, 
     getMatchForDonor, 
     completeDonation,
-    getUserDocument 
+    getUserDocument,
+    updateMatchStatus
 } from '../services/firestoreService';
 import { DonationRequest, DonationMatch, UserDocument } from '../types/database';
 
@@ -203,26 +204,63 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     </View>
                 ) : myMatch.status === 'accepted' ? (
                     <View style={styles.contactSection}>
-                        <Text style={styles.sectionTitle}>Contact Details</Text>
+                        <Text style={styles.sectionTitle}>Match Accepted!</Text>
+                        <Text style={styles.sectionSub}>You can now contact the requester to coordinate. Once you are at the hospital or starting the process, click below.</Text>
                         <View style={styles.contactRow}>
                              <TouchableOpacity style={styles.contactBtn} onPress={() => Linking.openURL(`tel:${request.phone}`)}>
-                                <MaterialIcon name="phone" size={24} color="#B62022" />
-                                <Text style={styles.contactBtnText}>Call</Text>
+                                 <MaterialIcon name="phone" size={24} color="#B62022" />
+                                 <Text style={styles.contactBtnText}>Call</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={[styles.contactBtn, {backgroundColor: '#E7F9ED'}]} onPress={() => handleWhatsApp(request.phone, 'Requester')}>
                                 <MaterialCommunityIcon name="whatsapp" size={24} color="#16A34A" />
                                 <Text style={[styles.contactBtnText, {color: '#16A34A'}]}>WhatsApp</Text>
                             </TouchableOpacity>
                         </View>
-                        <TouchableOpacity style={[styles.actionBtn, {marginTop: 24}]} onPress={handleComplete}>
-                            <MaterialIcon name="check-circle" size={22} color="#fff" style={{marginRight: 8}} />
-                            <Text style={styles.actionBtnText}>Mark as Donated</Text>
+                        <TouchableOpacity 
+                            style={[styles.actionBtn, {marginTop: 20, backgroundColor: '#1E293B'}]} 
+                            onPress={() => updateMatchStatus(myMatch.id!, 'in_progress', myMatch)}
+                            disabled={actionLoading}
+                        >
+                            <MaterialIcon name="play-circle-outline" size={22} color="#fff" style={{marginRight: 8}} />
+                            <Text style={styles.actionBtnText}>Start Donation Process</Text>
                         </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={[styles.cancelBtn, {marginTop: 12}]} 
+                            onPress={() => updateMatchStatus(myMatch.id!, 'cancelled', myMatch)}
+                        >
+                            <Text style={styles.cancelBtnText}>Cancel Helping</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : myMatch.status === 'in_progress' ? (
+                    <View style={styles.contactSection}>
+                        <View style={styles.statusBadgeLarge}>
+                            <MaterialIcon name="loop" size={20} color="#B62022" />
+                            <Text style={styles.statusBadgeTextLarge}>DONATION IN PROGRESS</Text>
+                        </View>
+                        
+                        <TouchableOpacity style={[styles.actionBtn, {marginTop: 20}]} onPress={handleComplete} disabled={actionLoading}>
+                            <MaterialIcon name="check-circle" size={22} color="#fff" style={{marginRight: 8}} />
+                            <Text style={styles.actionBtnText}>Donation Completed</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity 
+                            style={[styles.failedBtn, {marginTop: 12}]} 
+                            onPress={() => updateMatchStatus(myMatch.id!, 'failed', myMatch)}
+                            disabled={actionLoading}
+                        >
+                            <MaterialIcon name="error-outline" size={20} color="#64748B" style={{marginRight: 8}} />
+                            <Text style={styles.failedBtnText}>Donation Failed</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : myMatch.status === 'completed' ? (
+                    <View style={[styles.statusBox, {backgroundColor: '#DCFCE7'}]}>
+                        <MaterialIcon name="check-circle" size={20} color="#16A34A" style={{marginRight: 10}} />
+                        <Text style={[styles.statusBoxText, {color: '#16A34A'}]}>Thank you! You saved a life.</Text>
                     </View>
                 ) : (
                     <View style={[styles.statusBox, {backgroundColor: '#F1F5F9'}]}>
-                        <MaterialIcon name="error-outline" size={20} color="#64748B" style={{marginRight: 10}} />
-                        <Text style={[styles.statusBoxText, {color: '#64748B'}]}>Another donor has been chosen.</Text>
+                        <MaterialIcon name="info" size={20} color="#64748B" style={{marginRight: 10}} />
+                        <Text style={[styles.statusBoxText, {color: '#64748B'}]}>This donation attempt ended ({myMatch.status}).</Text>
                     </View>
                 )}
 
@@ -263,6 +301,17 @@ const styles = StyleSheet.create({
     actionBtn: { backgroundColor: '#B62022', height: 56, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', shadowColor: '#B62022', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
     actionBtnText: { color: 'white', fontSize: 16, fontWeight: '800' },
     
+    failedBtn: { height: 50, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
+    failedBtnText: { color: '#64748B', fontSize: 14, fontWeight: '700' },
+
+    cancelBtn: { height: 44, justifyContent: 'center', alignItems: 'center' },
+    cancelBtnText: { color: '#94A3B8', fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' },
+
+    statusBadgeLarge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', padding: 12, borderRadius: 10, alignSelf: 'flex-start' },
+    statusBadgeTextLarge: { color: '#B62022', fontSize: 12, fontWeight: '900', marginLeft: 8, letterSpacing: 0.5 },
+
+    sectionSub: { fontSize: 13, color: '#64748B', fontWeight: '500', lineHeight: 18, marginBottom: 16 },
+
     statusBox: { backgroundColor: '#FEF2F2', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
     statusBoxText: { color: '#B62022', fontWeight: '700', fontSize: 14 },
 

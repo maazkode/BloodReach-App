@@ -26,7 +26,8 @@ import {
     subscribeToRequests, 
     subscribeToNearbyRequests,
     subscribeToMatchingRequests, 
-    checkAndRefreshEligibility 
+    checkAndRefreshEligibility,
+    getActiveDonorMatches
 } from '../services/firestoreService';
 import { UserDocument, DonationRequest } from '../types/database';
 import { signOut } from '../services/authService';
@@ -42,10 +43,19 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
     const { user } = useAuth();
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
     const [nearbyRequests, setNearbyRequests] = React.useState<DonationRequest[]>([]);
+    const [activeHelps, setActiveHelps] = React.useState<any[]>([]);
     const [loadingRequests, setLoadingRequests] = React.useState(true);
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
     const [activeTab, setActiveTab] = React.useState('home');
-    const slideAnim = React.useRef(new Animated.Value(-width * 0.75)).current;
+
+    // Effect for active matches
+    React.useEffect(() => {
+        if (!user) return;
+        const unsubMatches = getActiveDonorMatches(user.uid, (matches) => {
+            setActiveHelps(matches);
+        });
+        return () => unsubMatches();
+    }, [user]);
 
     React.useEffect(() => {
         const fetchUserData = async () => {
@@ -58,7 +68,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
 
         let unsubscribe: () => void = () => {};
 
-        if (userData?.location?.latitude && userData?.location?.longitude) {
+        if (userData?.location?.latitude && userData?.location?.longitude && userData?.isAvailable) {
             console.log(`Subscribing to NEARBY requests (10KM) for ${userData.bloodGroup}...`);
             unsubscribe = subscribeToNearbyRequests(
                 userData.location.latitude,
@@ -66,7 +76,12 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                 10, // 10KM radius for dashboard
                 userData.bloodGroup || null,
                 (requests) => {
-                    const filtered = requests.filter(r => r.requesterId !== user?.uid);
+                    const activeRequestIds = activeHelps.map(m => m.requestId);
+                    const filtered = requests.filter(r => 
+                        r.requesterId !== user?.uid && 
+                        !activeRequestIds.includes(r.id!) &&
+                        (!userData?.bloodGroup || r.bloodGroup === userData.bloodGroup)
+                    );
                     setNearbyRequests(filtered.slice(0, 10));
                     setLoadingRequests(false);
                 }
@@ -74,18 +89,23 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
         } else {
             console.log('Subscribing to GLOBAL requests (no location)...');
             unsubscribe = subscribeToRequests((requests) => {
-                const filtered = requests.filter(r => r.requesterId !== user?.uid);
+                const activeRequestIds = activeHelps.map(m => m.requestId);
+                const filtered = requests.filter(r => 
+                    r.requesterId !== user?.uid && 
+                    !activeRequestIds.includes(r.id!) &&
+                    (!userData?.bloodGroup || r.bloodGroup === userData.bloodGroup)
+                );
                 setNearbyRequests(filtered.slice(0, 5));
                 setLoadingRequests(false);
             });
         }
 
         return () => unsubscribe();
-    }, [user, userData?.location?.latitude, userData?.location?.longitude]);
+    }, [user, userData?.location?.latitude, userData?.location?.longitude, activeHelps]);
 
     // Separate effect for matching request notifications
     React.useEffect(() => {
-        if (!userData || !userData.bloodGroup || !userData.location || !userData.isEligibleToDonate) return;
+        if (!userData || !userData.bloodGroup || !userData.location || !userData.isEligibleToDonate || !userData.isAvailable) return;
 
         console.log(`Starting matching listener for ${userData.bloodGroup} within 10KM`);
 
@@ -105,23 +125,6 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
         return () => unsubscribeMatching();
     }, [userData?.bloodGroup, userData?.location?.latitude, userData?.location?.longitude, userData?.isEligibleToDonate]);
 
-    const toggleDrawer = (open: boolean) => {
-        if (open) {
-            setIsDrawerOpen(true);
-            Animated.timing(slideAnim, {
-                toValue: 0,
-                duration: 300,
-                useNativeDriver: true,
-            }).start();
-        } else {
-            Animated.timing(slideAnim, {
-                toValue: -width * 0.75,
-                duration: 250,
-                useNativeDriver: true,
-            }).start(() => setIsDrawerOpen(false));
-        }
-    };
-
     const handleLogout = async () => {
         try {
             await signOut();
@@ -138,85 +141,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-            {/* ── Sidebar Drawer ── */}
-            <Modal transparent visible={isDrawerOpen} onRequestClose={() => toggleDrawer(false)} animationType="none">
-                <View style={styles.modalOverlayOuter}>
-                    <Pressable style={styles.modalBackdrop} onPress={() => toggleDrawer(false)} />
-                    <Animated.View style={[styles.drawerContainer, { transform: [{ translateX: slideAnim }] }]}>
-                        <View style={[styles.drawerHeader, { paddingTop: insets.top + 20 }]}>
-                            <View style={styles.drawerAvatarRow}>
-                                <View style={styles.drawerAvatarBox}>
-                                    {userData?.photoURL ? (
-                                        <Image source={{ uri: userData.photoURL }} style={styles.drawerAvatar} />
-                                    ) : (
-                                        <MaterialIcon name="person" size={34} color="#B62022" />
-                                    )}
-                                </View>
-                                <View style={{ flex: 1, marginLeft: 14 }}>
-                                    <Text style={styles.drawerName} numberOfLines={1}>{userData?.name || 'Blood Donor'}</Text>
-                                    <Text style={styles.drawerEmail} numberOfLines={1}>{user?.email || 'donor@bloodreach.com'}</Text>
-                                </View>
-                            </View>
-                            <View style={styles.drawerBadgeRow}>
-                                <View style={styles.bloodTypeBadge}>
-                                    <Text style={styles.bloodTypeBadgeText}>{userData?.bloodGroup || '--'}</Text>
-                                </View>
-                                <View style={styles.statusBadge}>
-                                    <Text style={styles.statusBadgeText}>ACTIVE DONOR</Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <View style={styles.drawerItems}>
-                            <TouchableOpacity
-                                style={styles.drawerItem}
-                                onPress={async () => {
-                                    toggleDrawer(false);
-                                    if (user) await createUserDocument({ uid: user.uid, lastActiveRole: 'requester' });
-                                    navigation.replace('RequesterDashboard');
-                                }}
-                            >
-                                <View style={[styles.drawerIconBox, { backgroundColor: '#FEE2E2' }]}>
-                                    <MaterialIcon name="swap-horiz" size={20} color="#B62022" />
-                                </View>
-                                <Text style={[styles.drawerItemText, { color: '#B62022' }]}>Switch to Requester</Text>
-                            </TouchableOpacity>
-
-                            <View style={styles.drawerDivider} />
-
-                            <TouchableOpacity style={styles.drawerItem}>
-                                <View style={styles.drawerIconBox}>
-                                    <MaterialIcon name="edit" size={20} color="#64748B" />
-                                </View>
-                                <Text style={styles.drawerItemText}>Edit Profile</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.drawerItem}>
-                                <View style={styles.drawerIconBox}>
-                                    <MaterialIcon name="history" size={20} color="#64748B" />
-                                </View>
-                                <Text style={styles.drawerItemText}>Donation History</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.drawerItem}>
-                                <View style={styles.drawerIconBox}>
-                                    <MaterialIcon name="settings" size={20} color="#64748B" />
-                                </View>
-                                <Text style={styles.drawerItemText}>Settings</Text>
-                            </TouchableOpacity>
-
-                            <View style={styles.drawerDivider} />
-
-                            <TouchableOpacity style={styles.drawerItem} onPress={handleLogout}>
-                                <View style={[styles.drawerIconBox, { backgroundColor: '#FEF2F2' }]}>
-                                    <MaterialIcon name="logout" size={20} color="#EF4444" />
-                                </View>
-                                <Text style={[styles.drawerItemText, { color: '#EF4444' }]}>Logout</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        <Text style={styles.versionText}>Version 1.0.0</Text>
-                    </Animated.View>
-                </View>
-            </Modal>
+            <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
             {/* ── Header ── */}
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
@@ -224,9 +149,6 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                     <Image source={require('../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />
                     <Text style={styles.headerBrandName}>BloodReach</Text>
                 </View>
-                <TouchableOpacity onPress={() => toggleDrawer(true)} style={styles.headerIconBtn}>
-                    <MaterialIcon name="menu" size={24} color="#1E293B" />
-                </TouchableOpacity>
             </View>
 
             <ScrollView
@@ -262,30 +184,57 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                     )}
                 </View>
 
-                {/* ── Stats Row ── */}
-                <View style={styles.statsRow}>
-                    <View style={styles.statCard}>
-                        <View style={styles.statIconBox}>
-                            <MaterialIcon name="volunteer-activism" size={20} color="#B62022" />
+                {/* ── Active Helps (Ongoing Donations) ── */}
+
+                {/* ── Active Helps (Ongoing Donations) ── */}
+                {activeHelps.length > 0 && (
+                    <View style={{ marginBottom: 20 }}>
+                        <View style={[styles.sectionHeader, { flexDirection: 'row', alignItems: 'center' }]}>
+                            <Text style={styles.sectionTitle}>Active Helps</Text>
+                            <View style={styles.activeCountBadge}>
+                                <Text style={styles.activeCountText}>{activeHelps.length}</Text>
+                            </View>
                         </View>
-                        <Text style={styles.statValue}>5</Text>
-                        <Text style={styles.statLabel}>Donations</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.requestsScroll}>
+                            {activeHelps.map((match) => (
+                                <TouchableOpacity
+                                    key={match.id}
+                                    style={[styles.requestCard, styles.activeMatchCard]}
+                                    onPress={() => navigation.navigate('DonorHelpDetail', { requestId: match.requestId })}
+                                >
+                                    <View style={styles.requestCardTop}>
+                                        <View style={styles.requestBloodBadge}>
+                                            <Text style={styles.requestBloodText}>{match.request?.bloodGroup || '--'}</Text>
+                                        </View>
+                                        <View style={[styles.statusTag, { backgroundColor: match.status === 'accepted' ? '#DCFCE7' : '#F1F5F9' }]}>
+                                            <Text style={[styles.statusTagText, { color: match.status === 'accepted' ? '#16A34A' : '#64748B' }]}>
+                                                {match.status.toUpperCase()}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    
+                                    <Text style={styles.requestHospital} numberOfLines={1} ellipsizeMode="tail">{match.request?.hospitalName || 'Loading...'}</Text>
+                                    <Text style={styles.requestPatient} numberOfLines={1} ellipsizeMode="tail">For {match.request?.patientName || 'Patient'}</Text>
+
+                                    <View style={styles.requestMeta}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                            <MaterialIcon name="location-on" size={14} color="#94A3B8" />
+                                            <Text style={styles.requestMetaText} numberOfLines={1} ellipsizeMode="tail">{match.request?.city || 'Location'}</Text>
+                                        </View>
+                                        <View style={styles.unitBadge}>
+                                            <MaterialCommunityIcon name="water" size={12} color="#B62022" />
+                                            <Text style={styles.unitBadgeText}>{match.request?.unitsRequired || 0} Unit{match.request?.unitsRequired !== 1 ? 's' : ''}</Text>
+                                        </View>
+                                    </View>
+                                    <View style={styles.helpBtn}>
+                                        <Text style={styles.helpBtnText}>View Progress</Text>
+                                        <MaterialIcon name="chevron-right" size={16} color="#B62022" />
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
                     </View>
-                    <View style={[styles.statCard, { backgroundColor: '#FEF2F2' }]}>
-                        <View style={[styles.statIconBox, { backgroundColor: '#fff' }]}>
-                            <MaterialIcon name="favorite" size={20} color="#B62022" />
-                        </View>
-                        <Text style={[styles.statValue, { color: '#B62022' }]}>15</Text>
-                        <Text style={styles.statLabel}>Lives Saved</Text>
-                    </View>
-                    <View style={styles.statCard}>
-                        <View style={styles.statIconBox}>
-                            <MaterialIcon name="emoji-events" size={20} color="#B62022" />
-                        </View>
-                        <Text style={styles.statValue}>Gold</Text>
-                        <Text style={styles.statLabel}>Rank</Text>
-                    </View>
-                </View>
+                )}
 
                 {/* ── Nearby Requests ── */}
                 <View style={styles.sectionHeader}>
@@ -317,14 +266,18 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                                     </View>
                                 </View>
 
-                                <Text style={styles.requestHospital} numberOfLines={1}>{item.hospitalName}</Text>
-                                <Text style={styles.requestPatient} numberOfLines={1}>For {item.patientName}</Text>
+                                <Text style={styles.requestHospital} numberOfLines={1} ellipsizeMode="tail">{item.hospitalName}</Text>
+                                <Text style={styles.requestPatient} numberOfLines={1} ellipsizeMode="tail">For {item.patientName}</Text>
 
                                 <View style={styles.requestMeta}>
-                                    <MaterialIcon name="location-on" size={13} color="#94A3B8" />
-                                    <Text style={styles.requestMetaText}>{item.city}</Text>
-                                    <Text style={styles.requestMetaDot}>•</Text>
-                                    <Text style={styles.requestMetaText}>{item.unitsRequired} unit{item.unitsRequired > 1 ? 's' : ''}</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                        <MaterialIcon name="location-on" size={14} color="#94A3B8" />
+                                        <Text style={styles.requestMetaText} numberOfLines={1} ellipsizeMode="tail">{item.city}</Text>
+                                    </View>
+                                    <View style={styles.unitBadge}>
+                                        <MaterialCommunityIcon name="water" size={12} color="#B62022" />
+                                        <Text style={styles.unitBadgeText}>{item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''}</Text>
+                                    </View>
                                 </View>
 
                                 <View style={styles.helpBtn}>
@@ -359,9 +312,8 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                 tabs={[
                     { key: 'home', label: 'Home', icon: 'home', activeIcon: 'home', onPress: () => setActiveTab('home') },
                     { key: 'requests', label: 'Requests', icon: 'water-drop', onPress: () => setActiveTab('requests') },
-                    { key: 'donate', label: 'Donate', icon: 'favorite', isFab: true, onPress: () => setActiveTab('donate') },
                     { key: 'history', label: 'History', icon: 'history', onPress: () => setActiveTab('history') },
-                    { key: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person', onPress: () => { setActiveTab('profile'); navigation.navigate('Profile'); } },
+                    { key: 'settings', label: 'Settings', icon: 'settings', activeIcon: 'settings', onPress: () => { setActiveTab('settings'); navigation.navigate('Settings'); } },
                 ]}
             />
         </View>
@@ -477,17 +429,17 @@ const styles = StyleSheet.create({
     // ─── Request Cards ───
     requestsScroll: { paddingLeft: 16, paddingBottom: 8 },
     requestCard: {
-        width: 220,
+        width: 260,
         backgroundColor: 'white',
-        borderRadius: 16,
-        padding: 16,
-        marginRight: 14,
+        borderRadius: 20,
+        padding: 18,
+        marginRight: 16,
         borderWidth: 1,
         borderColor: '#F1F5F9',
         shadowColor: '#000',
-        shadowOpacity: 0.04,
-        shadowRadius: 8,
-        elevation: 2,
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 3,
     },
     requestCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
     requestBloodBadge: {
@@ -503,11 +455,26 @@ const styles = StyleSheet.create({
     requestBloodText: { fontSize: 16, fontWeight: '900', color: '#B62022' },
     urgencyTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
     urgencyTagText: { fontSize: 10, fontWeight: '900' },
-    requestHospital: { fontSize: 15, fontWeight: '800', color: '#1E293B', marginBottom: 4 },
-    requestPatient: { fontSize: 13, color: '#64748B', fontWeight: '500', marginBottom: 12 },
-    requestMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-    requestMetaText: { fontSize: 12, fontWeight: '600', color: '#94A3B8' },
-    requestMetaDot: { marginHorizontal: 6, color: '#CBD5E1', fontSize: 12 },
+    requestHospital: { fontSize: 16, fontWeight: '900', color: '#1E293B', marginBottom: 4 },
+    requestPatient: { fontSize: 13, color: '#64748B', fontWeight: '600', marginBottom: 16 },
+    requestMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 18, justifyContent: 'space-between' },
+    requestMetaText: { fontSize: 12, fontWeight: '700', color: '#64748B', marginLeft: 4, flexShrink: 1 },
+    unitBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FEF2F2',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
+    },
+    unitBadgeText: {
+        fontSize: 11,
+        fontWeight: '900',
+        color: '#B62022',
+        marginLeft: 4,
+    },
     helpBtn: {
         backgroundColor: '#FEF2F2',
         borderRadius: 10,
@@ -517,6 +484,33 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     helpBtnText: { color: '#B62022', fontSize: 14, fontWeight: '800' },
+
+    activeMatchCard: {
+        borderColor: '#B62022',
+        borderWidth: 1,
+        backgroundColor: '#FFFBFB',
+    },
+    activeCountBadge: {
+        backgroundColor: '#B62022',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
+        marginLeft: 8,
+    },
+    activeCountText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: '900',
+    },
+    statusTag: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+    },
+    statusTagText: {
+        fontSize: 10,
+        fontWeight: '800',
+    },
 
     // ─── Empty State ───
     emptyBox: {

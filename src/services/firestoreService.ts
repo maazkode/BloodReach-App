@@ -249,20 +249,37 @@ export const getRequesterRequests = (
     try {
         const q = query(
             collection(db, 'requests'),
-            where('requesterId', '==', uid),
-            orderBy('createdAt', 'desc')
+            where('requesterId', '==', uid)
         );
 
-        return onSnapshot(q, (snapshot) => {
-            if (!snapshot) return;
-            const requests = snapshot.docs.map((doc: any) => ({
-                id: doc.id,
-                ...doc.data()
-            } as DonationRequest));
-            callback(requests);
-        });
+        return onSnapshot(q, 
+            (snapshot) => {
+                if (!snapshot) {
+                    callback([]);
+                    return;
+                }
+                const requests = snapshot.docs.map((doc: any) => ({
+                    id: doc.id,
+                    ...doc.data()
+                } as DonationRequest));
+                
+                // Sort client-side to avoid index requirements
+                const sorted = requests.sort((a: DonationRequest, b: DonationRequest) => {
+                    const timeA = (a.createdAt as any)?.seconds || 0;
+                    const timeB = (b.createdAt as any)?.seconds || 0;
+                    return timeB - timeA;
+                });
+
+                callback(sorted);
+            },
+            (error) => {
+                console.error('[Firestore] getRequesterRequests snapshot error:', error);
+                callback([]); // Stop loading even on error
+            }
+        );
     } catch (error) {
         console.error('[Firestore] getRequesterRequests error:', error);
+        callback([]);
         return () => {};
     }
 };
@@ -302,14 +319,6 @@ export const subscribeToMatchingRequests = (
                 (change: FirebaseFirestoreTypes.DocumentChange) => {
                     if (change.type === 'added') {
                         const data = change.doc.data() as DonationRequest;
-
-                        // Production-grade initial result skip:
-                        // Convert Firestore timestamp to millis and compare to listener start time
-                        const createdAt = (data.createdAt as any)?.toMillis?.() || 0;
-                        if (createdAt < listenerStartTime - 5000) {
-                            // Skip if request was created more than 5 seconds before subscription
-                            return;
-                        }
 
                         if (data.location?.latitude && data.location?.longitude) {
                             const distance = getDistance(
@@ -429,6 +438,68 @@ export const createDonation = async (
 /**
  * Creates a new donation match request (Pending)
  */
+/**
+ * Fetches completed donation stats for a donor.
+ */
+export const getDonorStats = (
+    donorId: string,
+    callback: (stats: { count: number; livesSaved: number; rank: string }) => void
+) => {
+    try {
+        const q = query(
+            collection(db, 'donation_matches'),
+            where('donorId', '==', donorId),
+            where('status', '==', 'completed')
+        );
+
+        return onSnapshot(q, (snapshot) => {
+            const count = snapshot.size;
+            const livesSaved = count * 3; // Each donation saves up to 3 lives
+            
+            let rank = 'Bronze';
+            if (count >= 10) rank = 'Gold';
+            else if (count >= 4) rank = 'Silver';
+
+            callback({ count, livesSaved, rank });
+        });
+    } catch (error) {
+        console.error('[Firestore] getDonorStats error:', error);
+        return () => {};
+    }
+};
+
+/**
+ * Fetches active matches for a donor (to track ongoing helps).
+ */
+export const getActiveDonorMatches = (
+    donorId: string,
+    callback: (matches: (DonationMatch & { request?: DonationRequest })[]) => void
+) => {
+    try {
+        const q = query(
+            collection(db, 'donation_matches'),
+            where('donorId', '==', donorId),
+            where('status', 'not-in', ['completed', 'rejected', 'cancelled'])
+        );
+
+        return onSnapshot(q, async (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
+            if (!snapshot || !snapshot.docs) {
+                callback([]);
+                return;
+            }
+            const matches = await Promise.all(snapshot.docs.map(async (d: FirebaseFirestoreTypes.QueryDocumentSnapshot) => {
+                const match = { id: d.id, ...d.data() } as DonationMatch;
+                const requestData = await getDonationRequest(match.requestId);
+                return { ...match, request: requestData || undefined };
+            }));
+            callback(matches as (DonationMatch & { request?: DonationRequest })[]);
+        });
+    } catch (error) {
+        console.error('[Firestore] getActiveDonorMatches error:', error);
+        return () => {};
+    }
+};
+
 export const createDonationMatch = async (
     requestId: string,
     donorId: string,
@@ -454,6 +525,19 @@ export const createDonationMatch = async (
 
         if (requestData.bloodGroup !== donorData.bloodGroup) {
             throw new Error(`Blood group mismatch. This patient needs ${requestData.bloodGroup}, but your blood group is ${donorData.bloodGroup}.`);
+        }
+
+        // Strict Range Check (10KM)
+        if (requestData.location && donorData.location) {
+            const distance = getDistance(
+                requestData.location.latitude,
+                requestData.location.longitude,
+                donorData.location.latitude,
+                donorData.location.longitude
+            );
+            if (distance > 10) {
+                throw new Error(`Out of range. You must be within 10km to donate to this request (Distance: ${Math.round(distance)}km).`);
+            }
         }
 
         const existingQuery = query(
@@ -497,8 +581,8 @@ export const createDonationMatch = async (
  */
 export const updateMatchStatus = async (
     matchId: string,
-    status: 'accepted' | 'rejected',
-    matchData?: DonationMatch // Passing data to avoid re-fetching
+    status: 'accepted' | 'rejected' | 'in_progress' | 'failed' | 'cancelled',
+    matchData?: DonationMatch
 ): Promise<void> => {
     try {
         const matchRef = doc(db, 'donation_matches', matchId);
@@ -514,21 +598,42 @@ export const updateMatchStatus = async (
                 getUserDocument(matchData.requesterId)
             ]);
 
+            const patientName = request?.patientName || 'the patient';
+
             if (status === 'accepted') {
-                // Notify Donor
                 await queueNotification(
                     matchData.donorId,
                     'Match Accepted!',
-                    `${requester?.name || 'Requester'} accepted your offer. You can now call/WhatsApp them.`,
+                    `${requester?.name || 'Requester'} accepted your offer for ${patientName}. You can now call/WhatsApp them.`,
                     { requestId: matchData.requestId, type: 'match_accepted' }
                 );
-            } else if (status === 'rejected') {
-                // Notify Donor
+            } else if (status === 'in_progress') {
                 await queueNotification(
                     matchData.donorId,
-                    'Request Declined',
-                    'Your offer to help was declined. Thank you for your willingness to save lives.',
-                    { requestId: matchData.requestId, type: 'match_rejected' }
+                    'Donation Started',
+                    `The donation process for ${patientName} has officially started.`,
+                    { requestId: matchData.requestId, type: 'donation_in_progress' }
+                );
+                await queueNotification(
+                    matchData.requesterId,
+                    'Donation Started',
+                    `Donor ${donor?.name} has started the donation process.`,
+                    { requestId: matchData.requestId, type: 'donation_in_progress' }
+                );
+            } else if (status === 'failed') {
+                await queueNotification(
+                    matchData.requesterId,
+                    'Donation Update',
+                    `The donation attempt with ${donor?.name} was unsuccessful. Your request is still open for others.`,
+                    { requestId: matchData.requestId, type: 'donation_failed' }
+                );
+            } else if (status === 'cancelled') {
+                const targetId = matchData.donorId; // Usually notify the other party
+                await queueNotification(
+                    targetId,
+                    'Process Cancelled',
+                    'The blood donation process has been cancelled.',
+                    { requestId: matchData.requestId, type: 'donation_cancelled' }
                 );
             }
         }
@@ -619,12 +724,13 @@ export const updateDonationRequest = async (
  */
 export const completeDonation = async (
     requestId: string,
-    donorId: string
+    donorId: string,
+    matchId?: string
 ): Promise<void> => {
     try {
         const now = new Date();
         const cooldownDate = new Date();
-        cooldownDate.setDate(now.getDate() + 90); // 90 days cooldown
+        cooldownDate.setDate(now.getDate() + 90);
 
         // 1. Mark request as completed
         await setDoc(doc(db, 'requests', requestId), {
@@ -632,7 +738,15 @@ export const completeDonation = async (
             updatedAt: serverTimestamp(),
         }, { merge: true });
 
-        // 3. Update Donor Cooldown
+        // 2. Update Match status
+        if (matchId) {
+            await setDoc(doc(db, 'donation_matches', matchId), {
+                status: 'completed',
+                updatedAt: serverTimestamp(),
+            }, { merge: true });
+        }
+
+        // 3. Update Donor Cooldown & Availability
         await setDoc(doc(db, 'users', donorId), {
             isAvailable: false,
             isEligibleToDonate: false,
@@ -641,7 +755,7 @@ export const completeDonation = async (
             updatedAt: serverTimestamp(),
         }, { merge: true });
 
-        console.log(`Request ${requestId} completed. Donor ${donorId} on cooldown until ${cooldownDate.toDateString()}`);
+        console.log(`Donation completed. Donor ${donorId} now unavailable and on 90-day cooldown.`);
     } catch (error) {
         console.error('[Firestore] completeDonation error:', error);
         throw error;
