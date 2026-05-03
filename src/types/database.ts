@@ -54,12 +54,14 @@ export interface DonationRequest {
     updatedAt: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
 }
 
-export interface Donation {
+export interface DonationMatch {
     id?: string;
     requestId: string;
     donorId: string;
     requesterId: string;
-    status: 'pending' | 'approved' | 'completed';
-    donationDate: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue | null;
+    status: 'pending' | 'accepted' | 'rejected' | 'completed';
+    donorPhone?: string;
+    requesterPhone?: string;
     createdAt: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
+    updatedAt: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
 }

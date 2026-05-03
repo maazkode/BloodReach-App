@@ -14,10 +14,11 @@ import RequesterDashboard from './src/screens/RequesterDashboardScreen';
 import CreateRequestScreen from './src/screens/CreateRequestScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import RequestDetailScreen from './src/screens/RequestDetailScreen';
-import { 
-  navigationRef, 
-  subscribeToForegroundMessages, 
-  setupNotificationHandlers 
+import DonorHelpDetailScreen from './src/screens/DonorHelpDetailScreen';
+import {
+  navigationRef,
+  subscribeToForegroundMessages,
+  setupNotificationHandlers
 } from './src/services/notificationService';
 import { useEffect } from 'react';
 
@@ -31,6 +32,7 @@ export type RootStackParamList = {
   CreateRequest: undefined;
   Profile: undefined;
   RequestDetail: { requestId: string };
+  DonorHelpDetail: { requestId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -68,6 +70,7 @@ const RootNavigator = () => {
             <Stack.Screen name="CreateRequest" component={CreateRequestScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
+            <Stack.Screen name="DonorHelpDetail" component={DonorHelpDetailScreen} />
             <Stack.Screen name="Auth" component={AuthScreen} options={{ animation: 'fade' }} />
           </>
         ) : (

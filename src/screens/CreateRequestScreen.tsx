@@ -23,7 +23,8 @@ import { getAuth } from '@react-native-firebase/auth';
 import { RootStackParamList } from '../../App';
 import { createDonationRequest } from '../services/firestoreService';
 import { DonationRequest } from '../types/database';
-import { getFullLocationData } from '../services/locationService';
+import { getFullLocationData, forwardGeocode } from '../services/locationService';
+import { geohashForLocation } from 'geofire-common';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateRequest'>;
 
@@ -42,6 +43,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const [isEmergency, setIsEmergency] = useState(false);
     const [phone, setPhone] = useState('');
     const [coordinates, setCoordinates] = useState<{ latitude: number, longitude: number, geohash: string } | null>(null);
+    const [lastGeocodedAddress, setLastGeocodedAddress] = useState('');
 
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showBloodGroupPicker, setShowBloodGroupPicker] = useState(false);
@@ -64,6 +66,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 longitude: locationData.longitude,
                 geohash: locationData.geohash
             });
+            setLastGeocodedAddress(locationData.address);
         } catch (error: any) {
             Alert.alert('Location Error', error.message || 'Could not fetch location');
         } finally {
@@ -82,6 +85,26 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
 
         setLoading(true);
         try {
+            let finalCoords = coordinates;
+
+            // If address changed since last fetch/geocode, or no coords yet
+            if (address !== lastGeocodedAddress || !finalCoords) {
+                console.log('Manually geocoding address...');
+                const geoResult = await forwardGeocode(address);
+                if (geoResult) {
+                    finalCoords = {
+                        latitude: geoResult.latitude,
+                        longitude: geoResult.longitude,
+                        geohash: geohashForLocation([geoResult.latitude, geoResult.longitude])
+                    };
+                    // Optional: setAddress(geoResult.address); // normalize if desired
+                } else {
+                    Alert.alert('Location Error', 'Could not find coordinates for this address. Please try a more specific address or use "Fetch".');
+                    setLoading(false);
+                    return;
+                }
+            }
+
             const requestData: Omit<DonationRequest, 'id' | 'createdAt' | 'updatedAt'> = {
                 requesterId: currentUser.uid,
                 patientName,
@@ -91,7 +114,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 hospitalName: hospital,
                 hospitalAddress: hospital,
                 city: address,
-                location: coordinates || { latitude: 0, longitude: 0, geohash: '' },
+                location: finalCoords!,
                 urgencyLevel: isEmergency ? 'urgent' : 'normal',
                 status: 'open',
                 matchedDonorIds: [],
@@ -121,7 +144,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={{ width: 24 }} />
             </View>
 
-            <KeyboardAvoidingView 
+            <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 style={{ flex: 1 }}
             >
@@ -129,170 +152,170 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.mainContent}
                 >
-                {/* BLOOD GROUP + DROPDOWN FIX */}
-                <View style={styles.row}>
-                    <View style={[styles.inputGroup, { flex: 1.3, marginRight: 8 }]}>
-                        <Text style={styles.label}>Blood Group</Text>
+                    {/* BLOOD GROUP + DROPDOWN FIX */}
+                    <View style={styles.row}>
+                        <View style={[styles.inputGroup, { flex: 1.3, marginRight: 8 }]}>
+                            <Text style={styles.label}>Blood Group</Text>
 
-                        <TouchableOpacity
-                            style={styles.inputBox}
-                            onPress={() => setShowBloodGroupPicker(!showBloodGroupPicker)}
-                        >
-                            <Text style={styles.valueText}>
-                                {bloodGroup || 'Select'}
-                            </Text>
+                            <TouchableOpacity
+                                style={styles.inputBox}
+                                onPress={() => setShowBloodGroupPicker(!showBloodGroupPicker)}
+                            >
+                                <Text style={styles.valueText}>
+                                    {bloodGroup || 'Select'}
+                                </Text>
 
-                            <MaterialCommunityIcon
-                                name="chevron-down"
-                                size={22}
-                                color="#64748B"
-                            />
-                        </TouchableOpacity>
+                                <MaterialCommunityIcon
+                                    name="chevron-down"
+                                    size={22}
+                                    color="#64748B"
+                                />
+                            </TouchableOpacity>
 
-                        {/* SMALL DROPDOWN */}
-                        {showBloodGroupPicker && (
-                            <View style={styles.dropdown}>
-                                {BLOOD_GROUPS.map(item => (
-                                    <TouchableOpacity
-                                        key={item}
-                                        style={styles.dropdownItem}
-                                        onPress={() => {
-                                            setBloodGroup(item);
-                                            setShowBloodGroupPicker(false);
-                                        }}
-                                    >
-                                        <Text style={styles.dropdownText}>{item}</Text>
-                                    </TouchableOpacity>
-                                ))}
+                            {/* SMALL DROPDOWN */}
+                            {showBloodGroupPicker && (
+                                <View style={styles.dropdown}>
+                                    {BLOOD_GROUPS.map(item => (
+                                        <TouchableOpacity
+                                            key={item}
+                                            style={styles.dropdownItem}
+                                            onPress={() => {
+                                                setBloodGroup(item);
+                                                setShowBloodGroupPicker(false);
+                                            }}
+                                        >
+                                            <Text style={styles.dropdownText}>{item}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
+                        </View>
+
+                        <View style={[styles.inputGroup, { flex: 1 }]}>
+                            <Text style={styles.label}>Units</Text>
+                            <View style={styles.inputBox}>
+                                <TextInput
+                                    value={units}
+                                    onChangeText={setUnits}
+                                    keyboardType="numeric"
+                                    placeholder="1"
+                                    style={styles.input}
+                                    placeholderTextColor="#94A3B8"
+                                />
                             </View>
-                        )}
+                        </View>
                     </View>
 
-                    <View style={[styles.inputGroup, { flex: 1 }]}>
-                        <Text style={styles.label}>Units</Text>
+                    <View style={styles.emergencyCard}>
+                        <View style={styles.warningBox}>
+                            <MaterialIcon name="report-problem" size={20} color="#B62022" />
+                        </View>
+                        <View style={{ flex: 1, marginHorizontal: 10 }}>
+                            <Text style={styles.emergencyTitle}>Emergency Request</Text>
+                            <Text style={styles.emergencySub}>High priority matching</Text>
+                        </View>
+                        <Switch value={isEmergency} onValueChange={setIsEmergency} />
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Patient Name</Text>
                         <View style={styles.inputBox}>
                             <TextInput
-                                value={units}
-                                onChangeText={setUnits}
-                                keyboardType="numeric"
-                                placeholder="1"
+                                value={patientName}
+                                onChangeText={setPatientName}
+                                placeholder="Enter patient name"
                                 style={styles.input}
                                 placeholderTextColor="#94A3B8"
                             />
                         </View>
                     </View>
-                </View>
 
-                <View style={styles.emergencyCard}>
-                    <View style={styles.warningBox}>
-                        <MaterialIcon name="report-problem" size={20} color="#B62022" />
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Mobile Number</Text>
+                        <View style={styles.inputBox}>
+                            <TextInput
+                                value={phone}
+                                onChangeText={setPhone}
+                                placeholder="03xx xxxxxxx"
+                                keyboardType="phone-pad"
+                                style={styles.input}
+                                placeholderTextColor="#94A3B8"
+                            />
+                        </View>
                     </View>
-                    <View style={{ flex: 1, marginHorizontal: 10 }}>
-                        <Text style={styles.emergencyTitle}>Emergency Request</Text>
-                        <Text style={styles.emergencySub}>High priority matching</Text>
-                    </View>
-                    <Switch value={isEmergency} onValueChange={setIsEmergency} />
-                </View>
 
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Patient Name</Text>
-                    <View style={styles.inputBox}>
-                        <TextInput
-                            value={patientName}
-                            onChangeText={setPatientName}
-                            placeholder="Enter patient name"
-                            style={styles.input}
-                            placeholderTextColor="#94A3B8"
-                        />
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Hospital Name</Text>
+                        <View style={styles.inputBox}>
+                            <TextInput
+                                value={hospital}
+                                onChangeText={setHospital}
+                                placeholder="Enter hospital name"
+                                style={styles.input}
+                                placeholderTextColor="#94A3B8"
+                            />
+                        </View>
                     </View>
-                </View>
 
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Mobile Number</Text>
-                    <View style={styles.inputBox}>
-                        <TextInput
-                            value={phone}
-                            onChangeText={setPhone}
-                            placeholder="03xx xxxxxxx"
-                            keyboardType="phone-pad"
-                            style={styles.input}
-                            placeholderTextColor="#94A3B8"
-                        />
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Address</Text>
+                        <View style={styles.inputBox}>
+                            <TextInput
+                                value={address}
+                                onChangeText={setAddress}
+                                placeholder="Enter full address or fetch live"
+                                style={styles.input}
+                                placeholderTextColor="#94A3B8"
+                            />
+                            <TouchableOpacity
+                                onPress={handleFetchLocation}
+                                disabled={fetchingLocation}
+                                activeOpacity={0.7}
+                                style={styles.locationButton}
+                            >
+                                {fetchingLocation ? (
+                                    <ActivityIndicator size="small" color="#B62022" />
+                                ) : (
+                                    <>
+                                        <MaterialIcon name="my-location" size={16} color="#B62022" />
+                                        <Text style={styles.locationButtonText}>Fetch</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </View>
 
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Hospital Name</Text>
-                    <View style={styles.inputBox}>
-                        <TextInput
-                            value={hospital}
-                            onChangeText={setHospital}
-                            placeholder="Enter hospital name"
-                            style={styles.input}
-                            placeholderTextColor="#94A3B8"
-                        />
-                    </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Address</Text>
-                    <View style={styles.inputBox}>
-                        <TextInput
-                            value={address}
-                            onChangeText={setAddress}
-                            placeholder="Enter full address or fetch live"
-                            style={styles.input}
-                            placeholderTextColor="#94A3B8"
-                        />
-                        <TouchableOpacity 
-                            onPress={handleFetchLocation} 
-                            disabled={fetchingLocation}
-                            activeOpacity={0.7}
-                            style={styles.locationButton}
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Required Date</Text>
+                        <TouchableOpacity
+                            style={styles.inputBox}
+                            onPress={() => setShowDatePicker(true)}
                         >
-                            {fetchingLocation ? (
-                                <ActivityIndicator size="small" color="#B62022" />
+                            <Text style={styles.valueText}>
+                                {date.toLocaleDateString()}
+                            </Text>
+                            <MaterialCommunityIcon
+                                name="calendar-month"
+                                size={22}
+                                color="#64748B"
+                            />
+                        </TouchableOpacity>
+                    </View>
+
+
+                    <View style={{ marginTop: 20 }}>
+                        <TouchableOpacity
+                            style={styles.submitButton}
+                            onPress={handleSubmit}
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="#fff" />
                             ) : (
-                                <>
-                                    <MaterialIcon name="my-location" size={16} color="#B62022" />
-                                    <Text style={styles.locationButtonText}>Fetch</Text>
-                                </>
+                                <Text style={styles.submitText}>Submit Request</Text>
                             )}
                         </TouchableOpacity>
                     </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Required Date</Text>
-                    <TouchableOpacity
-                        style={styles.inputBox}
-                        onPress={() => setShowDatePicker(true)}
-                    >
-                        <Text style={styles.valueText}>
-                            {date.toLocaleDateString()}
-                        </Text>
-                        <MaterialCommunityIcon
-                            name="calendar-month"
-                            size={22}
-                            color="#64748B"
-                        />
-                    </TouchableOpacity>
-                </View>
-
-
-                <View style={{ marginTop: 20 }}>
-                    <TouchableOpacity
-                        style={styles.submitButton}
-                        onPress={handleSubmit}
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color="#fff" />
-                        ) : (
-                            <Text style={styles.submitText}>Submit Request</Text>
-                        )}
-                    </TouchableOpacity>
-                </View>
                 </ScrollView>
             </KeyboardAvoidingView>
 

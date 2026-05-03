@@ -8,78 +8,54 @@ import {
     StatusBar,
     Image,
     Dimensions,
+    Modal,
+    Animated,
+    Pressable,
+    ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { Colors } from '../theme/colors';
+import { useAuth } from '../context/AuthContext';
+import { signOut } from '../services/authService';
+import { getUserDocument, getRequesterRequests, createUserDocument } from '../services/firestoreService';
+import { UserDocument, DonationRequest } from '../types/database';
+import BottomTabBar from '../components/BottomTabBar';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { useAuth } from '../context/AuthContext';
-import { getUserDocument, createUserDocument } from '../services/firestoreService';
-import { UserDocument } from '../types/database';
-import { signOut } from '../services/authService';
-import { Modal, Animated, Pressable } from 'react-native';
-import BottomTabBar from '../components/BottomTabBar';
 
 const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequesterDashboard'>;
 
-const REQUESTS_DATA = [
-    {
-        id: '1',
-        patientName: 'Ali Khan',
-        bloodGroup: 'O+',
-        unitsRequired: 2,
-        hospitalName: "St. Mary's Hospital",
-        city: 'Islamabad',
-        urgencyLevel: 'urgent',
-        status: 'open',
-        time: '2h ago',
-        matchedDonorIds: ['donor1', 'donor2'],
-    },
-    {
-        id: '2',
-        patientName: 'Sarah Ahmed',
-        bloodGroup: 'A-',
-        unitsRequired: 1,
-        hospitalName: 'City Hospital',
-        city: 'Lahore',
-        urgencyLevel: 'normal',
-        status: 'matched',
-        time: '1 day ago',
-        matchedDonorIds: ['donor3'],
-    },
-    {
-        id: '3',
-        patientName: 'Zainab Bibi',
-        bloodGroup: 'B+',
-        unitsRequired: 3,
-        hospitalName: 'General Hospital',
-        city: 'Karachi',
-        urgencyLevel: 'normal',
-        status: 'completed',
-        time: '4 days ago',
-        matchedDonorIds: ['donor4'],
-    }
-];
-
 const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
+    const [myRequests, setMyRequests] = React.useState<DonationRequest[]>([]);
+    const [loadingRequests, setLoadingRequests] = React.useState(true);
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
     const [activeTab, setActiveTab] = React.useState('home');
     const slideAnim = React.useRef(new Animated.Value(width * 0.75)).current;
 
+    const activeMatchesCount = myRequests.filter(r => r.status === 'matched').length;
+    const pendingUnitsTotal = myRequests
+        .filter(r => r.status === 'open')
+        .reduce((sum, r) => sum + (r.unitsRequired || 0), 0);
+
     React.useEffect(() => {
-        const fetchUserData = async () => {
-            if (user) {
-                const data = await getUserDocument(user.uid);
-                setUserData(data);
-            }
-        };
-        fetchUserData();
+        if (!user) return;
+
+        // 1. Fetch user profile
+        getUserDocument(user.uid).then(setUserData);
+
+        // 2. Listen for user's requests
+        const unsubscribe = getRequesterRequests(user.uid, (requests) => {
+            setMyRequests(requests);
+            setLoadingRequests(false);
+        });
+
+        return () => unsubscribe();
     }, [user]);
 
     const toggleDrawer = (open: boolean) => {
@@ -133,6 +109,154 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                 <Text style={[styles.badgeText, { color: textColor }]}>{status}</Text>
             </View>
         );
+    };
+
+    const renderRequestList = (list: DonationRequest[], emptyMsg: string) => {
+        if (loadingRequests) {
+            return <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />;
+        }
+
+        if (list.length === 0) {
+            return (
+                <View style={styles.emptyContainer}>
+                    <MaterialIcon name="post-add" size={48} color="#CBD5E1" />
+                    <Text style={styles.emptyText}>{emptyMsg}</Text>
+                </View>
+            );
+        }
+
+        return list.map((item) => (
+            <TouchableOpacity
+                activeOpacity={0.8}
+                key={item.id}
+                style={styles.requestCard}
+                onPress={() => navigation.navigate('RequestDetail', { requestId: item.id! })}
+            >
+                <View style={styles.cardMain}>
+                    <View style={[styles.bloodBadge, item.status === 'completed' && styles.bloodBadgeClosed]}>
+                        <Text style={[styles.bloodBadgeText, item.status === 'completed' && styles.bloodBadgeTextClosed]}>
+                            {item.bloodGroup}
+                        </Text>
+                    </View>
+
+                    <View style={styles.cardInfo}>
+                        <View style={styles.titleRow}>
+                            <Text style={styles.requestTitle} numberOfLines={1}>{item.patientName}</Text>
+                            <Text style={styles.timeText}>Recently</Text>
+                        </View>
+                        <Text style={styles.requestSub} numberOfLines={1}>
+                            {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''} <Text style={styles.bullet}>•</Text> {item.hospitalName}
+                        </Text>
+                        <View style={styles.badgeRow}>
+                            {item.urgencyLevel === 'urgent' && renderStatusBadge('EMERGENCY')}
+                            {item.status === 'open' && renderStatusBadge('WAITING')}
+                            {item.status === 'matched' && renderStatusBadge('MATCHED')}
+                            {item.status === 'completed' && renderStatusBadge('CLOSED')}
+                        </View>
+                    </View>
+                </View>
+
+                <View style={styles.cardFooter}>
+                    <View style={styles.footerLeft}>
+                        {item.matchedDonorIds && item.matchedDonorIds.length > 0 ? (
+                            <View style={styles.matchesRow}>
+                                <View style={styles.matchCircle}><Text style={styles.matchText}>{item.matchedDonorIds.length}</Text></View>
+                                <Text style={styles.matchLabel}>Donor{item.matchedDonorIds.length > 1 ? 's' : ''} Found</Text>
+                            </View>
+                        ) : item.status === 'completed' ? (
+                            <Text style={[styles.matchLabel, { marginLeft: 0 }]}>Request Fulfilled</Text>
+                        ) : (
+                            <View style={styles.infoRow}>
+                                <View style={styles.greenDot} />
+                                <Text style={styles.infoText}>Searching for donors...</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={styles.footerRight}>
+                        <Text style={[
+                            styles.viewDetailsText,
+                            item.status === 'completed' && styles.viewDetailsTextOutline
+                        ]}>View Details</Text>
+                        <MaterialIcon
+                            name="chevron-right"
+                            size={20}
+                            color={item.status === 'completed' ? '#94A3B8' : '#B62022'}
+                        />
+                    </View>
+                </View>
+            </TouchableOpacity>
+        ));
+    };
+
+    const renderTabContent = () => {
+        switch (activeTab) {
+            case 'requests':
+                return (
+                    <>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Active Requests</Text>
+                        </View>
+                        {renderRequestList(
+                            myRequests.filter(r => r.status === 'open' || r.status === 'matched'),
+                            "You have no active requests."
+                        )}
+                    </>
+                );
+            case 'history':
+                return (
+                    <>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Request History</Text>
+                        </View>
+                        {renderRequestList(
+                            myRequests.filter(r => r.status === 'completed' || r.status === 'cancelled'),
+                            "Your request history is empty."
+                        )}
+                    </>
+                );
+            default: // home
+                return (
+                    <>
+                        {/* Create Request Button */}
+                        <TouchableOpacity
+                            style={styles.createRequestButton}
+                            onPress={() => navigation.navigate('CreateRequest')}
+                        >
+                            <View style={styles.plusCircle}>
+                                <MaterialIcon name="add" size={24} color={Colors.primary} />
+                            </View>
+                            <Text style={styles.createRequestText}>Create Blood Request</Text>
+                        </TouchableOpacity>
+
+                        {/* Stats Row */}
+                        <View style={styles.statsRow}>
+                            <View style={styles.statCard}>
+                                <Text style={styles.statLabel}>ACTIVE MATCHES</Text>
+                                <Text style={[styles.statValue, { color: '#B62022' }]}>
+                                    {activeMatchesCount.toString().padStart(2, '0')}
+                                </Text>
+                            </View>
+                            <View style={styles.statCard}>
+                                <Text style={styles.statLabel}>PENDING UNITS</Text>
+                                <Text style={[styles.statValue, { color: '#1E293B' }]}>
+                                    {pendingUnitsTotal.toString().padStart(2, '0')}
+                                </Text>
+                            </View>
+                        </View>
+
+                        {/* My Requests Section */}
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Recent Requests</Text>
+                            <TouchableOpacity onPress={() => setActiveTab('requests')}>
+                                <Text style={styles.seeAllText}>See All</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {renderRequestList(myRequests.slice(0, 5), "You haven't created any requests yet.")}
+                    </>
+                );
+        }
     };
 
     return (
@@ -241,101 +365,7 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
             >
-                {/* Create Request Button */}
-                <TouchableOpacity
-                    style={styles.createRequestButton}
-                    onPress={() => navigation.navigate('CreateRequest')}
-                >
-                    <View style={styles.plusCircle}>
-                        <MaterialIcon name="add" size={24} color={Colors.primary} />
-                    </View>
-                    <Text style={styles.createRequestText}>Create Blood Request</Text>
-                </TouchableOpacity>
-
-
-
-                {/* Stats Row */}
-                <View style={styles.statsRow}>
-                    <View style={styles.statCard}>
-                        <Text style={styles.statLabel}>ACTIVE MATCHES</Text>
-                        <Text style={[styles.statValue, { color: '#B62022' }]}>02</Text>
-                    </View>
-                    <View style={styles.statCard}>
-                        <Text style={styles.statLabel}>PENDING UNITS</Text>
-                        <Text style={[styles.statValue, { color: '#1E293B' }]}>03</Text>
-                    </View>
-                </View>
-
-                {/* My Requests Section */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>My Requests</Text>
-                    <TouchableOpacity>
-                        <Text style={styles.seeAllText}>See All</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {REQUESTS_DATA.map((item) => (
-                    <TouchableOpacity
-                        activeOpacity={0.8}
-                        key={item.id}
-                        style={styles.requestCard}
-                        onPress={() => navigation.navigate('RequestDetail', { requestId: item.id })}
-                    >
-                        <View style={styles.cardMain}>
-                            <View style={[styles.bloodBadge, item.status === 'completed' && styles.bloodBadgeClosed]}>
-                                <Text style={[styles.bloodBadgeText, item.status === 'completed' && styles.bloodBadgeTextClosed]}>
-                                    {item.bloodGroup}
-                                </Text>
-                            </View>
-
-                            <View style={styles.cardInfo}>
-                                <View style={styles.titleRow}>
-                                    <Text style={styles.requestTitle} numberOfLines={1}>{item.patientName}</Text>
-                                    <Text style={styles.timeText}>{item.time}</Text>
-                                </View>
-                                <Text style={styles.requestSub} numberOfLines={1}>
-                                    {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''} <Text style={styles.bullet}>•</Text> {item.hospitalName}
-                                </Text>
-                                <View style={styles.badgeRow}>
-                                    {item.urgencyLevel === 'urgent' && renderStatusBadge('EMERGENCY')}
-                                    {item.status === 'open' && renderStatusBadge('WAITING')}
-                                    {item.status === 'matched' && renderStatusBadge('MATCHED')}
-                                    {item.status === 'completed' && renderStatusBadge('CLOSED')}
-                                </View>
-                            </View>
-                        </View>
-
-                        <View style={styles.cardFooter}>
-                            <View style={styles.footerLeft}>
-                                {item.matchedDonorIds && item.matchedDonorIds.length > 0 ? (
-                                    <View style={styles.matchesRow}>
-                                        <View style={styles.matchCircle}><Text style={styles.matchText}>{item.matchedDonorIds.length}</Text></View>
-                                        <Text style={styles.matchLabel}>Donor{item.matchedDonorIds.length > 1 ? 's' : ''} Found</Text>
-                                    </View>
-                                ) : item.status === 'completed' ? (
-                                    <Text style={[styles.matchLabel, { marginLeft: 0 }]}>Request Fulfilled</Text>
-                                ) : (
-                                    <View style={styles.infoRow}>
-                                        <View style={styles.greenDot} />
-                                        <Text style={styles.infoText}>Searching for donors...</Text>
-                                    </View>
-                                )}
-                            </View>
-
-                            <View style={styles.footerRight}>
-                                <Text style={[
-                                    styles.viewDetailsText,
-                                    item.status === 'completed' && styles.viewDetailsTextOutline
-                                ]}>View Details</Text>
-                                <MaterialIcon
-                                    name="chevron-right"
-                                    size={20}
-                                    color={item.status === 'completed' ? '#94A3B8' : '#B62022'}
-                                />
-                            </View>
-                        </View>
-                    </TouchableOpacity>
-                ))}
+                {renderTabContent()}
             </ScrollView>
 
             <BottomTabBar
@@ -558,6 +588,19 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#94A3B8',
         fontWeight: '600',
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 60,
+        paddingHorizontal: 40,
+    },
+    emptyText: {
+        fontSize: 15,
+        color: '#94A3B8',
+        fontWeight: '600',
+        marginTop: 12,
+        textAlign: 'center',
     },
 });
 

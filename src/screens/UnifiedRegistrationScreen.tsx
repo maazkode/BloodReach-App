@@ -54,6 +54,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
     const [locationData, setLocationData] = useState<LocationData | null>(null);
+    const [fetchingLocation, setFetchingLocation] = useState(false);
     const [isDetecting, setIsDetecting] = useState(false);
 
     const validateForm = () => {
@@ -71,8 +72,8 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
         return Object.keys(tempErrors).length === 0;
     };
 
-    const handleAutoDetect = async () => {
-        setIsDetecting(true);
+    const handleFetchLocation = async () => {
+        setFetchingLocation(true);
         try {
             const data = await getFullLocationData();
             setLocationData(data);
@@ -82,9 +83,11 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
         } catch (error: any) {
             Alert.alert('Detection Failed', error.message || 'Could not detect location');
         } finally {
-            setIsDetecting(false);
+            setFetchingLocation(false);
         }
     };
+
+    const handleAutoDetect = handleFetchLocation;
 
     const handleManualLocate = async () => {
         if (!address.trim()) {
@@ -136,6 +139,8 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 age: age ? Number(age) : undefined,
                 gender: gender || undefined,
                 isAvailable: isAvailable,
+                isEligibleToDonate: true,
+                donationCooldownUntil: null,
                 roles: roles,
                 lastActiveRole: lastActiveRole as 'donor' | 'requester',
                 lastDonationDate: lastDonationDate ? Timestamp.fromDate(lastDonationDate) : null,
@@ -216,26 +221,28 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                             <View style={styles.inputWrapper}>
                                 <TextInput
                                     style={[styles.input, { flex: 1, backgroundColor: 'transparent', paddingHorizontal: 0 }]}
-                                    placeholder="e.g. House #123, Street 5, City"
+                                    placeholder="House, Street, City"
                                     value={address}
                                     onChangeText={(text) => {
                                         setAddress(text);
                                         if (locationData) setLocationData(null);
                                     }}
                                 />
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    {isDetecting ? (
-                                        <ActivityIndicator size="small" color={Colors.primary} style={{ marginRight: 8 }} />
+                                <TouchableOpacity
+                                    onPress={handleFetchLocation}
+                                    disabled={fetchingLocation}
+                                    activeOpacity={0.7}
+                                    style={styles.locationButton}
+                                >
+                                    {fetchingLocation ? (
+                                        <ActivityIndicator size="small" color="#B62022" />
                                     ) : (
-                                        <TouchableOpacity
-                                            onPress={handleAutoDetect}
-                                            style={{ padding: 4 }}
-                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                        >
-                                            <MaterialIcon name="my-location" size={20} color={Colors.primary} />
-                                        </TouchableOpacity>
+                                        <>
+                                            <MaterialIcon name="my-location" size={16} color="#B62022" />
+                                            <Text style={styles.locationButtonText}>Fetch</Text>
+                                        </>
                                     )}
-                                </View>
+                                </TouchableOpacity>
                             </View>
                             {locationData && (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
@@ -453,6 +460,23 @@ const styles = StyleSheet.create({
     selectionItemText: { fontSize: 16, color: '#1E293B', fontWeight: '500' },
     modalCloseButton: { marginTop: 10, paddingVertical: 12, alignItems: 'center' },
     modalCloseButtonText: { color: '#64748B', fontWeight: '600' },
+
+    locationButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FEF2F2',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
+    },
+    locationButtonText: {
+        color: '#B62022',
+        fontSize: 13,
+        fontWeight: 'bold',
+        marginLeft: 6,
+    },
 });
 
 export default UnifiedRegistrationScreen;

@@ -20,7 +20,7 @@ import {
 } from '@react-native-firebase/firestore';
 
 import { geohashQueryBounds, distanceBetween } from 'geofire-common';
-import { UserDocument, DonationRequest, Donation } from '../types/database';
+import { UserDocument, DonationRequest, DonationMatch } from '../types/database';
 
 const db = getFirestore();
 
@@ -135,6 +135,76 @@ export const subscribeToRequests = (
     );
 };
 
+/**
+ * Subscribes to open requests within a specific radius.
+ */
+export const subscribeToNearbyRequests = (
+    lat: number,
+    lng: number,
+    radiusKm: number,
+    callback: (requests: DonationRequest[]) => void
+): Unsubscribe => {
+    const radiusInM = radiusKm * 1000;
+    const bounds = geohashQueryBounds([lat, lng], radiusInM);
+
+    const unsubs = bounds.map((b) => {
+        const q = query(
+            collection(db, 'requests'),
+            where('status', '==', 'open'),
+            orderBy('location.geohash'),
+            startAt(b[0]),
+            endAt(b[1])
+        );
+
+        return onSnapshot(q, (snapshot) => {
+            if (!snapshot) return;
+            const requests = snapshot.docs.map((doc: any) => ({
+                id: doc.id,
+                ...doc.data()
+            } as DonationRequest));
+            
+            // Further filter by exact distance
+            const filtered = requests.filter((r: DonationRequest) => {
+                if (!r.location?.latitude || !r.location?.longitude) return false;
+                const distance = getDistance(lat, lng, r.location.latitude, r.location.longitude);
+                return distance <= radiusKm;
+            });
+
+            callback(filtered);
+        });
+    });
+
+    return () => unsubs.forEach(u => u());
+};
+
+/**
+ * Fetches all requests created by a specific user.
+ */
+export const getRequesterRequests = (
+    uid: string,
+    callback: (requests: DonationRequest[]) => void
+) => {
+    try {
+        const q = query(
+            collection(db, 'requests'),
+            where('requesterId', '==', uid),
+            orderBy('createdAt', 'desc')
+        );
+
+        return onSnapshot(q, (snapshot) => {
+            if (!snapshot) return;
+            const requests = snapshot.docs.map((doc: any) => ({
+                id: doc.id,
+                ...doc.data()
+            } as DonationRequest));
+            callback(requests);
+        });
+    } catch (error) {
+        console.error('[Firestore] getRequesterRequests error:', error);
+        return () => {};
+    }
+};
+
 // ─── MATCHING ENGINE ─────────────────────────────────
 
 /**
@@ -150,7 +220,7 @@ export const subscribeToMatchingRequests = (
 ): Unsubscribe => {
     const radiusInM = radiusKm * 1000;
     const bounds = geohashQueryBounds([lat, lng], radiusInM);
-    
+
     // Capture the exact time the listener starts to skip stale/initial results
     const listenerStartTime = Date.now();
 
@@ -170,7 +240,7 @@ export const subscribeToMatchingRequests = (
                 (change: FirebaseFirestoreTypes.DocumentChange) => {
                     if (change.type === 'added') {
                         const data = change.doc.data() as DonationRequest;
-                        
+
                         // Production-grade initial result skip:
                         // Convert Firestore timestamp to millis and compare to listener start time
                         const createdAt = (data.createdAt as any)?.toMillis?.() || 0;
@@ -280,7 +350,7 @@ export const getNearbyDonors = async ({
  * Records a donation between a donor and requester.
  */
 export const createDonation = async (
-    donationData: Omit<Donation, 'id' | 'createdAt'>
+    donationData: Omit<DonationMatch, 'id' | 'createdAt'>
 ): Promise<string> => {
     try {
         const ref = await addDoc(collection(db, 'donations'), {
@@ -295,25 +365,138 @@ export const createDonation = async (
 };
 
 /**
- * Completes a donation and sets the donor's 3-month cooldown.
+ * Creates a new donation match request (Pending)
+ */
+export const createDonationMatch = async (
+    requestId: string,
+    donorId: string,
+    requesterId: string
+): Promise<string> => {
+    try {
+        const matchRef = doc(collection(db, 'donation_matches'));
+        const matchData: DonationMatch = {
+            requestId,
+            donorId,
+            requesterId,
+            status: 'pending',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        };
+        await setDoc(matchRef, matchData);
+        return matchRef.id;
+    } catch (error) {
+        console.error('[Firestore] createDonationMatch error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Updates the status of a donation match (Accept/Reject)
+ */
+export const updateMatchStatus = async (
+    matchId: string,
+    status: 'accepted' | 'rejected'
+): Promise<void> => {
+    try {
+        await setDoc(doc(db, 'donation_matches', matchId), {
+            status,
+            updatedAt: serverTimestamp(),
+        }, { merge: true });
+    } catch (error) {
+        console.error('[Firestore] updateMatchStatus error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get all matches for a specific request (for the requester)
+ */
+export const getMatchesForRequest = (
+    requestId: string,
+    callback: (matches: DonationMatch[]) => void
+) => {
+    return onSnapshot(
+        query(collection(db, 'donation_matches'), where('requestId', '==', requestId)),
+        (snapshot) => {
+            if (!snapshot) return;
+            const matches = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as DonationMatch));
+            callback(matches);
+        }
+    );
+};
+
+/**
+ * Get a specific match between a donor and a request
+ */
+export const getMatchForDonor = (
+    requestId: string,
+    donorId: string,
+    callback: (match: DonationMatch | null) => void
+) => {
+    return onSnapshot(
+        query(
+            collection(db, 'donation_matches'), 
+            where('requestId', '==', requestId),
+            where('donorId', '==', donorId)
+        ),
+        (snapshot) => {
+            if (!snapshot) {
+                callback(null);
+                return;
+            }
+            if (snapshot.empty) {
+                callback(null);
+            } else {
+                callback({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as DonationMatch);
+            }
+        }
+    );
+};
+
+/**
+ * Fetches a single donation request by ID.
+ */
+export const getDonationRequest = async (requestId: string): Promise<DonationRequest | null> => {
+    try {
+        const snap = await getDoc(doc(db, 'requests', requestId));
+        return snap.exists() ? { id: snap.id, ...snap.data() } as DonationRequest : null;
+    } catch (error) {
+        console.error('[Firestore] getDonationRequest error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Updates a donation request with partial data.
+ */
+export const updateDonationRequest = async (
+    requestId: string,
+    data: Partial<DonationRequest>
+): Promise<void> => {
+    try {
+        await setDoc(doc(db, 'requests', requestId), {
+            ...data,
+            updatedAt: serverTimestamp(),
+        }, { merge: true });
+    } catch (error) {
+        console.error('[Firestore] updateDonationRequest error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Marks a donation as completed and triggers donor cooldown.
  */
 export const completeDonation = async (
-    donationId: string,
-    donorId: string,
-    requestId: string
+    requestId: string,
+    donorId: string
 ): Promise<void> => {
     try {
         const now = new Date();
         const cooldownDate = new Date();
         cooldownDate.setDate(now.getDate() + 90); // 90 days cooldown
 
-        // 1. Update Donation Status
-        await setDoc(doc(db, 'donations', donationId), {
-            status: 'completed',
-            donationDate: Timestamp.fromDate(now),
-        }, { merge: true });
-
-        // 2. Update Request Status
+        // 1. Mark request as completed
         await setDoc(doc(db, 'requests', requestId), {
             status: 'completed',
             updatedAt: serverTimestamp(),
@@ -328,7 +511,7 @@ export const completeDonation = async (
             updatedAt: serverTimestamp(),
         }, { merge: true });
 
-        console.log(`Donation ${donationId} completed. Donor ${donorId} on cooldown until ${cooldownDate.toDateString()}`);
+        console.log(`Request ${requestId} completed. Donor ${donorId} on cooldown until ${cooldownDate.toDateString()}`);
     } catch (error) {
         console.error('[Firestore] completeDonation error:', error);
         throw error;
@@ -355,7 +538,7 @@ export const checkAndRefreshEligibility = async (uid: string): Promise<UserDocum
                 console.log(`Donor ${uid} cooldown expired. Re-enabling eligibility.`);
                 await setDoc(userRef, {
                     isEligibleToDonate: true,
-                    isAvailable: true, 
+                    isAvailable: true,
                     updatedAt: serverTimestamp(),
                 }, { merge: true });
 

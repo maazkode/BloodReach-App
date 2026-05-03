@@ -20,7 +20,14 @@ import { Colors } from '../theme/colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument, createUserDocument, subscribeToRequests, subscribeToMatchingRequests, checkAndRefreshEligibility } from '../services/firestoreService';
+import { 
+    getUserDocument, 
+    createUserDocument, 
+    subscribeToRequests, 
+    subscribeToNearbyRequests,
+    subscribeToMatchingRequests, 
+    checkAndRefreshEligibility 
+} from '../services/firestoreService';
 import { UserDocument, DonationRequest } from '../types/database';
 import { signOut } from '../services/authService';
 import { triggerLocalNotification } from '../services/notificationService';
@@ -49,14 +56,29 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
         };
         fetchUserData();
 
-        // Subscribe to real-time requests for the dashboard
-        const unsubscribe = subscribeToRequests((requests) => {
-            setNearbyRequests(requests.slice(0, 5)); // Just show top 5 on dashboard
-            setLoadingRequests(false);
-        });
+        let unsubscribe: () => void = () => {};
+
+        if (userData?.location?.latitude && userData?.location?.longitude) {
+            console.log('Subscribing to NEARBY requests (10KM)...');
+            unsubscribe = subscribeToNearbyRequests(
+                userData.location.latitude,
+                userData.location.longitude,
+                10, // 10KM radius for dashboard
+                (requests) => {
+                    setNearbyRequests(requests.slice(0, 10));
+                    setLoadingRequests(false);
+                }
+            );
+        } else {
+            console.log('Subscribing to GLOBAL requests (no location)...');
+            unsubscribe = subscribeToRequests((requests) => {
+                setNearbyRequests(requests.slice(0, 5));
+                setLoadingRequests(false);
+            });
+        }
 
         return () => unsubscribe();
-    }, [user]);
+    }, [user, userData?.location?.latitude, userData?.location?.longitude]);
 
     // Separate effect for matching request notifications
     React.useEffect(() => {
@@ -225,7 +247,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                         {userData?.isEligibleToDonate === false ? 'Time to recover' : 'You\'re ready\nto save lives'}
                     </Text>
                     <Text style={styles.heroSub}>
-                        {userData?.isEligibleToDonate === false 
+                        {userData?.isEligibleToDonate === false
                             ? `You can donate again after ${userData.donationCooldownUntil ? (userData.donationCooldownUntil as any).toDate().toLocaleDateString() : 'the cooldown period'}.`
                             : 'Thank you for your life-saving contributions. Each donation can save up to 3 lives.'}
                     </Text>
@@ -279,7 +301,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                                 key={item.id}
                                 style={styles.requestCard}
                                 activeOpacity={0.85}
-                                onPress={() => navigation.navigate('RequestDetail', { requestId: item.id! })}
+                                onPress={() => navigation.navigate('DonorHelpDetail', { requestId: item.id! })}
                             >
                                 <View style={styles.requestCardTop}>
                                     <View style={styles.requestBloodBadge}>

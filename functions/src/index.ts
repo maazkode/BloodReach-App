@@ -1,13 +1,13 @@
-import {setGlobalOptions} from "firebase-functions";
-import {onDocumentCreated} from "firebase-functions/v2/firestore";
+import { setGlobalOptions } from "firebase-functions";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import {geohashQueryBounds, distanceBetween} from "geofire-common";
+import { geohashQueryBounds, distanceBetween } from "geofire-common";
 
 admin.initializeApp();
 
 // Optimize performance and cold starts
-setGlobalOptions({maxInstances: 10, region: "us-central1"});
+setGlobalOptions({ maxInstances: 10, region: "us-central1" });
 
 /**
  * Triggered when a new document is created in the "requests" collection.
@@ -127,7 +127,7 @@ export const onNewBloodRequest = onDocumentCreated(
       };
 
       const response = await admin.messaging().sendEachForMulticast(message);
-      
+
       logger.info(`Notification Summary: ${response.successCount} success, ${response.failureCount} failure.`);
 
       // Optional: Clean up stale tokens if any failed
