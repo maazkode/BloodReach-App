@@ -16,8 +16,17 @@ import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIc
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { getAuth } from '@react-native-firebase/auth';
-import { getDonationRequest, updateDonationRequest, completeDonation } from '../services/firestoreService';
-import { DonationRequest } from '../types/database';
+import { 
+    getDonationRequest, 
+    updateDonationRequest, 
+    completeDonation, 
+    getMatchesForRequest, 
+    updateMatchStatus,
+    getUserDocument,
+    createDonationMatch,
+    getMatchForDonor
+} from '../services/firestoreService';
+import { DonationRequest, DonationMatch, UserDocument } from '../types/database';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequestDetail'>;
 
@@ -26,6 +35,8 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     const [request, setRequest] = useState<DonationRequest | null>(null);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
+    const [matches, setMatches] = useState<(DonationMatch & { donor?: UserDocument })[]>([]);
+    const [myMatch, setMyMatch] = useState<DonationMatch | null>(null);
     const currentUser = getAuth().currentUser;
 
     useEffect(() => {
@@ -34,6 +45,25 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 const data = await getDonationRequest(requestId);
                 if (data) {
                     setRequest(data);
+                    
+                    // If I am the requester, listen for matches
+                    if (data.requesterId === currentUser?.uid) {
+                        const unsub = getMatchesForRequest(requestId, async (matchList) => {
+                            // Fetch donor profile for each match
+                            const enhancedMatches = await Promise.all(matchList.map(async (m) => {
+                                const donorProfile = await getUserDocument(m.donorId);
+                                return { ...m, donor: donorProfile || undefined };
+                            }));
+                            setMatches(enhancedMatches);
+                        });
+                        return () => unsub();
+                    } else {
+                        // If I am NOT the requester, listen for MY match status
+                        const unsub = getMatchForDonor(requestId, currentUser?.uid || '', (match) => {
+                            setMyMatch(match);
+                        });
+                        return () => unsub();
+                    }
                 } else {
                     Alert.alert('Error', 'Request not found.');
                     navigation.goBack();
@@ -80,21 +110,59 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         });
     };
 
-    const handleHelpNow = async () => {
-        if (!currentUser) return;
-
+    const handleAcceptMatch = async (match: DonationMatch, donorName: string) => {
         setActionLoading(true);
         try {
-            const updatedMatchedIds = [...request.matchedDonorIds, currentUser.uid];
+            await updateMatchStatus(match.id!, 'accepted', match);
+            
+            // Also add to request's matchedDonorIds
+            const updatedMatchedIds = [...(request.matchedDonorIds || []), match.donorId];
             await updateDonationRequest(requestId, {
                 matchedDonorIds: updatedMatchedIds,
                 status: 'matched'
             });
-            Alert.alert('Success', "You've been matched! Please contact the requester immediately.");
-            // Refresh local state
-            setRequest(prev => prev ? { ...prev, matchedDonorIds: updatedMatchedIds, status: 'matched' } : null);
+
+            Alert.alert('Match Accepted', `You can now contact ${donorName}.`);
         } catch (error) {
-            Alert.alert('Error', 'Could not process your request. Please try again.');
+            Alert.alert('Error', 'Could not accept donor.');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleRejectMatch = async (match: DonationMatch) => {
+        Alert.alert('Reject Donor', 'Are you sure you want to reject this donor?', [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+                text: 'Reject', 
+                style: 'destructive',
+                onPress: async () => {
+                    setActionLoading(true);
+                    try {
+                        await updateMatchStatus(match.id!, 'rejected', match);
+                    } catch (e) { Alert.alert('Error', 'Could not reject.'); }
+                    finally { setActionLoading(false); }
+                }
+            }
+        ]);
+    };
+
+    const handleInterest = async () => {
+        if (!currentUser || !request) {
+            console.error('[RequestDetail] Missing user or request:', { currentUser: !!currentUser, request: !!request });
+            return;
+        }
+        
+        if (actionLoading) return;
+
+        setActionLoading(true);
+        try {
+            console.log('[RequestDetail] Creating match for:', { requestId, donorId: currentUser.uid, requesterId: request.requesterId });
+            await createDonationMatch(requestId, currentUser.uid, request.requesterId);
+            Alert.alert('Request Sent', 'The requester has been notified. You can see their contact once they accept.');
+        } catch (error: any) {
+            console.error('[RequestDetail] handleInterest error:', error);
+            Alert.alert('Error', error.message || 'Could not send request.');
         } finally {
             setActionLoading(false);
         }
@@ -189,7 +257,76 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     </View>
                 </View>
 
-                {!isRequester && (
+                {isRequester && (
+                    <View style={styles.matchesSection}>
+                        <Text style={styles.sectionTitle}>Interested Donors ({matches.length})</Text>
+                        {matches.length === 0 ? (
+                            <View style={styles.noMatchesBox}>
+                                <MaterialCommunityIcon name="account-search-outline" size={32} color="#94A3B8" />
+                                <Text style={styles.noMatchesText}>Waiting for donors to respond...</Text>
+                            </View>
+                        ) : (
+                            matches.map((m) => (
+                                <View key={m.id} style={styles.matchCard}>
+                                    <View style={styles.donorInfoRow}>
+                                        <View style={styles.donorAvatar}>
+                                            <MaterialIcon name="person" size={24} color="#64748B" />
+                                        </View>
+                                        <View style={{flex: 1}}>
+                                            <Text style={styles.donorName}>{m.donor?.name || 'Anonymous Donor'}</Text>
+                                            <Text style={styles.donorStatus}>{m.status.toUpperCase()}</Text>
+                                        </View>
+                                        {m.status === 'accepted' && (
+                                            <View style={styles.acceptedBadge}>
+                                                <MaterialIcon name="check-circle" size={16} color="#16A34A" />
+                                            </View>
+                                        )}
+                                    </View>
+
+                                    {m.status === 'pending' ? (
+                                        <View style={styles.matchActions}>
+                                            <TouchableOpacity 
+                                                style={[styles.smallBtn, styles.rejectBtn]} 
+                                                onPress={() => handleRejectMatch(m)}
+                                                disabled={actionLoading}
+                                            >
+                                                <Text style={styles.rejectBtnText}>Reject</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity 
+                                                style={[styles.smallBtn, styles.acceptBtn]} 
+                                                onPress={() => handleAcceptMatch(m, m.donor?.name || 'Donor')}
+                                                disabled={actionLoading}
+                                            >
+                                                <Text style={styles.acceptBtnText}>Accept</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    ) : m.status === 'accepted' ? (
+                                        <View style={styles.matchContactRow}>
+                                             <TouchableOpacity 
+                                                style={styles.contactIconBtn} 
+                                                onPress={() => Linking.openURL(`tel:${m.donor?.phone}`)}
+                                            >
+                                                <MaterialIcon name="phone" size={20} color="#B62022" />
+                                                <Text style={styles.contactIconText}>Call</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity 
+                                                style={[styles.contactIconBtn, {backgroundColor: '#E7F9ED'}]} 
+                                                onPress={() => handleWhatsApp(m.donor?.phone || '', m.donor?.name || 'Donor')}
+                                            >
+                                                <MaterialCommunityIcon name="whatsapp" size={20} color="#16A34A" />
+                                                <Text style={[styles.contactIconText, {color: '#16A34A'}]}>WhatsApp</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    ) : (
+                                        <Text style={styles.rejectedText}>You declined this offer.</Text>
+                                    )}
+                                </View>
+                            ))
+                        )}
+                    </View>
+                )}
+
+                {!isRequester && myMatch?.status === 'accepted' && (
                     <View style={styles.contactCard}>
                         <Text style={styles.sectionTitle}>Contact Requester</Text>
                         <View style={styles.contactRow}>
@@ -205,10 +342,17 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     </View>
                 )}
 
-                {!isRequester && !isMatched && request.status === 'open' && (
+                {!isRequester && myMatch?.status === 'pending' && (
+                    <View style={styles.statusBox}>
+                        <ActivityIndicator size="small" color="#B62022" style={{marginRight: 10}} />
+                        <Text style={styles.statusBoxText}>Request Sent. Waiting for approval...</Text>
+                    </View>
+                )}
+
+                {!isRequester && !myMatch && request.status === 'open' && (
                     <TouchableOpacity
                         style={styles.fulfillBtn}
-                        onPress={handleHelpNow}
+                        onPress={handleInterest}
                         disabled={actionLoading}
                     >
                         {actionLoading ? (
@@ -216,10 +360,16 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         ) : (
                             <>
                                 <MaterialIcon name="favorite" size={22} color="#fff" style={{ marginRight: 8 }} />
-                                <Text style={styles.fulfillBtnText}>Accept & Help Now</Text>
+                                <Text style={styles.fulfillBtnText}>I Want to Help</Text>
                             </>
                         )}
                     </TouchableOpacity>
+                )}
+                {isRequester && request.status === 'open' && !myMatch && (
+                     <View style={[styles.statusBox, { backgroundColor: '#F1F5F9', marginBottom: 24 }]}>
+                        <MaterialIcon name="info" size={20} color="#64748B" style={{ marginRight: 10 }} />
+                        <Text style={[styles.statusBoxText, { color: '#64748B' }]}>This is your own request.</Text>
+                    </View>
                 )}
 
                 {isMatched && request.status !== 'completed' && (
@@ -309,7 +459,33 @@ const styles = StyleSheet.create({
     fulfillBtnText: { color: 'white', fontSize: 16, fontWeight: '800' },
 
     mapBtn: { height: 56, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: 'white' },
-    mapBtnText: { color: '#1E293B', fontSize: 15, fontWeight: '700' }
+    mapBtnText: { color: '#1E293B', fontSize: 15, fontWeight: '700' },
+
+    matchesSection: { marginBottom: 24 },
+    noMatchesBox: { backgroundColor: 'white', borderRadius: 16, padding: 30, alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9', borderStyle: 'dashed' },
+    noMatchesText: { color: '#94A3B8', fontSize: 14, fontWeight: '600', marginTop: 12 },
+    
+    matchCard: { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F1F5F9' },
+    donorInfoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+    donorAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    donorName: { fontSize: 16, fontWeight: '800', color: '#1E293B' },
+    donorStatus: { fontSize: 10, color: '#64748B', fontWeight: '700', letterSpacing: 0.5, marginTop: 2 },
+    acceptedBadge: { marginLeft: 8 },
+    
+    matchActions: { flexDirection: 'row', gap: 10 },
+    smallBtn: { flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+    rejectBtn: { backgroundColor: '#F1F5F9' },
+    rejectBtnText: { color: '#64748B', fontWeight: '700', fontSize: 14 },
+    acceptBtn: { backgroundColor: '#B62022' },
+    acceptBtnText: { color: 'white', fontWeight: '800', fontSize: 14 },
+    
+    matchContactRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+    contactIconBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: '#FDECEC', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+    contactIconText: { color: '#B62022', fontWeight: '800', fontSize: 14 },
+    rejectedText: { fontSize: 13, color: '#94A3B8', fontStyle: 'italic', textAlign: 'center', paddingVertical: 8 },
+
+    statusBox: { backgroundColor: '#FEF2F2', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: '#FEE2E2' },
+    statusBoxText: { color: '#B62022', fontWeight: '700', fontSize: 14 }
 });
 
 export default RequestDetailScreen;

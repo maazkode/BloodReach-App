@@ -44,6 +44,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const [phone, setPhone] = useState('');
     const [coordinates, setCoordinates] = useState<{ latitude: number, longitude: number, geohash: string } | null>(null);
     const [lastGeocodedAddress, setLastGeocodedAddress] = useState('');
+    const [isLocationVerified, setIsLocationVerified] = useState(false);
 
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showBloodGroupPicker, setShowBloodGroupPicker] = useState(false);
@@ -59,16 +60,39 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const handleFetchLocation = async () => {
         setFetchingLocation(true);
         try {
-            const locationData = await getFullLocationData();
-            setAddress(locationData.address);
-            setCoordinates({
-                latitude: locationData.latitude,
-                longitude: locationData.longitude,
-                geohash: locationData.geohash
-            });
-            setLastGeocodedAddress(locationData.address);
+            if (address && address.length > 3 && address !== lastGeocodedAddress) {
+                // Manual Verification
+                console.log('Verifying manual address...');
+                const geoResult = await forwardGeocode(address);
+                if (geoResult) {
+                    setCoordinates({
+                        latitude: geoResult.latitude,
+                        longitude: geoResult.longitude,
+                        geohash: geohashForLocation([geoResult.latitude, geoResult.longitude])
+                    });
+                    setAddress(geoResult.address); // Use normalized address
+                    setLastGeocodedAddress(geoResult.address);
+                    setIsLocationVerified(true);
+                    Alert.alert('Verified', 'Location has been successfully identified.');
+                } else {
+                    Alert.alert('Location Error', 'Could not find coordinates for this address. Please be more specific.');
+                    setIsLocationVerified(false);
+                }
+            } else {
+                // GPS Fetch
+                const locationData = await getFullLocationData();
+                setAddress(locationData.address);
+                setCoordinates({
+                    latitude: locationData.latitude,
+                    longitude: locationData.longitude,
+                    geohash: locationData.geohash
+                });
+                setLastGeocodedAddress(locationData.address);
+                setIsLocationVerified(true);
+            }
         } catch (error: any) {
             Alert.alert('Location Error', error.message || 'Could not fetch location');
+            setIsLocationVerified(false);
         } finally {
             setFetchingLocation(false);
         }
@@ -83,28 +107,13 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
         const currentUser = getAuth().currentUser;
         if (!currentUser) return;
 
+        if (!isLocationVerified || !coordinates || address !== lastGeocodedAddress) {
+            Alert.alert('Verification Required', 'Please click "Locate" to verify your address before submitting.');
+            return;
+        }
+
         setLoading(true);
         try {
-            let finalCoords = coordinates;
-
-            // If address changed since last fetch/geocode, or no coords yet
-            if (address !== lastGeocodedAddress || !finalCoords) {
-                console.log('Manually geocoding address...');
-                const geoResult = await forwardGeocode(address);
-                if (geoResult) {
-                    finalCoords = {
-                        latitude: geoResult.latitude,
-                        longitude: geoResult.longitude,
-                        geohash: geohashForLocation([geoResult.latitude, geoResult.longitude])
-                    };
-                    // Optional: setAddress(geoResult.address); // normalize if desired
-                } else {
-                    Alert.alert('Location Error', 'Could not find coordinates for this address. Please try a more specific address or use "Fetch".');
-                    setLoading(false);
-                    return;
-                }
-            }
-
             const requestData: Omit<DonationRequest, 'id' | 'createdAt' | 'updatedAt'> = {
                 requesterId: currentUser.uid,
                 patientName,
@@ -114,7 +123,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 hospitalName: hospital,
                 hospitalAddress: hospital,
                 city: address,
-                location: finalCoords!,
+                location: coordinates!,
                 urgencyLevel: isEmergency ? 'urgent' : 'normal',
                 status: 'open',
                 matchedDonorIds: [],
@@ -277,8 +286,17 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                                     <ActivityIndicator size="small" color="#B62022" />
                                 ) : (
                                     <>
-                                        <MaterialIcon name="my-location" size={16} color="#B62022" />
-                                        <Text style={styles.locationButtonText}>Fetch</Text>
+                                        <MaterialIcon 
+                                            name={isLocationVerified && address === lastGeocodedAddress ? "check-circle" : "location-searching"} 
+                                            size={16} 
+                                            color={isLocationVerified && address === lastGeocodedAddress ? "#16A34A" : "#B62022"} 
+                                        />
+                                        <Text style={[
+                                            styles.locationButtonText,
+                                            isLocationVerified && address === lastGeocodedAddress && { color: '#16A34A' }
+                                        ]}>
+                                            {isLocationVerified && address === lastGeocodedAddress ? "Verified" : "Locate"}
+                                        </Text>
                                     </>
                                 )}
                             </TouchableOpacity>

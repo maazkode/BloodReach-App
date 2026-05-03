@@ -45,8 +45,21 @@ const RootNavigator = () => {
     const unsubscribe = subscribeToForegroundMessages();
     setupNotificationHandlers();
 
+    // Register FCM Token
+    const registerToken = async () => {
+      if (user) {
+        const { getFCMToken } = require('./src/services/notificationService');
+        const { saveUserFCMToken } = require('./src/services/firestoreService');
+        const token = await getFCMToken();
+        if (token) {
+          await saveUserFCMToken(user.uid, token);
+        }
+      }
+    };
+    registerToken();
+
     return unsubscribe;
-  }, []);
+  }, [user]);
 
   if (loading) {
     return <SplashScreen />;
@@ -76,6 +89,7 @@ const RootNavigator = () => {
         ) : (
           <>
             <Stack.Screen name="Auth" component={AuthScreen} options={{ animation: 'fade' }} />
+            <Stack.Screen name="Splash" component={SplashScreen} options={{ animation: 'fade' }} />
           </>
         )}
       </Stack.Navigator>

@@ -107,6 +107,38 @@ export const createDonationRequest = async (
 };
 
 /**
+ * Saves/Updates the FCM token for the user.
+ */
+export const saveUserFCMToken = async (uid: string, token: string): Promise<void> => {
+    try {
+        await setDoc(doc(db, 'users', uid), {
+            fcmToken: token,
+            updatedAt: serverTimestamp(),
+        }, { merge: true });
+    } catch (error) {
+        console.error('[Firestore] saveUserFCMToken error:', error);
+    }
+};
+
+/**
+ * Queues a notification for a specific user.
+ */
+const queueNotification = async (userId: string, title: string, body: string, data: any = {}) => {
+    try {
+        await addDoc(collection(db, 'notifications'), {
+            toUserId: userId,
+            title,
+            body,
+            data,
+            status: 'pending',
+            createdAt: serverTimestamp(),
+        });
+    } catch (error) {
+        console.error('[Firestore] queueNotification error:', error);
+    }
+};
+
+/**
  * Subscribes to recent open requests for the global dashboard.
  */
 export const subscribeToRequests = (
@@ -142,19 +174,44 @@ export const subscribeToNearbyRequests = (
     lat: number,
     lng: number,
     radiusKm: number,
+    bloodGroup: string | null,
     callback: (requests: DonationRequest[]) => void
 ): Unsubscribe => {
     const radiusInM = radiusKm * 1000;
     const bounds = geohashQueryBounds([lat, lng], radiusInM);
+    const resultsMap = new Map<string, DonationRequest[]>();
 
-    const unsubs = bounds.map((b) => {
-        const q = query(
+    const triggerCallback = () => {
+        const allRequests: DonationRequest[] = [];
+        resultsMap.forEach(list => allRequests.push(...list));
+        
+        // Remove duplicates (by ID) and sort by proximity or date
+        const uniqueRequests = Array.from(new Map(allRequests.map(r => [r.id, r])).values());
+        
+        // Sort by distance
+        uniqueRequests.sort((a, b) => {
+            const distA = getDistance(lat, lng, a.location.latitude, a.location.longitude);
+            const distB = getDistance(lat, lng, b.location.latitude, b.location.longitude);
+            return distA - distB;
+        });
+
+        callback(uniqueRequests);
+    };
+
+    const unsubs = bounds.map((b, index) => {
+        let q = query(
             collection(db, 'requests'),
             where('status', '==', 'open'),
             orderBy('location.geohash'),
             startAt(b[0]),
             endAt(b[1])
         );
+
+        if (bloodGroup) {
+            // Note: This requires a composite index: status + bloodGroup + location.geohash
+            // However, we can also filter client-side if the index isn't ready.
+            // Let's stick to client-side filtering for compatibility unless the user wants an index.
+        }
 
         return onSnapshot(q, (snapshot) => {
             if (!snapshot) return;
@@ -163,14 +220,19 @@ export const subscribeToNearbyRequests = (
                 ...doc.data()
             } as DonationRequest));
             
-            // Further filter by exact distance
+            // Further filter by exact distance AND blood group
             const filtered = requests.filter((r: DonationRequest) => {
                 if (!r.location?.latitude || !r.location?.longitude) return false;
+                
+                // Blood Group Match
+                if (bloodGroup && r.bloodGroup !== bloodGroup) return false;
+
                 const distance = getDistance(lat, lng, r.location.latitude, r.location.longitude);
                 return distance <= radiusKm;
             });
 
-            callback(filtered);
+            resultsMap.set(`bound_${index}`, filtered);
+            triggerCallback();
         });
     });
 
@@ -372,7 +434,38 @@ export const createDonationMatch = async (
     donorId: string,
     requesterId: string
 ): Promise<string> => {
+    if (!requestId || !donorId || !requesterId) {
+        throw new Error('Invalid match data: IDs are required.');
+    }
+
+    if (donorId === requesterId) {
+        throw new Error('You cannot donate to your own request.');
+    }
+
     try {
+        const [requestData, donorData] = await Promise.all([
+            getDonationRequest(requestId),
+            getUserDocument(donorId)
+        ]);
+
+        if (!requestData || !donorData) {
+            throw new Error('Could not verify request or donor information.');
+        }
+
+        if (requestData.bloodGroup !== donorData.bloodGroup) {
+            throw new Error(`Blood group mismatch. This patient needs ${requestData.bloodGroup}, but your blood group is ${donorData.bloodGroup}.`);
+        }
+
+        const existingQuery = query(
+            collection(db, 'donation_matches'),
+            where('requestId', '==', requestId),
+            where('donorId', '==', donorId)
+        );
+        const existingSnapshot = await getDocs(existingQuery);
+        if (!existingSnapshot.empty) {
+            return existingSnapshot.docs[0].id;
+        }
+
         const matchRef = doc(collection(db, 'donation_matches'));
         const matchData: DonationMatch = {
             requestId,
@@ -383,6 +476,15 @@ export const createDonationMatch = async (
             updatedAt: serverTimestamp(),
         };
         await setDoc(matchRef, matchData);
+
+        // Queue notification for requester
+        await queueNotification(
+            requesterId,
+            'New Donor Interested!',
+            `${donorData.name} wants to help with the request for ${requestData.patientName}.`,
+            { requestId, type: 'match_request' }
+        );
+
         return matchRef.id;
     } catch (error) {
         console.error('[Firestore] createDonationMatch error:', error);
@@ -395,13 +497,41 @@ export const createDonationMatch = async (
  */
 export const updateMatchStatus = async (
     matchId: string,
-    status: 'accepted' | 'rejected'
+    status: 'accepted' | 'rejected',
+    matchData?: DonationMatch // Passing data to avoid re-fetching
 ): Promise<void> => {
     try {
-        await setDoc(doc(db, 'donation_matches', matchId), {
+        const matchRef = doc(db, 'donation_matches', matchId);
+        await setDoc(matchRef, {
             status,
             updatedAt: serverTimestamp(),
         }, { merge: true });
+
+        if (matchData) {
+            const [request, donor, requester] = await Promise.all([
+                getDonationRequest(matchData.requestId),
+                getUserDocument(matchData.donorId),
+                getUserDocument(matchData.requesterId)
+            ]);
+
+            if (status === 'accepted') {
+                // Notify Donor
+                await queueNotification(
+                    matchData.donorId,
+                    'Match Accepted!',
+                    `${requester?.name || 'Requester'} accepted your offer. You can now call/WhatsApp them.`,
+                    { requestId: matchData.requestId, type: 'match_accepted' }
+                );
+            } else if (status === 'rejected') {
+                // Notify Donor
+                await queueNotification(
+                    matchData.donorId,
+                    'Request Declined',
+                    'Your offer to help was declined. Thank you for your willingness to save lives.',
+                    { requestId: matchData.requestId, type: 'match_rejected' }
+                );
+            }
+        }
     } catch (error) {
         console.error('[Firestore] updateMatchStatus error:', error);
         throw error;

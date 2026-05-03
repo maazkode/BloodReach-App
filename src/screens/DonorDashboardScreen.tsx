@@ -59,20 +59,23 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
         let unsubscribe: () => void = () => {};
 
         if (userData?.location?.latitude && userData?.location?.longitude) {
-            console.log('Subscribing to NEARBY requests (10KM)...');
+            console.log(`Subscribing to NEARBY requests (10KM) for ${userData.bloodGroup}...`);
             unsubscribe = subscribeToNearbyRequests(
                 userData.location.latitude,
                 userData.location.longitude,
                 10, // 10KM radius for dashboard
+                userData.bloodGroup || null,
                 (requests) => {
-                    setNearbyRequests(requests.slice(0, 10));
+                    const filtered = requests.filter(r => r.requesterId !== user?.uid);
+                    setNearbyRequests(filtered.slice(0, 10));
                     setLoadingRequests(false);
                 }
             );
         } else {
             console.log('Subscribing to GLOBAL requests (no location)...');
             unsubscribe = subscribeToRequests((requests) => {
-                setNearbyRequests(requests.slice(0, 5));
+                const filtered = requests.filter(r => r.requesterId !== user?.uid);
+                setNearbyRequests(filtered.slice(0, 5));
                 setLoadingRequests(false);
             });
         }

@@ -100,28 +100,38 @@ export const getFullLocationData = async (): Promise<LocationData> => {
 
 /**
  * Converts an address string into coordinates using Nominatim
+ * Includes fallback logic for specific addresses that OSM might not recognize
  */
 export const forwardGeocode = async (address: string): Promise<{ latitude: number, longitude: number, address: string } | null> => {
-    try {
-        const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&accept-language=en`,
-            {
-                headers: {
-                    'User-Agent': 'BloodReachApp/1.0',
-                },
+    const attempts = [
+        address, // 1st: Full address
+        address.split(' ').slice(1).join(' '), // 2nd: Remove first word (often a shop name)
+        address.split(' ').slice(2).join(' '), // 3rd: Remove first two words
+        address.split(' ').slice(-3).join(' '), // 4th: Last 3 words (usually City, District, Province)
+    ].filter(a => a.length > 5); // Only try meaningful strings
+
+    for (const query of attempts) {
+        try {
+            console.log(`[Geocoding] Attempting: ${query}`);
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&accept-language=en`,
+                {
+                    headers: {
+                        'User-Agent': 'BloodReachApp/1.0',
+                    },
+                }
+            );
+            const data: any = await response.json();
+            if (data && Array.isArray(data) && data.length > 0) {
+                return {
+                    latitude: parseFloat(data[0].lat),
+                    longitude: parseFloat(data[0].lon),
+                    address: data[0].display_name,
+                };
             }
-        );
-        const data: any = await response.json();
-        if (data && Array.isArray(data) && data.length > 0) {
-            return {
-                latitude: parseFloat(data[0].lat),
-                longitude: parseFloat(data[0].lon),
-                address: data[0].display_name,
-            };
+        } catch (error) {
+            console.error('Forward Geocoding Error:', error);
         }
-        return null;
-    } catch (error) {
-        console.error('Forward Geocoding Error:', error);
-        return null;
     }
+    return null;
 };

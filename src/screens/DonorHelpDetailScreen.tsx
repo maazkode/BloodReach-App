@@ -83,13 +83,21 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     };
 
     const handleInterest = async () => {
-        if (!currentUser || !request) return;
+        if (!currentUser || !request) {
+            console.error('[DonorHelpDetail] Missing user or request:', { currentUser: !!currentUser, request: !!request });
+            return;
+        }
+        
+        if (actionLoading) return;
+
         setActionLoading(true);
         try {
+            console.log('[DonorHelpDetail] Creating match for:', { requestId, donorId: currentUser.uid, requesterId: request.requesterId });
             await createDonationMatch(requestId, currentUser.uid, request.requesterId);
             Alert.alert('Request Sent', 'The requester has been notified. You can see their contact once they accept.');
-        } catch (error) {
-            Alert.alert('Error', 'Could not send request.');
+        } catch (error: any) {
+            console.error('[DonorHelpDetail] handleInterest error:', error);
+            Alert.alert('Error', error.message || 'Could not send request.');
         } finally {
             setActionLoading(false);
         }
@@ -173,14 +181,21 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
                 {/* Match Status Logic */}
                 {!myMatch ? (
-                    <TouchableOpacity style={styles.actionBtn} onPress={handleInterest} disabled={actionLoading}>
-                        {actionLoading ? <ActivityIndicator color="#fff" /> : (
-                            <>
-                                <MaterialIcon name="favorite" size={22} color="#fff" style={{marginRight: 8}} />
-                                <Text style={styles.actionBtnText}>I Want to Donate</Text>
-                            </>
-                        )}
-                    </TouchableOpacity>
+                    request.requesterId === currentUser?.uid ? (
+                        <View style={[styles.statusBox, { backgroundColor: '#F1F5F9' }]}>
+                            <MaterialIcon name="info" size={20} color="#64748B" style={{ marginRight: 10 }} />
+                            <Text style={[styles.statusBoxText, { color: '#64748B' }]}>This is your own request.</Text>
+                        </View>
+                    ) : (
+                        <TouchableOpacity style={styles.actionBtn} onPress={handleInterest} disabled={actionLoading}>
+                            {actionLoading ? <ActivityIndicator color="#fff" /> : (
+                                <>
+                                    <MaterialIcon name="favorite" size={22} color="#fff" style={{ marginRight: 8 }} />
+                                    <Text style={styles.actionBtnText}>I Want to Donate</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    )
                 ) : myMatch.status === 'pending' ? (
                     <View style={styles.statusBox}>
                         <ActivityIndicator size="small" color="#B62022" style={{marginRight: 10}} />
