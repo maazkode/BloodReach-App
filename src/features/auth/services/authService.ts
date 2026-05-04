@@ -1,7 +1,7 @@
 import { getAuth, GoogleAuthProvider, signInWithCredential, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from '@react-native-firebase/auth';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { Alert } from 'react-native';
-import { log, translateError } from '../utils/errorHandler';
+import { log, translateError } from '../../shared/utils/errorHandler';
 
 /**
  * Configure Google Sign-In with your Web Client ID from Firebase Console.

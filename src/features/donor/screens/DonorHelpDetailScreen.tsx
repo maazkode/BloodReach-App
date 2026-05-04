@@ -9,12 +9,12 @@ import {
     Alert,
     Linking
 } from 'react-native';
-import { safeRun, log, translateError } from '../utils/errorHandler';
+import { safeRun, log, translateError } from '../../shared/utils/errorHandler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../App';
+import { RootStackParamList } from '../../../../App';
 import { getAuth } from '@react-native-firebase/auth';
 import { 
     getDonationRequest, 
@@ -23,8 +23,8 @@ import {
     completeDonation,
     getUserDocument,
     updateMatchStatus
-} from '../services/firestoreService';
-import { DonationRequest, DonationMatch, UserDocument } from '../types/database';
+} from '../../shared/services/firestoreService';
+import { DonationRequest, DonationMatch, UserDocument } from '../../shared/types/database';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DonorHelpDetail'>;
 

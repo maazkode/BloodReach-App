@@ -14,11 +14,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
-import { signOut } from '../services/authService';
+import { signOut } from '../../auth/services/authService';
 import { getUserDocument, getDonorStats, createUserDocument } from '../services/firestoreService';
 import { UserDocument } from '../types/database';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../App';
+import { RootStackParamList } from '../../../../App';
 import LinearGradient from 'react-native-linear-gradient';
 import { safeRun, log } from '../utils/errorHandler';
 

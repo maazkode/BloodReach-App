@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../App';
+import { RootStackParamList } from '../../../../App';
 import { getAuth } from '@react-native-firebase/auth';
 import { 
     getDonationRequest, 
@@ -25,8 +25,8 @@ import {
     getUserDocument,
     createDonationMatch,
     getMatchForDonor
-} from '../services/firestoreService';
-import { DonationRequest, DonationMatch, UserDocument } from '../types/database';
+} from '../../shared/services/firestoreService';
+import { DonationRequest, DonationMatch, UserDocument } from '../../shared/types/database';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequestDetail'>;
 

@@ -11,11 +11,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../App';
+import { RootStackParamList } from '../../../../App';
 import { useAuth } from '../context/AuthContext';
 import { getUserDocument } from '../services/firestoreService';
 import { UserDocument } from '../types/database';
-import { signOut } from '../services/authService';
+import { signOut } from '../../auth/services/authService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 

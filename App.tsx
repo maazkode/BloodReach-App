@@ -3,24 +3,24 @@ import { StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-
-import { AuthProvider, useAuth } from './src/context/AuthContext';
-import SplashScreen from './src/screens/SplashScreen';
-import AuthScreen from './src/screens/AuthScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import UnifiedRegistrationScreen from './src/screens/UnifiedRegistrationScreen';
-import DonorDashboard from './src/screens/DonorDashboardScreen';
-import RequesterDashboard from './src/screens/RequesterDashboardScreen';
-import CreateRequestScreen from './src/screens/CreateRequestScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-import RequestDetailScreen from './src/screens/RequestDetailScreen';
-import DonorHelpDetailScreen from './src/screens/DonorHelpDetailScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
+import { AuthProvider, useAuth } from './src/features/shared/context/AuthContext';
+import SplashScreen from './src/features/shared/screens/SplashScreen';
+import AuthScreen from './src/features/auth/screens/AuthScreen';
+import HomeScreen from './src/features/shared/screens/HomeScreen';
+import UnifiedRegistrationScreen from './src/features/auth/screens/UnifiedRegistrationScreen';
+import DonorDashboard from './src/features/donor/screens/DonorDashboardScreen';
+import RequesterDashboard from './src/features/requester/screens/RequesterDashboardScreen';
+import CreateRequestScreen from './src/features/requester/screens/CreateRequestScreen';
+import ProfileScreen from './src/features/shared/screens/ProfileScreen';
+import RequestDetailScreen from './src/features/requester/screens/RequestDetailScreen';
+import DonorHelpDetailScreen from './src/features/donor/screens/DonorHelpDetailScreen';
+import SettingsScreen from './src/features/shared/screens/SettingsScreen';
 import {
   navigationRef,
   subscribeToForegroundMessages,
   setupNotificationHandlers
-} from './src/services/notificationService';
+} from './src/features/shared/services/notificationService';
+
 import { useEffect } from 'react';
 
 export type RootStackParamList = {
@@ -50,8 +50,8 @@ const RootNavigator = () => {
     // Register FCM Token
     const registerToken = async () => {
       if (user) {
-        const { getFCMToken } = require('./src/services/notificationService');
-        const { saveUserFCMToken } = require('./src/services/firestoreService');
+        const { getFCMToken } = require('./src/features/shared/services/notificationService');
+        const { saveUserFCMToken } = require('./src/features/shared/services/firestoreService');
         const token = await getFCMToken();
         if (token) {
           await saveUserFCMToken(user.uid, token);

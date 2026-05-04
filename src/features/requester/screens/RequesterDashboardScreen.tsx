@@ -15,14 +15,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import { Colors } from '../theme/colors';
-import { useAuth } from '../context/AuthContext';
-import { signOut } from '../services/authService';
-import { getUserDocument, getRequesterRequests, createUserDocument } from '../services/firestoreService';
-import { UserDocument, DonationRequest } from '../types/database';
-import BottomTabBar from '../components/BottomTabBar';
+import { Colors } from '../../shared/theme/colors';
+import { useAuth } from '../../shared/context/AuthContext';
+import { signOut } from '../../auth/services/authService';
+import { getUserDocument, getRequesterRequests, createUserDocument } from '../../shared/services/firestoreService';
+import { UserDocument, DonationRequest } from '../../shared/types/database';
+import BottomTabBar from '../../shared/components/BottomTabBar';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../App';
+import { RootStackParamList } from '../../../../App';
 
 const { width } = Dimensions.get('window');
 
@@ -249,7 +249,7 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
                 <View style={styles.headerBrand}>
                     <Image
-                        source={require('../assets/logo.png')}
+                        source={require('../../../assets/logo.png')}
                         style={styles.headerLogo}
                         resizeMode="contain"
                     />

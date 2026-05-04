@@ -16,15 +16,15 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import { Colors } from '../theme/colors';
+import { Colors } from '../../shared/theme/colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../App';
+import { RootStackParamList } from '../../../../App';
 import { getAuth } from '@react-native-firebase/auth';
-import { createUserDocument } from '../services/firestoreService';
-import { UserDocument } from '../types/database';
+import { createUserDocument } from '../../shared/services/firestoreService';
+import { UserDocument } from '../../shared/types/database';
 import { Timestamp, serverTimestamp } from '@react-native-firebase/firestore';
-import { getFullLocationData, forwardGeocode, LocationData } from '../services/locationService';
-import { getFCMToken } from '../services/notificationService';
+import { getFullLocationData, forwardGeocode, LocationData } from '../../shared/services/locationService';
+import { getFCMToken } from '../../shared/services/notificationService';
 import { geohashForLocation } from 'geofire-common';
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
