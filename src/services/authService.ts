@@ -1,12 +1,13 @@
 import { getAuth, GoogleAuthProvider, signInWithCredential, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from '@react-native-firebase/auth';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { Alert } from 'react-native';
+import { log, translateError } from '../utils/errorHandler';
 
 /**
  * Configure Google Sign-In with your Web Client ID from Firebase Console.
  */
 GoogleSignin.configure({
-    webClientId: '77440415256-99qs4h1gk8ec50brk7vb427a4br49pm9.apps.googleusercontent.com', // Replace with actual Web Client ID
+    webClientId: '77440415256-99qs4h1gk8ec50brk7vb427a4br49pm9.apps.googleusercontent.com',
 });
 
 /**
@@ -16,41 +17,35 @@ GoogleSignin.configure({
 export const signInWithGoogle = async () => {
     try {
         const auth = getAuth();
-        // Check if device has Google Play Services
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
-        // Step 1: Trigger Google Sign-In picker
         const signInResult = await GoogleSignin.signIn();
-
         const idToken = signInResult.data?.idToken;
 
         if (!idToken) {
             throw new Error('Google Sign-In failed: No ID Token found.');
         }
 
-        // Step 2: Create a Google credential with the token
         const googleCredential = GoogleAuthProvider.credential(idToken);
-
-        // Step 3: Authenticate with Firebase using the credential
         const userCredential = await signInWithCredential(auth, googleCredential);
         const firebaseUser = userCredential.user;
 
         if (firebaseUser) {
-            console.log('Google Sign-In successful for:', firebaseUser.email);
+            log('info', 'Auth > signInWithGoogle', 'Google Sign-In successful', { email: firebaseUser.email });
             return firebaseUser;
         }
 
         return null;
     } catch (error: any) {
         if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-            console.log('User cancelled the Google Sign-In flow');
+            log('info', 'Auth > signInWithGoogle', 'User cancelled sign-in');
         } else if (error.code === statusCodes.IN_PROGRESS) {
-            console.log('Google Sign-In is already in progress');
+            log('warn', 'Auth > signInWithGoogle', 'Sign-in already in progress');
         } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-            console.error('Play Services not available or outdated');
+            log('error', 'Auth > signInWithGoogle', 'Play Services unavailable');
             Alert.alert('Error', 'Google Play Services is not available. Please install it to sign in.');
         } else {
-            console.error('Google Sign-In Error:', error);
+            log('error', 'Auth > signInWithGoogle', 'Unexpected error', { code: error?.code });
             throw error;
         }
         return null;
@@ -64,10 +59,11 @@ export const signUpWithEmail = async (email: string, pass: string) => {
     try {
         const auth = getAuth();
         const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+        log('info', 'Auth > signUpWithEmail', 'Account created', { email });
         return userCredential.user;
     } catch (error: any) {
-        console.error('Sign Up Error:', error);
-        throw error;
+        log('error', 'Auth > signUpWithEmail', 'Sign-up failed', { code: error?.code });
+        throw new Error(translateError(error));
     }
 };
 
@@ -78,10 +74,11 @@ export const signInWithEmail = async (email: string, pass: string) => {
     try {
         const auth = getAuth();
         const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+        log('info', 'Auth > signInWithEmail', 'Signed in', { email });
         return userCredential.user;
     } catch (error: any) {
-        console.error('Sign In Error:', error);
-        throw error;
+        log('error', 'Auth > signInWithEmail', 'Sign-in failed', { code: error?.code });
+        throw new Error(translateError(error));
     }
 };
 
@@ -93,9 +90,9 @@ export const signOut = async () => {
         const auth = getAuth();
         await GoogleSignin.signOut();
         await firebaseSignOut(auth);
-        console.log('Signed out successfully');
-    } catch (error) {
-        console.error('Sign-Out Error:', error);
+        log('info', 'Auth > signOut', 'Signed out successfully');
+    } catch (error: any) {
+        log('error', 'Auth > signOut', 'Sign-out failed', { code: error?.code });
         throw error;
     }
 };

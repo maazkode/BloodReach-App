@@ -9,6 +9,7 @@ import {
     Alert,
     Linking
 } from 'react-native';
+import { safeRun, log, translateError } from '../utils/errorHandler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -40,25 +41,25 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     useEffect(() => {
         const fetchDetails = async () => {
             try {
+                log('info', 'DonorHelpDetail > fetchDetails', 'Loading request', { requestId });
                 const reqData = await getDonationRequest(requestId);
                 if (reqData) {
                     setRequest(reqData);
-                    
-                    // Fetch requester details
                     const userData = await getUserDocument(reqData.requesterId);
                     setRequester(userData);
-
-                    // Listen for match status
                     const unsub = getMatchForDonor(requestId, currentUser?.uid || '', (match) => {
                         setMyMatch(match);
                     });
                     return () => unsub();
                 } else {
-                    Alert.alert('Error', 'Request not found.');
+                    Alert.alert('Request Not Found', 'This blood request no longer exists or has been removed.');
                     navigation.goBack();
                 }
-            } catch (error) {
-                console.error('Fetch error:', error);
+            } catch (error: any) {
+                log('error', 'DonorHelpDetail > fetchDetails', 'Failed to load request', { code: error?.code });
+                Alert.alert('Failed to Load', translateError(error), [
+                    { text: 'Go Back', onPress: () => navigation.goBack() },
+                ]);
             } finally {
                 setLoading(false);
             }
@@ -80,49 +81,61 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     const handleWhatsApp = (phone: string, name: string) => {
         const message = `Hi, I am reaching out regarding your urgent blood request for ${request.patientName} (${request.bloodGroup}) on BloodReach. I'm interested in helping.`;
         const url = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(message)}`;
-        Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open WhatsApp.'));
+        Linking.openURL(url).catch(() =>
+            Alert.alert('Cannot Open WhatsApp', 'WhatsApp is not installed on this device.')
+        );
     };
 
     const handleInterest = async () => {
         if (!currentUser || !request) {
-            console.error('[DonorHelpDetail] Missing user or request:', { currentUser: !!currentUser, request: !!request });
+            log('warn', 'DonorHelpDetail > handleInterest', 'Missing user or request data');
             return;
         }
-        
-        if (actionLoading) return;
 
         setActionLoading(true);
-        try {
-            console.log('[DonorHelpDetail] Creating match for:', { requestId, donorId: currentUser.uid, requesterId: request.requesterId });
-            await createDonationMatch(requestId, currentUser.uid, request.requesterId);
-            Alert.alert('Request Sent', 'The requester has been notified. You can see their contact once they accept.');
-        } catch (error: any) {
-            console.error('[DonorHelpDetail] handleInterest error:', error);
-            Alert.alert('Error', error.message || 'Could not send request.');
-        } finally {
-            setActionLoading(false);
-        }
+        await safeRun(
+            () => createDonationMatch(requestId, currentUser.uid, request.requesterId),
+            {
+                context: 'DonorHelpDetail > handleInterest',
+                errorTitle: 'Could Not Send Request',
+                allowRetry: true,
+                guard: () => !actionLoading,
+                onSuccess: () =>
+                    Alert.alert(
+                        'Request Sent ✓',
+                        'The requester has been notified. You will see their contact details once they accept.'
+                    ),
+            }
+        );
+        setActionLoading(false);
     };
 
     const handleComplete = async () => {
         if (!currentUser) return;
         Alert.alert(
             'Confirm Donation',
-            'Have you successfully donated blood?',
+            'Have you successfully donated blood? This will start your 90-day recovery period.',
             [
-                { text: 'No', style: 'cancel' },
-                { 
-                    text: 'Yes', 
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Yes, I Donated',
                     onPress: async () => {
                         setActionLoading(true);
-                        try {
-                            await completeDonation(requestId, currentUser.uid);
-                            Alert.alert('Thank You', 'You saved a life!');
-                            navigation.replace('DonorDashboard');
-                        } catch (e) { Alert.alert('Error', 'Update failed'); }
-                        finally { setActionLoading(false); }
-                    }
-                }
+                        await safeRun(
+                            () => completeDonation(requestId, currentUser.uid),
+                            {
+                                context: 'DonorHelpDetail > handleComplete',
+                                errorTitle: 'Could Not Mark Donation',
+                                allowRetry: true,
+                                onSuccess: () => {
+                                    Alert.alert('Thank You! 🩸', 'You saved a life! You are now in your 90-day recovery window.');
+                                    navigation.replace('DonorDashboard');
+                                },
+                            }
+                        );
+                        setActionLoading(false);
+                    },
+                },
             ]
         );
     };

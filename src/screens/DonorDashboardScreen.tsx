@@ -12,6 +12,7 @@ import {
     Animated,
     Pressable,
     ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
@@ -68,7 +69,8 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
 
         let unsubscribe: () => void = () => {};
 
-        if (userData?.location?.latitude && userData?.location?.longitude && userData?.isAvailable) {
+        // Only subscribe to nearby filtered requests if the user is AVAILABLE and ELIGIBLE
+        if (userData?.location?.latitude && userData?.location?.longitude && userData?.isAvailable && userData?.isEligibleToDonate) {
             console.log(`Subscribing to NEARBY requests (10KM) for ${userData.bloodGroup}...`);
             unsubscribe = subscribeToNearbyRequests(
                 userData.location.latitude,
@@ -137,6 +139,12 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
     const getUrgencyBg = (level: string) => level === 'urgent' ? '#FEE2E2' : '#FEF3C7';
     const getUrgencyLabel = (level: string) => level === 'urgent' ? 'EMERGENCY' : 'NEEDED';
 
+    const formatCooldownDate = (timestamp: any) => {
+        if (!timestamp) return 'Available Now';
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    };
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -161,7 +169,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                         <View style={[styles.eligiblePill, userData?.isEligibleToDonate === false && styles.cooldownPill]}>
                             <View style={[styles.greenDot, userData?.isEligibleToDonate === false && styles.redDot]} />
                             <Text style={[styles.eligiblePillText, userData?.isEligibleToDonate === false && styles.cooldownPillText]}>
-                                {userData?.isEligibleToDonate === false ? 'COOLDOWN PERIOD' : 'ELIGIBLE NOW'}
+                                {userData?.isEligibleToDonate === false ? 'NOT MEDICALLY FIT' : (userData?.isAvailable ? 'ACTIVE & ELIGIBLE' : 'OFFLINE')}
                             </Text>
                         </View>
                         <View style={styles.bloodGroupCircle}>
@@ -169,7 +177,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                         </View>
                     </View>
                     <Text style={styles.heroTitle}>
-                        {userData?.isEligibleToDonate === false ? 'Time to recover' : 'You\'re ready\nto save lives'}
+                        {userData?.isEligibleToDonate === false ? 'Recovery Mode' : 'You\'re ready\nto save lives'}
                     </Text>
                     <Text style={styles.heroSub}>
                         {userData?.isEligibleToDonate === false
@@ -280,10 +288,21 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                                     </View>
                                 </View>
 
-                                <View style={styles.helpBtn}>
-                                    <Text style={styles.helpBtnText}>Help Now</Text>
-                                    <MaterialIcon name="chevron-right" size={16} color="#B62022" />
-                                </View>
+                                <TouchableOpacity 
+                                    style={[styles.helpBtn, !userData?.isEligibleToDonate && styles.helpBtnDisabled]}
+                                    onPress={() => {
+                                        if (userData?.isEligibleToDonate) {
+                                            navigation.navigate('DonorHelpDetail', { requestId: item.id! });
+                                        } else {
+                                            Alert.alert("Cooldown Active", "You recently donated blood. You will be eligible to help again on " + formatCooldownDate(userData?.donationCooldownUntil));
+                                        }
+                                    }}
+                                >
+                                    <Text style={[styles.helpBtnText, !userData?.isEligibleToDonate && styles.helpBtnTextDisabled]}>
+                                        {userData?.isEligibleToDonate ? 'Help Now' : 'In Cooldown'}
+                                    </Text>
+                                    <MaterialIcon name="chevron-right" size={16} color={userData?.isEligibleToDonate ? "#B62022" : "#94A3B8"} />
+                                </TouchableOpacity>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
@@ -301,8 +320,14 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                     </View>
                     <View style={{ flex: 1 }}>
                         <Text style={styles.nextLabel}>NEXT ELIGIBILITY WINDOW</Text>
-                        <Text style={styles.nextDate}>March 25, 2026</Text>
-                        <Text style={styles.nextSub}>Your planned donation cycle ends then.</Text>
+                        <Text style={[styles.nextDate, userData?.isEligibleToDonate === false && styles.nextDateCooldown]}>
+                            {userData?.isEligibleToDonate ? 'You are eligible now' : formatCooldownDate(userData?.donationCooldownUntil)}
+                        </Text>
+                        <Text style={styles.nextSub}>
+                            {userData?.isEligibleToDonate 
+                                ? 'Your health status allows you to save lives today.' 
+                                : 'You are currently in a medical recovery period.'}
+                        </Text>
                     </View>
                 </View>
             </ScrollView>
@@ -350,7 +375,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     heroCardCooldown: {
-        backgroundColor: '#64748B',
+        backgroundColor: '#64748B', // Slate Grey for unfitness
     },
     heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
     eligiblePill: {
@@ -365,7 +390,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.1)',
     },
     greenDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E', marginRight: 8 },
-    redDot: { backgroundColor: '#F87171' },
+    redDot: { backgroundColor: '#FBBF24' }, // Amber for Recovery Mode
     eligiblePillText: { color: 'white', fontSize: 11, fontWeight: '800' },
     cooldownPillText: { color: '#E2E8F0' },
     bloodGroupCircle: {
@@ -483,7 +508,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    helpBtnDisabled: {
+        backgroundColor: '#F1F5F9',
+    },
     helpBtnText: { color: '#B62022', fontSize: 14, fontWeight: '800' },
+    helpBtnTextDisabled: { color: '#94A3B8' },
 
     activeMatchCard: {
         borderColor: '#B62022',
@@ -550,6 +579,7 @@ const styles = StyleSheet.create({
     },
     nextLabel: { fontSize: 10, fontWeight: '800', color: '#94A3B8', marginBottom: 4 },
     nextDate: { fontSize: 16, fontWeight: '900', color: '#B62022', marginBottom: 2 },
+    nextDateCooldown: { color: '#D97706' }, // Amber for cooldown date
     nextSub: { fontSize: 12, color: '#64748B', fontWeight: '500' },
 
     // ─── Bottom Nav ───

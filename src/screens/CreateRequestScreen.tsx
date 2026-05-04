@@ -13,6 +13,7 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import { safeRun, log } from '../utils/errorHandler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -58,87 +59,101 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
 
 
     const handleFetchLocation = async () => {
+        if (fetchingLocation) return; // prevent double-tap
         setFetchingLocation(true);
-        try {
-            if (address && address.length > 3 && address !== lastGeocodedAddress) {
-                // Manual Verification
-                console.log('Verifying manual address...');
-                const geoResult = await forwardGeocode(address);
-                if (geoResult) {
-                    setCoordinates({
-                        latitude: geoResult.latitude,
-                        longitude: geoResult.longitude,
-                        geohash: geohashForLocation([geoResult.latitude, geoResult.longitude])
-                    });
-                    setAddress(geoResult.address); // Use normalized address
-                    setLastGeocodedAddress(geoResult.address);
-                    setIsLocationVerified(true);
-                    Alert.alert('Verified', 'Location has been successfully identified.');
+        await safeRun(
+            async () => {
+                if (address && address.length > 3 && address !== lastGeocodedAddress) {
+                    log('info', 'CreateRequest > handleFetchLocation', 'Verifying manual address', { address });
+                    const geoResult = await forwardGeocode(address);
+                    if (geoResult) {
+                        setCoordinates({
+                            latitude: geoResult.latitude,
+                            longitude: geoResult.longitude,
+                            geohash: geohashForLocation([geoResult.latitude, geoResult.longitude]),
+                        });
+                        setAddress(geoResult.address);
+                        setLastGeocodedAddress(geoResult.address);
+                        setIsLocationVerified(true);
+                        Alert.alert('Location Verified ✓', 'Your hospital location has been confirmed.');
+                    } else {
+                        setIsLocationVerified(false);
+                        Alert.alert('Location Not Found', 'Could not find coordinates for this address. Please try a more specific address or use GPS.');
+                    }
                 } else {
-                    Alert.alert('Location Error', 'Could not find coordinates for this address. Please be more specific.');
-                    setIsLocationVerified(false);
+                    log('info', 'CreateRequest > handleFetchLocation', 'Fetching GPS location');
+                    const locationData = await getFullLocationData();
+                    setAddress(locationData.address);
+                    setCoordinates({
+                        latitude: locationData.latitude,
+                        longitude: locationData.longitude,
+                        geohash: locationData.geohash,
+                    });
+                    setLastGeocodedAddress(locationData.address);
+                    setIsLocationVerified(true);
                 }
-            } else {
-                // GPS Fetch
-                const locationData = await getFullLocationData();
-                setAddress(locationData.address);
-                setCoordinates({
-                    latitude: locationData.latitude,
-                    longitude: locationData.longitude,
-                    geohash: locationData.geohash
-                });
-                setLastGeocodedAddress(locationData.address);
-                setIsLocationVerified(true);
+            },
+            {
+                context: 'CreateRequest > handleFetchLocation',
+                errorTitle: 'Location Error',
+                allowRetry: true,
+                onError: () => setIsLocationVerified(false),
             }
-        } catch (error: any) {
-            Alert.alert('Location Error', error.message || 'Could not fetch location');
-            setIsLocationVerified(false);
-        } finally {
-            setFetchingLocation(false);
-        }
+        );
+        setFetchingLocation(false);
     };
 
     const handleSubmit = async () => {
-        if (!patientName || !phone || !bloodGroup || !hospital || !address) {
-            Alert.alert('Missing Info', 'Please fill all required fields');
+        // Validation
+        if (!patientName.trim() || !phone.trim() || !bloodGroup || !hospital.trim() || !address.trim()) {
+            Alert.alert('Missing Information', 'Please fill in all required fields before submitting.');
             return;
         }
 
         const currentUser = getAuth().currentUser;
-        if (!currentUser) return;
-
-        if (!isLocationVerified || !coordinates || address !== lastGeocodedAddress) {
-            Alert.alert('Verification Required', 'Please click "Locate" to verify your address before submitting.');
+        if (!currentUser) {
+            Alert.alert('Session Expired', 'Please sign in again to continue.');
             return;
         }
 
-        setLoading(true);
-        try {
-            const requestData: Omit<DonationRequest, 'id' | 'createdAt' | 'updatedAt'> = {
-                requesterId: currentUser.uid,
-                patientName,
-                phone,
-                bloodGroup,
-                unitsRequired: parseInt(units) || 1,
-                hospitalName: hospital,
-                hospitalAddress: hospital,
-                city: address,
-                location: coordinates!,
-                urgencyLevel: isEmergency ? 'urgent' : 'normal',
-                status: 'open',
-                matchedDonorIds: [],
-            };
-
-            await createDonationRequest(requestData);
-
-            Alert.alert('Success', 'Request submitted successfully', [
-                { text: 'OK', onPress: () => navigation.goBack() },
-            ]);
-        } catch (error) {
-            Alert.alert('Error', 'Could not submit request');
-        } finally {
-            setLoading(false);
+        if (!isLocationVerified || !coordinates || address !== lastGeocodedAddress) {
+            Alert.alert('Location Not Verified', 'Please click "Locate" to verify your hospital address before submitting.');
+            return;
         }
+
+        if (loading) return; // prevent double-submit
+
+        setLoading(true);
+        await safeRun(
+            async () => {
+                const requestData: Omit<DonationRequest, 'id' | 'createdAt' | 'updatedAt'> = {
+                    requesterId: currentUser.uid,
+                    patientName: patientName.trim(),
+                    phone: phone.trim(),
+                    bloodGroup,
+                    unitsRequired: parseInt(units) || 1,
+                    hospitalName: hospital.trim(),
+                    hospitalAddress: hospital.trim(),
+                    city: address,
+                    location: coordinates!,
+                    urgencyLevel: isEmergency ? 'urgent' : 'normal',
+                    status: 'open',
+                    matchedDonorIds: [],
+                };
+                log('info', 'CreateRequest > handleSubmit', 'Submitting blood request', { bloodGroup, urgency: requestData.urgencyLevel });
+                await createDonationRequest(requestData);
+            },
+            {
+                context: 'CreateRequest > handleSubmit',
+                errorTitle: 'Submission Failed',
+                allowRetry: true,
+                onSuccess: () =>
+                    Alert.alert('Request Submitted ✓', 'Your blood request is now live. Nearby donors will be notified.', [
+                        { text: 'OK', onPress: () => navigation.goBack() },
+                    ]),
+            }
+        );
+        setLoading(false);
     };
 
     return (

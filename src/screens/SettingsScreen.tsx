@@ -20,6 +20,7 @@ import { UserDocument } from '../types/database';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import LinearGradient from 'react-native-linear-gradient';
+import { safeRun, log } from '../utils/errorHandler';
 
 const { width } = Dimensions.get('window');
 
@@ -30,6 +31,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     const { user } = useAuth();
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
     const [donorStats, setDonorStats] = React.useState({ count: 0, livesSaved: 0, rank: 'Bronze' });
+    const [actionLoading, setActionLoading] = React.useState(false);
 
     React.useEffect(() => {
         if (user) {
@@ -39,28 +41,52 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         }
     }, [user]);
 
-    const handleLogout = async () => {
+    const handleLogout = () => {
+        if (actionLoading) return;
         Alert.alert(
-            "Logout",
-            "Are you sure you want to exit?",
+            'Logout',
+            'Are you sure you want to sign out?',
             [
-                { text: "Cancel", style: "cancel" },
-                { text: "Logout", style: "destructive", onPress: async () => await signOut() }
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Logout',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setActionLoading(true);
+                        await safeRun(
+                            () => signOut(),
+                            {
+                                context: 'Settings > handleLogout',
+                                errorTitle: 'Logout Failed',
+                                allowRetry: false,
+                            }
+                        );
+                        setActionLoading(false);
+                    },
+                },
             ]
         );
     };
 
     const handleSwitchRole = async () => {
-        if (!user || !userData) return;
+        if (!user || !userData || actionLoading) return;
         const newRole = userData.lastActiveRole === 'donor' ? 'requester' : 'donor';
         const targetScreen = newRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard';
-        
-        try {
-            await createUserDocument({ uid: user.uid, lastActiveRole: newRole });
-            navigation.replace(targetScreen);
-        } catch (error) {
-            console.error('Role switch error:', error);
-        }
+
+        setActionLoading(true);
+        await safeRun(
+            () => createUserDocument({ uid: user.uid, lastActiveRole: newRole }),
+            {
+                context: 'Settings > handleSwitchRole',
+                errorTitle: 'Role Switch Failed',
+                allowRetry: true,
+                onSuccess: () => {
+                    log('info', 'Settings > handleSwitchRole', `Switched to ${newRole}`);
+                    navigation.replace(targetScreen);
+                },
+            }
+        );
+        setActionLoading(false);
     };
 
     const MenuOption = ({ icon, title, color = "#1E293B", onPress, isLast = false, rightText }: any) => (

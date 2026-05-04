@@ -129,6 +129,27 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
             const roles = isAvailable ? ['donor', 'requester'] : ['requester'];
             const lastActiveRole = isAvailable ? 'donor' : 'requester';
 
+            // 90-day eligibility check
+            let isEligible = true;
+            let cooldownUntil: Timestamp | null = null;
+            if (lastDonationDate) {
+                const now = new Date();
+                const cooldownDate = new Date(lastDonationDate);
+                cooldownDate.setDate(cooldownDate.getDate() + 90);
+                
+                console.log('[Registration] Last Donation:', lastDonationDate.toDateString());
+                console.log('[Registration] Cooldown Until:', cooldownDate.toDateString());
+                console.log('[Registration] Today:', now.toDateString());
+
+                if (now < cooldownDate) {
+                    isEligible = false;
+                    cooldownUntil = Timestamp.fromDate(cooldownDate);
+                    console.log('[Registration] Donor is INELIGIBLE');
+                } else {
+                    console.log('[Registration] Donor is ELIGIBLE');
+                }
+            }
+
             const userData: UserDocument = {
                 uid: currentUser.uid,
                 name,
@@ -138,9 +159,9 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 address: address,
                 age: age ? Number(age) : undefined,
                 gender: gender || undefined,
-                isAvailable: isAvailable,
-                isEligibleToDonate: true,
-                donationCooldownUntil: null,
+                isAvailable: isEligible ? isAvailable : false, // Force false if ineligible
+                isEligibleToDonate: isEligible,
+                donationCooldownUntil: cooldownUntil,
                 roles: roles,
                 lastActiveRole: lastActiveRole as 'donor' | 'requester',
                 lastDonationDate: lastDonationDate ? Timestamp.fromDate(lastDonationDate) : null,
