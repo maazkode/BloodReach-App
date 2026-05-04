@@ -575,6 +575,8 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         padding: 20,
         marginBottom: 20,
+        height: 200, // Fixed height for total consistency
+        justifyContent: 'center', // Keep content balanced
     },
     heroCardCooldown: {
         backgroundColor: '#64748B',

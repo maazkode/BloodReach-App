@@ -90,8 +90,8 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     };
 
     const MenuOption = ({ icon, title, color = "#1E293B", onPress, isLast = false, rightText }: any) => (
-        <TouchableOpacity 
-            style={[styles.menuItem, isLast && { borderBottomWidth: 0 }]} 
+        <TouchableOpacity
+            style={[styles.menuItem, isLast && { borderBottomWidth: 0 }]}
             onPress={onPress}
             activeOpacity={0.7}
         >
@@ -107,7 +107,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-            
+
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
                 {/* ── Immersive Header ── */}
                 <View style={styles.topProfileContainer}>
@@ -115,7 +115,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                         colors={['#B62022', '#801618']}
                         style={[styles.gradientHeader, { height: 280 + insets.top }]}
                     />
-                    
+
                     <View style={[styles.headerContent, { paddingTop: insets.top + 20 }]}>
                         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn}>
                             <MaterialIcon name="arrow-back" size={24} color="white" />
@@ -136,7 +136,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                         </View>
                         <Text style={styles.userNameText}>{userData?.name || 'User Name'}</Text>
                         <Text style={styles.userEmailText}>{user?.email}</Text>
-                        
+
                         <View style={styles.bloodTypeFloatingBadge}>
                             <MaterialCommunityIcon name="water" size={16} color="white" />
                             <Text style={styles.floatingBadgeText}>{userData?.bloodGroup || '--'}</Text>
@@ -168,54 +168,54 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={styles.menuContainer}>
                     <Text style={styles.menuHeaderLabel}>ACCOUNT</Text>
                     <View style={styles.menuSectionCard}>
-                        <MenuOption 
-                            icon="account-edit-outline" 
-                            title="Personal Information" 
-                            onPress={() => {}} 
-                            color="#3B82F6" 
+                        <MenuOption
+                            icon="account-edit-outline"
+                            title="Personal Information"
+                            onPress={() => { }}
+                            color="#3B82F6"
                         />
-                        <MenuOption 
-                            icon="swap-horizontal" 
-                            title={`Switch to ${userData?.lastActiveRole === 'donor' ? 'Requester' : 'Donor'}`} 
-                            onPress={handleSwitchRole} 
+                        <MenuOption
+                            icon="swap-horizontal"
+                            title={`Switch to ${userData?.lastActiveRole === 'donor' ? 'Requester' : 'Donor'}`}
+                            onPress={handleSwitchRole}
                             color="#8B5CF6"
                             rightText="Active"
                         />
-                        <MenuOption 
-                            icon="history" 
-                            title="Donation History" 
-                            onPress={() => {}} 
-                            color="#10B981" 
+                        <MenuOption
+                            icon="history"
+                            title="Donation History"
+                            onPress={() => { }}
+                            color="#10B981"
                             isLast
                         />
                     </View>
 
                     <Text style={styles.menuHeaderLabel}>PREFERENCES</Text>
                     <View style={styles.menuSectionCard}>
-                        <MenuOption 
-                            icon="bell-outline" 
-                            title="Notifications" 
-                            onPress={() => {}} 
-                            color="#F59E0B" 
+                        <MenuOption
+                            icon="bell-outline"
+                            title="Notifications"
+                            onPress={() => { }}
+                            color="#F59E0B"
                         />
-                        <MenuOption 
-                            icon="shield-check-outline" 
-                            title="Privacy & Security" 
-                            onPress={() => {}} 
-                            color="#64748B" 
+                        <MenuOption
+                            icon="shield-check-outline"
+                            title="Privacy & Security"
+                            onPress={() => { }}
+                            color="#64748B"
                             isLast
                         />
                     </View>
 
                     <Text style={styles.menuHeaderLabel}>SUPPORT</Text>
                     <View style={styles.menuSectionCard}>
-                        <MenuOption icon="help-circle-outline" title="Help & Feedback" onPress={() => {}} />
-                        <MenuOption icon="information-outline" title="About BloodReach" onPress={() => {}} isLast />
+                        <MenuOption icon="help-circle-outline" title="Help & Feedback" onPress={() => { }} />
+                        <MenuOption icon="information-outline" title="About BloodReach" onPress={() => { }} isLast />
                     </View>
 
                     <TouchableOpacity style={styles.logoutButtonModern} onPress={handleLogout}>
                         <MaterialCommunityIcon name="logout-variant" size={22} color="#EF4444" />
-                        <Text style={styles.logoutButtonText}>Sign Out</Text>
+                        <Text style={styles.logoutButtonText}> Log Out</Text>
                     </TouchableOpacity>
 
                     <Text style={styles.footerVersion}>BloodReach v1.0.0 • Build 24</Text>
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     headerTitleText: { fontSize: 18, fontWeight: '800', color: 'white' },
-    
+
     profileMainBox: {
         alignItems: 'center',
         marginTop: 30,
@@ -267,15 +267,15 @@ const styles = StyleSheet.create({
         elevation: 10,
     },
     mainAvatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: 'white' },
-    avatarPlaceholder: { 
-        width: 100, height: 100, borderRadius: 50, 
-        backgroundColor: '#B62022', 
+    avatarPlaceholder: {
+        width: 100, height: 100, borderRadius: 50,
+        backgroundColor: '#B62022',
         justifyContent: 'center', alignItems: 'center',
         borderWidth: 3, borderColor: 'white'
     },
     userNameText: { fontSize: 24, fontWeight: '900', color: 'white', marginTop: 15 },
     userEmailText: { fontSize: 14, color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 4 },
-    
+
     bloodTypeFloatingBadge: {
         position: 'absolute',
         bottom: 50,
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     },
     menuTitle: { flex: 1, marginLeft: 15, fontSize: 15, fontWeight: '700' },
     rightText: { fontSize: 12, fontWeight: '800', color: '#B62022', marginRight: 10, backgroundColor: '#FEF2F2', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-    
+
     logoutButtonModern: {
         flexDirection: 'row',
         alignItems: 'center',

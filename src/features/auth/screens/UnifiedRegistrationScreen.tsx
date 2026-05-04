@@ -26,6 +26,7 @@ import { Timestamp, serverTimestamp } from '@react-native-firebase/firestore';
 import { getFullLocationData, forwardGeocode, LocationData } from '../../shared/services/locationService';
 import { getFCMToken } from '../../shared/services/notificationService';
 import { geohashForLocation } from 'geofire-common';
+import { signOut } from '../services/authService';
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["Male", "Female", "Other"];
@@ -195,7 +196,17 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                <TouchableOpacity 
+                    onPress={async () => {
+                        try {
+                            await signOut();
+                            // App.tsx RootNavigator will automatically redirect to Auth when user becomes null
+                        } catch (error) {
+                            navigation.replace('Auth');
+                        }
+                    }} 
+                    style={styles.backButton}
+                >
                     <MaterialIcon name="arrow-back" size={24} color={Colors.primary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Profile Setup</Text>

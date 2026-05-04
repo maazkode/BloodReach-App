@@ -61,16 +61,21 @@ export const createUserDocument = async (
     try {
         const ref = doc(db, 'users', userData.uid);
         const snap = await getDoc(ref);
+        const existingData = snap.data() as UserDocument | undefined;
 
         const dataToSave: Partial<UserDocument> = {
             ...userData,
-            isAvailable: userData.isAvailable ?? false,
-            roles: userData.roles || ['requester'],
-            lastActiveRole: userData.lastActiveRole || 'requester',
-            isVerified: userData.isVerified || false,
-            isEligibleToDonate: userData.isEligibleToDonate ?? true,
-            donationCooldownUntil: userData.donationCooldownUntil || null,
-            lastDonationDate: userData.lastDonationDate || null,
+            isAvailable: userData.isAvailable ?? (existingData?.isAvailable ?? false),
+            roles: userData.roles || (existingData?.roles || ['requester']),
+            lastActiveRole: userData.lastActiveRole || (existingData?.lastActiveRole || 'requester'),
+            isVerified: userData.isVerified ?? (existingData?.isVerified ?? false),
+            isEligibleToDonate: userData.isEligibleToDonate ?? (existingData?.isEligibleToDonate ?? true),
+            donationCooldownUntil: userData.donationCooldownUntil !== undefined 
+                ? userData.donationCooldownUntil 
+                : (existingData?.donationCooldownUntil ?? null),
+            lastDonationDate: userData.lastDonationDate !== undefined 
+                ? userData.lastDonationDate 
+                : (existingData?.lastDonationDate ?? null),
             updatedAt: serverTimestamp(),
         };
 
