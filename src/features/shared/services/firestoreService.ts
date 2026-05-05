@@ -140,6 +140,25 @@ export const saveUserFCMToken = async (uid: string, token: string): Promise<void
 };
 
 /**
+ * Dynamically updates the user's location in Firestore.
+ */
+export const updateUserLocation = async (
+    uid: string,
+    locationData: { latitude: number; longitude: number; geohash: string; address?: string }
+): Promise<void> => {
+    try {
+        await setDoc(doc(db, 'users', uid), {
+            location: locationData,
+            locationUpdatedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        }, { merge: true });
+    } catch (error) {
+        console.error('[Firestore] updateUserLocation error:', error);
+        throw error;
+    }
+};
+
+/**
  * Queues a notification for a specific user.
  */
 const queueNotification = async (userId: string, title: string, body: string, data: any = {}) => {
@@ -348,10 +367,14 @@ export const subscribeToMatchingRequests = (
                             );
 
                             if (distance <= radiusKm) {
-                                callback({
-                                    id: change.doc.id,
-                                    ...data,
-                                });
+                                // Only trigger callback for NEW requests created AFTER the listener started
+                                const createdTime = (data.createdAt as any)?.toMillis ? (data.createdAt as any).toMillis() : 0;
+                                if (createdTime > listenerStartTime) {
+                                    callback({
+                                        id: change.doc.id,
+                                        ...data,
+                                    });
+                                }
                             }
                         }
                     }
@@ -515,6 +538,46 @@ export const getActiveDonorMatches = (
         });
     } catch (error) {
         console.error('[Firestore] getActiveDonorMatches error:', error);
+        return () => {};
+    }
+};
+
+/**
+ * Fetches historical matches for a donor (completed, rejected, etc.).
+ */
+export const getDonorHistory = (
+    donorId: string,
+    callback: (matches: (DonationMatch & { request?: DonationRequest })[]) => void
+) => {
+    try {
+        const q = query(
+            collection(db, 'donation_matches'),
+            where('donorId', '==', donorId),
+            where('status', 'in', ['completed', 'rejected', 'cancelled'])
+        );
+
+        return onSnapshot(q, async (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
+            if (!snapshot || !snapshot.docs) {
+                callback([]);
+                return;
+            }
+            const matches = await Promise.all(snapshot.docs.map(async (d: FirebaseFirestoreTypes.QueryDocumentSnapshot) => {
+                const match = { id: d.id, ...d.data() } as DonationMatch;
+                const requestData = await getDonationRequest(match.requestId);
+                return { ...match, request: requestData || undefined };
+            }));
+            
+            // Sort by date descending
+            const sorted = matches.sort((a, b) => {
+                const timeA = (a.createdAt as any)?.seconds || 0;
+                const timeB = (b.createdAt as any)?.seconds || 0;
+                return timeB - timeA;
+            });
+            
+            callback(sorted as (DonationMatch & { request?: DonationRequest })[]);
+        });
+    } catch (error) {
+        console.error('[Firestore] getDonorHistory error:', error);
         return () => {};
     }
 };

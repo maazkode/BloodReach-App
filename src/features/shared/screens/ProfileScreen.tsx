@@ -7,13 +7,14 @@ import {
   ScrollView,
   StatusBar,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../App';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument } from '../services/firestoreService';
+import { getUserDocument, subscribeToUser } from '../services/firestoreService';
 import { UserDocument } from '../types/database';
 import { signOut } from '../../auth/services/authService';
 
@@ -23,14 +24,15 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [userData, setUserData] = React.useState<UserDocument | null>(null);
+  const [loadingUser, setLoadingUser] = React.useState(true);
 
   React.useEffect(() => {
-    const fetchUserData = async () => {
-      if (!user) return;
-      const data = await getUserDocument(user.uid);
+    if (!user) return;
+    const unsub = subscribeToUser(user.uid, (data) => {
       setUserData(data);
-    };
-    fetchUserData();
+      setLoadingUser(false);
+    });
+    return () => unsub();
   }, [user]);
 
   const handleLogout = async () => {
@@ -45,6 +47,16 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     if (userData?.lastActiveRole === 'donor') navigation.navigate('DonorDashboard');
     else navigation.navigate('RequesterDashboard');
   };
+
+  if (loadingUser) {
+    return (
+      <View style={styles.loadingContainer}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <ActivityIndicator size="large" color="#B62022" />
+        <Text style={styles.loadingSyncText}>Synchronizing your profile...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -283,6 +295,18 @@ const styles = StyleSheet.create({
   },
   navItem: { alignItems: 'center' },
   navText: { fontSize: 11, fontWeight: '800', color: '#94A3B8', marginTop: 4 },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingSyncText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '600',
+  },
 });
 
 export default ProfileScreen;

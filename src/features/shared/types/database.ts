@@ -23,6 +23,7 @@ export interface UserDocument {
         longitude: number;
         geohash: string;
     };
+    locationUpdatedAt?: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
     // address: string;
     fcmToken?: string;
     email: string;

@@ -18,7 +18,7 @@ import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { Colors } from '../../shared/theme/colors';
 import { useAuth } from '../../shared/context/AuthContext';
 import { signOut } from '../../auth/services/authService';
-import { getUserDocument, getRequesterRequests, createUserDocument } from '../../shared/services/firestoreService';
+import { getUserDocument, getRequesterRequests, createUserDocument, subscribeToUser } from '../../shared/services/firestoreService';
 import { UserDocument, DonationRequest } from '../../shared/types/database';
 import BottomTabBar from '../../shared/components/BottomTabBar';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -27,15 +27,112 @@ import { RootStackParamList } from '../../../../App';
 const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequesterDashboard'>;
+const StatusBadge = React.memo(({ status }: { status: string }) => {
+    let bgColor = '#F1F5F9';
+    let textColor = '#64748B';
+    let icon = null;
 
-const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
+    if (status === 'EMERGENCY') {
+        bgColor = '#FEE2E2';
+        textColor = '#B62022';
+        icon = <MaterialIcon name="emergency" size={12} color="#B62022" style={{ marginRight: 4 }} />;
+    } else if (status === 'WAITING') {
+        bgColor = '#FFEDD5';
+        textColor = '#D97706';
+    } else if (status === 'MATCHED') {
+        bgColor = '#DCFCE7';
+        textColor = '#16A34A';
+    } else if (status === 'CLOSED') {
+        bgColor = '#E2E8F0';
+        textColor = '#64748B';
+    }
+
+    return (
+        <View style={[styles.badge, { backgroundColor: bgColor }]}>
+            {icon}
+            <Text style={[styles.badgeText, { color: textColor }]}>{status}</Text>
+        </View>
+    );
+});
+
+const RequestCard = React.memo(({ item, onPress }: { item: DonationRequest, onPress: (item: DonationRequest) => void }) => (
+    <TouchableOpacity
+        activeOpacity={0.8}
+        style={styles.requestCard}
+        onPress={() => onPress(item)}
+    >
+        <View style={styles.cardMain}>
+            <View style={[styles.bloodBadge, item.status === 'completed' && styles.bloodBadgeClosed]}>
+                <Text style={[styles.bloodBadgeText, item.status === 'completed' && styles.bloodBadgeTextClosed]}>
+                    {item.bloodGroup}
+                </Text>
+            </View>
+
+            <View style={styles.cardInfo}>
+                <View style={styles.titleRow}>
+                    <Text style={styles.requestTitle} numberOfLines={1}>{item.patientName}</Text>
+                    <Text style={styles.timeText}>Recently</Text>
+                </View>
+                <Text style={styles.requestSub} numberOfLines={1}>
+                    {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''} <Text style={styles.bullet}>•</Text> {item.hospitalName}
+                </Text>
+                <View style={styles.badgeRow}>
+                    {item.urgencyLevel === 'urgent' && <StatusBadge status="EMERGENCY" />}
+                    {item.status === 'open' && <StatusBadge status="WAITING" />}
+                    {item.status === 'matched' && <StatusBadge status="MATCHED" />}
+                    {item.status === 'completed' && <StatusBadge status="CLOSED" />}
+                </View>
+            </View>
+        </View>
+
+        <View style={styles.cardFooter}>
+            <View style={styles.footerLeft}>
+                {item.matchedDonorIds && item.matchedDonorIds.length > 0 ? (
+                    <View style={styles.matchesRow}>
+                        <View style={styles.matchCircle}><Text style={styles.matchText}>{item.matchedDonorIds.length}</Text></View>
+                        <Text style={styles.matchLabel}>Donor{item.matchedDonorIds.length > 1 ? 's' : ''} Found</Text>
+                    </View>
+                ) : item.status === 'completed' ? (
+                    <Text style={[styles.matchLabel, { marginLeft: 0 }]}>Request Fulfilled</Text>
+                ) : (
+                    <View style={styles.infoRow}>
+                        <View style={styles.greenDot} />
+                        <Text style={styles.infoText}>Searching for donors...</Text>
+                    </View>
+                )}
+            </View>
+
+            <View style={styles.footerRight}>
+                <Text style={[
+                    styles.viewDetailsText,
+                    item.status === 'completed' && styles.viewDetailsTextOutline
+                ]}>View Details</Text>
+                <MaterialIcon
+                    name="chevron-right"
+                    size={20}
+                    color={item.status === 'completed' ? '#94A3B8' : '#B62022'}
+                />
+            </View>
+        </View>
+    </TouchableOpacity>
+));
+
+const RequesterDashboard: React.FC<Props> = ({ route, navigation }) => {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
     const [myRequests, setMyRequests] = React.useState<DonationRequest[]>([]);
     const [loadingRequests, setLoadingRequests] = React.useState(true);
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
-    const [activeTab, setActiveTab] = React.useState('home');
+    const [activeTab, setActiveTab] = React.useState(route.params?.tab || 'home');
+    const [loadingUser, setLoadingUser] = React.useState(true);
+
+    // Sync activeTab when route.params.tab changes
+    React.useEffect(() => {
+        if (route.params?.tab) {
+            setActiveTab(route.params.tab);
+        }
+    }, [route.params?.tab]);
 
     const activeMatchesCount = myRequests.filter(r => r.status === 'matched').length;
     const pendingUnitsTotal = myRequests
@@ -45,16 +142,26 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
     React.useEffect(() => {
         if (!user) return;
 
-        // 1. Fetch user profile
-        getUserDocument(user.uid).then(setUserData);
+        // 1. Subscribe to user profile real-time
+        const unsubUser = subscribeToUser(user.uid, (data) => {
+            if (data) {
+                setUserData(data);
+                setLoadingUser(false);
+            } else {
+                setLoadingUser(false);
+            }
+        });
 
         // 2. Listen for user's requests
-        const unsubscribe = getRequesterRequests(user.uid, (requests) => {
+        const unsubRequests = getRequesterRequests(user.uid, (requests) => {
             setMyRequests(requests);
             setLoadingRequests(false);
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubUser();
+            unsubRequests();
+        };
     }, [user]);
 
     const handleLogout = async () => {
@@ -65,33 +172,11 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
         }
     };
 
-    const renderStatusBadge = (status: string) => {
-        let bgColor = '#F1F5F9';
-        let textColor = '#64748B';
-        let icon = null;
 
-        if (status === 'EMERGENCY') {
-            bgColor = '#FEE2E2';
-            textColor = '#B62022';
-            icon = <MaterialIcon name="emergency" size={12} color="#B62022" style={{ marginRight: 4 }} />;
-        } else if (status === 'WAITING') {
-            bgColor = '#FFEDD5';
-            textColor = '#D97706';
-        } else if (status === 'MATCHED') {
-            bgColor = '#DCFCE7';
-            textColor = '#16A34A';
-        } else if (status === 'CLOSED') {
-            bgColor = '#E2E8F0';
-            textColor = '#64748B';
-        }
 
-        return (
-            <View key={status} style={[styles.badge, { backgroundColor: bgColor }]}>
-                {icon}
-                <Text style={[styles.badgeText, { color: textColor }]}>{status}</Text>
-            </View>
-        );
-    };
+    const handlePressRequest = React.useCallback((item: DonationRequest) => {
+        navigation.navigate('RequestDetail', { requestId: item.id! });
+    }, [navigation]);
 
     const renderRequestList = (list: DonationRequest[], emptyMsg: string) => {
         if (loadingRequests) {
@@ -107,71 +192,10 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
             );
         }
 
-        return list.map((item) => (
-            <TouchableOpacity
-                activeOpacity={0.8}
-                key={item.id}
-                style={styles.requestCard}
-                onPress={() => navigation.navigate('RequestDetail', { requestId: item.id! })}
-            >
-                <View style={styles.cardMain}>
-                    <View style={[styles.bloodBadge, item.status === 'completed' && styles.bloodBadgeClosed]}>
-                        <Text style={[styles.bloodBadgeText, item.status === 'completed' && styles.bloodBadgeTextClosed]}>
-                            {item.bloodGroup}
-                        </Text>
-                    </View>
-
-                    <View style={styles.cardInfo}>
-                        <View style={styles.titleRow}>
-                            <Text style={styles.requestTitle} numberOfLines={1}>{item.patientName}</Text>
-                            <Text style={styles.timeText}>Recently</Text>
-                        </View>
-                        <Text style={styles.requestSub} numberOfLines={1}>
-                            {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''} <Text style={styles.bullet}>•</Text> {item.hospitalName}
-                        </Text>
-                        <View style={styles.badgeRow}>
-                            {item.urgencyLevel === 'urgent' && renderStatusBadge('EMERGENCY')}
-                            {item.status === 'open' && renderStatusBadge('WAITING')}
-                            {item.status === 'matched' && renderStatusBadge('MATCHED')}
-                            {item.status === 'completed' && renderStatusBadge('CLOSED')}
-                        </View>
-                    </View>
-                </View>
-
-                <View style={styles.cardFooter}>
-                    <View style={styles.footerLeft}>
-                        {item.matchedDonorIds && item.matchedDonorIds.length > 0 ? (
-                            <View style={styles.matchesRow}>
-                                <View style={styles.matchCircle}><Text style={styles.matchText}>{item.matchedDonorIds.length}</Text></View>
-                                <Text style={styles.matchLabel}>Donor{item.matchedDonorIds.length > 1 ? 's' : ''} Found</Text>
-                            </View>
-                        ) : item.status === 'completed' ? (
-                            <Text style={[styles.matchLabel, { marginLeft: 0 }]}>Request Fulfilled</Text>
-                        ) : (
-                            <View style={styles.infoRow}>
-                                <View style={styles.greenDot} />
-                                <Text style={styles.infoText}>Searching for donors...</Text>
-                            </View>
-                        )}
-                    </View>
-
-                    <View style={styles.footerRight}>
-                        <Text style={[
-                            styles.viewDetailsText,
-                            item.status === 'completed' && styles.viewDetailsTextOutline
-                        ]}>View Details</Text>
-                        <MaterialIcon
-                            name="chevron-right"
-                            size={20}
-                            color={item.status === 'completed' ? '#94A3B8' : '#B62022'}
-                        />
-                    </View>
-                </View>
-            </TouchableOpacity>
-        ));
+        return list.map((item) => <RequestCard key={item.id} item={item} onPress={handlePressRequest} />);
     };
 
-    const renderTabContent = () => {
+    const tabContent = React.useMemo(() => {
         switch (activeTab) {
             case 'requests':
                 return (
@@ -239,7 +263,17 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                     </>
                 );
         }
-    };
+    }, [activeTab, myRequests, activeMatchesCount, pendingUnitsTotal, loadingRequests]);
+
+    if (loadingUser) {
+        return (
+            <View style={styles.loadingContainer}>
+                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+                <ActivityIndicator size="large" color="#B62022" />
+                <Text style={styles.loadingSyncText}>Synchronizing your profile...</Text>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -261,7 +295,7 @@ const RequesterDashboard: React.FC<Props> = ({ navigation }) => {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
             >
-                {renderTabContent()}
+                {tabContent}
             </ScrollView>
 
             <BottomTabBar
@@ -496,6 +530,18 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginTop: 12,
         textAlign: 'center',
+    },
+    loadingContainer: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingSyncText: {
+        marginTop: 16,
+        fontSize: 14,
+        color: '#64748B',
+        fontWeight: '600',
     },
 });
 

@@ -102,7 +102,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     if (!request) return null;
 
     const isRequester = request.requesterId === currentUser?.uid;
-    const isMatched = (request.matchedDonorIds || []).includes(currentUser?.uid || '');
+    const isMatched = currentUser?.uid ? (request.matchedDonorIds || []).includes(currentUser.uid) : false;
 
     const handleWhatsApp = (phone: string, name: string) => {
         const message = isRequester

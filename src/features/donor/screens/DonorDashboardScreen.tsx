@@ -30,7 +30,8 @@ import {
     subscribeToMatchingRequests,
     checkAndRefreshEligibility,
     getActiveDonorMatches,
-    subscribeToUser
+    subscribeToUser,
+    getDonorHistory
 } from '../../shared/services/firestoreService';
 import { UserDocument, DonationRequest } from '../../shared/types/database';
 import { signOut } from '../../auth/services/authService';
@@ -38,11 +39,98 @@ import { triggerLocalNotification } from '../../shared/services/notificationServ
 import BottomTabBar from '../../shared/components/BottomTabBar';
 import { useModal } from '../../shared/context/ModalContext';
 
+type Props = NativeStackScreenProps<RootStackParamList, 'DonorDashboard'>;
 const { width } = Dimensions.get('window');
 
-type Props = NativeStackScreenProps<RootStackParamList, 'DonorDashboard'>;
+const getUrgencyColor = (level: string) => level === 'urgent' ? '#B62022' : '#D97706';
+const getUrgencyBg = (level: string) => level === 'urgent' ? '#FEE2E2' : '#FEF3C7';
+const getUrgencyLabel = (level: string) => level === 'urgent' ? 'EMERGENCY' : 'NEEDED';
 
-const DonorDashboard: React.FC<Props> = ({ navigation }) => {
+const RequestItem = React.memo(({ item, isFullWidth, isEligible, onHelpPress }: { 
+    item: DonationRequest, 
+    isFullWidth?: boolean, 
+    isEligible: boolean,
+    onHelpPress: (item: DonationRequest) => void 
+}) => {
+    const urgencyColor = getUrgencyColor(item.urgencyLevel);
+    const urgencyBg = getUrgencyBg(item.urgencyLevel);
+
+    return (
+        <TouchableOpacity
+            style={isFullWidth ? styles.unifiedCardFull : styles.unifiedCardHorizontal}
+            activeOpacity={0.82}
+            onPress={() => onHelpPress(item)}
+        >
+            <View style={styles.unifiedCardTop}>
+                <View style={styles.bloodBadge}>
+                    <Text style={styles.bloodBadgeText}>{item.bloodGroup}</Text>
+                </View>
+                <View style={[styles.statusPill, { backgroundColor: urgencyBg }]}>
+                    <Text style={[styles.statusPillText, { color: urgencyColor }]}>
+                        {getUrgencyLabel(item.urgencyLevel)}
+                    </Text>
+                </View>
+            </View>
+
+            <Text style={styles.unifiedTitle} numberOfLines={1}>
+                {item.hospitalName || 'Unknown Hospital'}
+            </Text>
+
+            <Text style={styles.unifiedSubtext} numberOfLines={1}>
+                For {item.patientName || 'Patient'}
+            </Text>
+
+            <View style={styles.unifiedMetaRow}>
+                <View style={styles.metaItem}>
+                    <MaterialIcon name="location-on" size={14} color="#94A3B8" />
+                    <Text style={styles.metaText} numberOfLines={1}>
+                        {item.city || 'Location'}
+                    </Text>
+                </View>
+                <View style={styles.unitPill}>
+                    <MaterialCommunityIcon name="water" size={12} color="#B62022" />
+                    <Text style={styles.unitPillText}>
+                        {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''}
+                    </Text>
+                </View>
+            </View>
+        </TouchableOpacity>
+    );
+});
+
+const HistoryItem = React.memo(({ match, onPress }: { match: any, onPress: () => void }) => (
+    <TouchableOpacity
+        style={styles.unifiedCardFull}
+        onPress={onPress}
+    >
+        <View style={styles.unifiedCardTop}>
+            <View style={styles.bloodBadge}>
+                <Text style={styles.bloodBadgeText}>{match.request?.bloodGroup || '--'}</Text>
+            </View>
+            <View style={[styles.statusPill, { backgroundColor: '#F1F5F9' }]}>
+                <Text style={[styles.statusPillText, { color: '#64748B' }]}>
+                    {(match.status ?? 'pending').toUpperCase()}
+                </Text>
+            </View>
+        </View>
+        <Text style={styles.unifiedTitle}>{match.request?.hospitalName || 'Hospital Info'}</Text>
+        <Text style={styles.unifiedSubtext}>Donated for {match.request?.patientName || 'Patient'}</Text>
+        <View style={styles.unifiedMetaRow}>
+            <View style={styles.metaItem}>
+                <MaterialIcon name="event" size={14} color="#94A3B8" />
+                <Text style={styles.metaText}>
+                    {(match.createdAt as any)?.toDate ? (match.createdAt as any).toDate().toLocaleDateString() : 'N/A'}
+                </Text>
+            </View>
+            <View style={styles.unitPill}>
+                <MaterialCommunityIcon name="check-circle" size={12} color="#16A34A" />
+                <Text style={[styles.unitPillText, { color: '#16A34A' }]}>Done</Text>
+            </View>
+        </View>
+    </TouchableOpacity>
+));
+
+const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
     const { showModal } = useModal();
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
@@ -51,8 +139,25 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
     const [activeHelps, setActiveHelps] = React.useState<any[]>([]);
     const [loadingRequests, setLoadingRequests] = React.useState(true);
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
-    const [activeTab, setActiveTab] = React.useState('home');
+    const [activeTab, setActiveTab] = React.useState(route.params?.tab || 'home');
+
+    // Sync activeTab when route.params.tab changes
+    React.useEffect(() => {
+        if (route.params?.tab) {
+            setActiveTab(route.params.tab);
+        }
+    }, [route.params?.tab]);
     const [loadingUser, setLoadingUser] = React.useState(true);
+    const [donationHistory, setDonationHistory] = React.useState<any[]>([]);
+
+    // Effect for history
+    React.useEffect(() => {
+        if (!user || activeTab !== 'history') return;
+        const unsubHistory = getDonorHistory(user.uid, (history) => {
+            setDonationHistory(history);
+        });
+        return () => unsubHistory();
+    }, [user, activeTab]);
 
     // Effect for active matches
     React.useEffect(() => {
@@ -187,15 +292,242 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
         }
     };
 
-    const getUrgencyColor = (level: string) => level === 'urgent' ? '#B62022' : '#D97706';
-    const getUrgencyBg = (level: string) => level === 'urgent' ? '#FEE2E2' : '#FEF3C7';
-    const getUrgencyLabel = (level: string) => level === 'urgent' ? 'EMERGENCY' : 'NEEDED';
-
-    const formatCooldownDate = (timestamp: any) => {
+    const formatCooldownDate = React.useCallback((timestamp: any) => {
         if (!timestamp) return 'Available Now';
         const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
         return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    };
+    }, []);
+
+    const handleHelpPress = React.useCallback((item: DonationRequest) => {
+        if (userData?.isEligibleToDonate) {
+            navigation.navigate('DonorHelpDetail', { requestId: item.id! });
+        } else {
+            showModal({
+                title: 'Cooldown Active',
+                description: 'You recently donated blood. You will be eligible to help again on ' + formatCooldownDate(userData?.donationCooldownUntil),
+                type: 'warning',
+                primaryText: 'Got it'
+            });
+        }
+    }, [userData?.isEligibleToDonate, userData?.donationCooldownUntil, navigation, showModal, formatCooldownDate]);
+
+    const tabContent = React.useMemo(() => {
+        switch (activeTab) {
+            case 'requests':
+                return (
+                    <View style={{ paddingBottom: 20 }}>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Matching Requests</Text>
+                        </View>
+                        {nearbyRequests.length > 0 ? (
+                            nearbyRequests.map(r => (
+                                <RequestItem 
+                                    key={r.id} 
+                                    item={r} 
+                                    isFullWidth 
+                                    isEligible={!!userData?.isEligibleToDonate}
+                                    onHelpPress={handleHelpPress}
+                                />
+                            ))
+                        ) : (
+                            <View style={styles.emptyBox}>
+                                <MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" />
+                                <Text style={styles.emptyText}>No active matching requests nearby</Text>
+                            </View>
+                        )}
+                    </View>
+                );
+            case 'history':
+                return (
+                    <View style={{ paddingBottom: 20 }}>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Donation History</Text>
+                        </View>
+                        {donationHistory.length > 0 ? (
+                            donationHistory.map(match => (
+                                <HistoryItem 
+                                    key={match.id} 
+                                    match={match} 
+                                    onPress={() => navigation.navigate('DonorHelpDetail', { requestId: match.requestId })} 
+                                />
+                            ))
+                        ) : (
+                            <View style={styles.emptyBox}>
+                                <MaterialCommunityIcon name="history" size={36} color="#CBD5E1" />
+                                <Text style={styles.emptyText}>You haven't completed any donations yet.</Text>
+                            </View>
+                        )}
+                    </View>
+                );
+            default: // home
+                return (
+                    <>
+                        {/* ── Eligibility Hero Card ── */}
+                        <View style={[styles.heroCard, userData?.isEligibleToDonate === false && styles.heroCardCooldown]}>
+                            <View style={styles.unifiedCardTop}>
+                                <View style={[
+                                    styles.eligiblePill,
+                                    userData?.isEligibleToDonate === false && styles.cooldownPill
+                                ]}>
+                                    <View style={[
+                                        styles.dot,
+                                        userData?.isEligibleToDonate === false ? styles.redDot : styles.greenDot
+                                    ]} />
+                                    <Text style={styles.eligiblePillText}>
+                                        {userData?.isEligibleToDonate === false
+                                            ? 'RECOVERY MODE'
+                                            : userData?.isAvailable === true
+                                                ? 'ACTIVE'
+                                                : 'OFFLINE'}
+                                    </Text>
+                                </View>
+
+                                <View style={styles.bloodBadge}>
+                                    <Text style={styles.bloodBadgeText}>
+                                        {userData?.bloodGroup || 'A+'}
+                                    </Text>
+                                </View>
+                            </View>
+
+                            <Text style={styles.unifiedTitleLarge}>
+                                {userData?.isEligibleToDonate === false
+                                    ? 'Take Rest & Recover'
+                                    : 'Ready to Save Lives'}
+                            </Text>
+
+                            <Text style={styles.unifiedSubtextLight}>
+                                {userData?.isEligibleToDonate === false
+                                    ? `Eligible again after ${userData?.donationCooldownUntil
+                                        ? (userData.donationCooldownUntil as any).toDate().toLocaleDateString()
+                                        : 'cooldown'
+                                    }`
+                                    : 'Your donation can save up to 3 lives.'}
+                            </Text>
+
+                            {userData?.isEligibleToDonate === true && (
+                                <TouchableOpacity style={styles.heroActionBtn} activeOpacity={0.8}>
+                                    <MaterialIcon name="event-available" size={18} color="#B62022" />
+                                    <Text style={styles.heroActionBtnText}>Schedule a Donation</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        {/* ── Active Helps (Ongoing Donations) ── */}
+                        {activeHelps.length > 0 && (
+                            <View style={{ marginBottom: 20 }}>
+                                <View style={styles.sectionHeader}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Text style={styles.sectionTitle}>Active Helps</Text>
+                                        <View style={styles.countBadge}>
+                                            <Text style={styles.countBadgeText}>{activeHelps.length}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    contentContainerStyle={styles.horizontalScrollContent}
+                                >
+                                    {activeHelps.map((match) => {
+                                        const isAccepted = match.status === 'accepted';
+                                        return (
+                                            <TouchableOpacity
+                                                key={match.id}
+                                                style={styles.unifiedCardHorizontal}
+                                                activeOpacity={0.82}
+                                                onPress={() => navigation.navigate('DonorHelpDetail', { requestId: match.requestId })}
+                                            >
+                                                <View style={styles.unifiedCardTop}>
+                                                    <View style={styles.bloodBadge}>
+                                                        <Text style={styles.bloodBadgeText}>
+                                                            {match.request?.bloodGroup || '--'}
+                                                        </Text>
+                                                    </View>
+                                                    <View style={[
+                                                        styles.statusPill,
+                                                        { backgroundColor: isAccepted ? '#DCFCE7' : '#F1F5F9' },
+                                                    ]}>
+                                                        <Text style={[
+                                                            styles.statusPillText,
+                                                            { color: isAccepted ? '#16A34A' : '#64748B' },
+                                                        ]}>
+                                                            {(match.status ?? 'pending').toUpperCase()}
+                                                        </Text>
+                                                    </View>
+                                                </View>
+
+                                                <Text style={styles.unifiedTitle} numberOfLines={1}>
+                                                    {match.request?.hospitalName || 'Loading...'}
+                                                </Text>
+
+                                                <Text style={styles.unifiedSubtext} numberOfLines={1}>
+                                                    For {match.request?.patientName || 'Patient'}
+                                                </Text>
+
+                                                <View style={styles.unifiedMetaRow}>
+                                                    <View style={styles.metaItem}>
+                                                        <MaterialIcon name="location-on" size={14} color="#94A3B8" />
+                                                        <Text style={styles.metaText} numberOfLines={1}>
+                                                            {match.request?.city || 'Location'}
+                                                        </Text>
+                                                    </View>
+                                                    <View style={styles.unitPill}>
+                                                        <MaterialCommunityIcon name="water" size={12} color="#B62022" />
+                                                        <Text style={styles.unitPillText}>
+                                                            {match.request?.unitsRequired ?? 0} Unit{(match.request?.unitsRequired ?? 0) !== 1 ? 's' : ''}
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
+                        )}
+
+                        {/* ── Nearby Requests ── */}
+                        {userData?.isEligibleToDonate !== false && (
+                            <>
+                                <View style={styles.sectionHeader}>
+                                    <Text style={styles.sectionTitle}>Nearby Requests</Text>
+                                    <TouchableOpacity onPress={() => setActiveTab('requests')}>
+                                        <Text style={styles.seeAllText}>See All</Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                {loadingRequests ? (
+                                    <View style={styles.loadingBox}>
+                                        <ActivityIndicator size="small" color="#B62022" />
+                                        <Text style={styles.loadingText}>Finding requests near you...</Text>
+                                    </View>
+                                ) : nearbyRequests.length > 0 ? (
+                                    <ScrollView
+                                        horizontal
+                                        showsHorizontalScrollIndicator={false}
+                                        contentContainerStyle={styles.horizontalScrollContent}
+                                    >
+                                        {nearbyRequests.slice(0, 5).map((item: DonationRequest) => (
+                                            <RequestItem 
+                                                key={item.id} 
+                                                item={item} 
+                                                isEligible={!!userData?.isEligibleToDonate}
+                                                onHelpPress={handleHelpPress}
+                                            />
+                                        ))}
+                                    </ScrollView>
+                                ) : (
+                                    <View style={styles.emptyBox}>
+                                        <MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" />
+                                        <Text style={styles.emptyText}>No active requests nearby</Text>
+                                    </View>
+                                )}
+                            </>
+                        )}
+                    </>
+                );
+        }
+    }, [activeTab, nearbyRequests, donationHistory, userData, activeHelps, loadingRequests]);
 
     if (loadingUser) {
         return (
@@ -223,219 +555,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 90 }]}
             >
-                {/* ── Eligibility Hero Card ── */}
-                <View style={[styles.heroCard, userData?.isEligibleToDonate === false && styles.heroCardCooldown]}>
-                    <View style={styles.unifiedCardTop}>
-                        <View style={[
-                            styles.eligiblePill,
-                            userData?.isEligibleToDonate === false && styles.cooldownPill
-                        ]}>
-                            <View style={[
-                                styles.dot,
-                                userData?.isEligibleToDonate === false ? styles.redDot : styles.greenDot
-                            ]} />
-                            <Text style={styles.eligiblePillText}>
-                                {userData?.isEligibleToDonate === false
-                                    ? 'RECOVERY MODE'
-                                    : userData?.isAvailable === true
-                                        ? 'ACTIVE'
-                                        : 'OFFLINE'}
-                            </Text>
-                        </View>
-
-                        <View style={styles.bloodBadge}>
-                            <Text style={styles.bloodBadgeText}>
-                                {userData?.bloodGroup || 'A+'}
-                            </Text>
-                        </View>
-                    </View>
-
-                    <Text style={styles.unifiedTitleLarge}>
-                        {userData?.isEligibleToDonate === false
-                            ? 'Take Rest & Recover'
-                            : 'Ready to Save Lives'}
-                    </Text>
-
-                    <Text style={styles.unifiedSubtextLight}>
-                        {userData?.isEligibleToDonate === false
-                            ? `Eligible again after ${userData?.donationCooldownUntil
-                                ? (userData.donationCooldownUntil as any).toDate().toLocaleDateString()
-                                : 'cooldown'
-                            }`
-                            : 'Your donation can save up to 3 lives.'}
-                    </Text>
-
-                    {userData?.isEligibleToDonate === true && (
-                        <TouchableOpacity style={styles.heroActionBtn} activeOpacity={0.8}>
-                            <MaterialIcon name="event-available" size={18} color="#B62022" />
-                            <Text style={styles.heroActionBtnText}>Schedule a Donation</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-
-
-
-
-                {/* ── Active Helps (Ongoing Donations) ── */}
-                {activeHelps.length > 0 && (
-                    <View style={{ marginBottom: 20 }}>
-                        <View style={styles.sectionHeader}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Text style={styles.sectionTitle}>Active Helps</Text>
-                                <View style={styles.countBadge}>
-                                    <Text style={styles.countBadgeText}>{activeHelps.length}</Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.horizontalScrollContent}
-                        >
-                            {activeHelps.map((match) => {
-                                const isAccepted = match.status === 'accepted';
-                                return (
-                                    <TouchableOpacity
-                                        key={match.id}
-                                        style={styles.unifiedCardHorizontal}
-                                        activeOpacity={0.82}
-                                        onPress={() => navigation.navigate('DonorHelpDetail', { requestId: match.requestId })}
-                                    >
-                                        <View style={styles.unifiedCardTop}>
-                                            <View style={styles.bloodBadge}>
-                                                <Text style={styles.bloodBadgeText}>
-                                                    {match.request?.bloodGroup || '--'}
-                                                </Text>
-                                            </View>
-                                            <View style={[
-                                                styles.statusPill,
-                                                { backgroundColor: isAccepted ? '#DCFCE7' : '#F1F5F9' },
-                                            ]}>
-                                                <Text style={[
-                                                    styles.statusPillText,
-                                                    { color: isAccepted ? '#16A34A' : '#64748B' },
-                                                ]}>
-                                                    {(match.status ?? 'pending').toUpperCase()}
-                                                </Text>
-                                            </View>
-                                        </View>
-
-                                        <Text style={styles.unifiedTitle} numberOfLines={1}>
-                                            {match.request?.hospitalName || 'Loading...'}
-                                        </Text>
-
-                                        <Text style={styles.unifiedSubtext} numberOfLines={1}>
-                                            For {match.request?.patientName || 'Patient'}
-                                        </Text>
-
-                                        <View style={styles.unifiedMetaRow}>
-                                            <View style={styles.metaItem}>
-                                                <MaterialIcon name="location-on" size={14} color="#94A3B8" />
-                                                <Text style={styles.metaText} numberOfLines={1}>
-                                                    {match.request?.city || 'Location'}
-                                                </Text>
-                                            </View>
-                                            <View style={styles.unitPill}>
-                                                <MaterialCommunityIcon name="water" size={12} color="#B62022" />
-                                                <Text style={styles.unitPillText}>
-                                                    {match.request?.unitsRequired ?? 0} Unit{(match.request?.unitsRequired ?? 0) !== 1 ? 's' : ''}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </ScrollView>
-                    </View>
-                )}
-
-                {/* ── Nearby Requests ── */}
-                {userData?.isEligibleToDonate !== false && (
-                    <>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Nearby Requests</Text>
-                        </View>
-
-                        {loadingRequests ? (
-                            <View style={styles.loadingBox}>
-                                <ActivityIndicator size="small" color="#B62022" />
-                                <Text style={styles.loadingText}>Finding requests near you...</Text>
-                            </View>
-                        ) : nearbyRequests.length > 0 ? (
-                            <ScrollView
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={styles.horizontalScrollContent}
-                            >
-                                {nearbyRequests.map((item: DonationRequest) => {
-                                    const urgencyColor = getUrgencyColor(item.urgencyLevel);
-                                    const urgencyBg = getUrgencyBg(item.urgencyLevel);
-                                    return (
-                                        <TouchableOpacity
-                                            key={item.id}
-                                            style={styles.unifiedCardHorizontal}
-                                            activeOpacity={0.82}
-                                            onPress={() => {
-                                                if (userData?.isEligibleToDonate) {
-                                                    navigation.navigate('DonorHelpDetail', { requestId: item.id! });
-                                                } else {
-                                                    showModal({
-                                                        title: 'Cooldown Active',
-                                                        description: 'You recently donated blood. You will be eligible to help again on ' + formatCooldownDate(userData?.donationCooldownUntil),
-                                                        type: 'warning',
-                                                        primaryText: 'Got it'
-                                                    });
-                                                }
-                                            }}
-                                        >
-                                            <View style={styles.unifiedCardTop}>
-                                                <View style={styles.bloodBadge}>
-                                                    <Text style={styles.bloodBadgeText}>{item.bloodGroup}</Text>
-                                                </View>
-                                                <View style={[styles.statusPill, { backgroundColor: urgencyBg }]}>
-                                                    <Text style={[styles.statusPillText, { color: urgencyColor }]}>
-                                                        {getUrgencyLabel(item.urgencyLevel)}
-                                                    </Text>
-                                                </View>
-                                            </View>
-
-                                            <Text style={styles.unifiedTitle} numberOfLines={1}>
-                                                {item.hospitalName || 'Unknown Hospital'}
-                                            </Text>
-
-                                            <Text style={styles.unifiedSubtext} numberOfLines={1}>
-                                                For {item.patientName || 'Patient'}
-                                            </Text>
-
-                                            <View style={styles.unifiedMetaRow}>
-                                                <View style={styles.metaItem}>
-                                                    <MaterialIcon name="location-on" size={14} color="#94A3B8" />
-                                                    <Text style={styles.metaText} numberOfLines={1}>
-                                                        {item.city || 'Location'}
-                                                    </Text>
-                                                </View>
-                                                <View style={styles.unitPill}>
-                                                    <MaterialCommunityIcon name="water" size={12} color="#B62022" />
-                                                    <Text style={styles.unitPillText}>
-                                                        {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''}
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </ScrollView>
-                        ) : (
-                            <View style={styles.emptyBox}>
-                                <MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" />
-                                <Text style={styles.emptyText}>No active requests nearby</Text>
-                            </View>
-                        )}
-                    </>
-                )}
-
-
+                {tabContent}
             </ScrollView>
 
             <BottomTabBar
@@ -699,6 +819,11 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 10,
         fontWeight: '900',
+    },
+    seeAllText: {
+        fontSize: 14,
+        color: '#B62022',
+        fontWeight: '700',
     },
     loadingBox: {
         flexDirection: 'row',

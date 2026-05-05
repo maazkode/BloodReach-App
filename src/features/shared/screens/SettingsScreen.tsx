@@ -9,23 +9,41 @@ import {
     Image,
     Alert,
     Dimensions,
+    ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
 import { signOut } from '../../auth/services/authService';
-import { getUserDocument, getDonorStats, createUserDocument } from '../services/firestoreService';
+import { getUserDocument, getDonorStats, createUserDocument, subscribeToUser } from '../services/firestoreService';
 import { UserDocument } from '../types/database';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../App';
 import LinearGradient from 'react-native-linear-gradient';
 import { safeRun, log } from '../utils/errorHandler';
 import { useModal } from '../context/ModalContext';
+import BottomTabBar from '../../shared/components/BottomTabBar';
+
 
 const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
+
+const MenuOption = React.memo(({ icon, title, color = "#1E293B", onPress, isLast = false, rightText }: any) => (
+    <TouchableOpacity
+        style={[styles.menuItem, isLast && { borderBottomWidth: 0 }]}
+        onPress={onPress}
+        activeOpacity={0.7}
+    >
+        <View style={[styles.menuIconBox, { backgroundColor: `${color}10` }]}>
+            <MaterialCommunityIcon name={icon} size={22} color={color} />
+        </View>
+        <Text style={[styles.menuTitle, { color }]}>{title}</Text>
+        {rightText && <Text style={styles.rightText}>{rightText}</Text>}
+        <MaterialIcon name="chevron-right" size={20} color="#CBD5E1" />
+    </TouchableOpacity>
+));
 
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     const { showModal } = useModal();
@@ -34,16 +52,27 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
     const [donorStats, setDonorStats] = React.useState({ count: 0, livesSaved: 0, rank: 'Bronze' });
     const [actionLoading, setActionLoading] = React.useState(false);
+    const [loadingUser, setLoadingUser] = React.useState(true);
+    const [activeTab, setActiveTab] = React.useState('settings');
 
     React.useEffect(() => {
-        if (user) {
-            getUserDocument(user.uid).then(setUserData);
-            const unsubStats = getDonorStats(user.uid, setDonorStats);
-            return () => unsubStats();
-        }
+        if (!user) return;
+        const unsubUser = subscribeToUser(user.uid, (data) => {
+            if (data) {
+                setUserData(data);
+                setLoadingUser(false);
+            } else {
+                setLoadingUser(false);
+            }
+        });
+        const unsubStats = getDonorStats(user.uid, setDonorStats);
+        return () => {
+            unsubUser();
+            unsubStats();
+        };
     }, [user]);
 
-    const handleLogout = () => {
+    const handleLogout = React.useCallback(() => {
         if (actionLoading) return;
         showModal({
             title: 'Logout',
@@ -65,9 +94,9 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             },
             secondaryText: 'Cancel',
         });
-    };
+    }, [actionLoading, showModal]);
 
-    const handleSwitchRole = async () => {
+    const handleSwitchRole = React.useCallback(async () => {
         if (!user || !userData || actionLoading) return;
         const newRole = userData.lastActiveRole === 'donor' ? 'requester' : 'donor';
         const targetScreen = newRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard';
@@ -82,27 +111,84 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 showModal,
                 onSuccess: () => {
                     log('info', 'Settings > handleSwitchRole', `Switched to ${newRole}`);
-                    navigation.replace(targetScreen);
+                    navigation.replace(targetScreen, { tab: 'home' });
                 },
             }
         );
         setActionLoading(false);
-    };
+    }, [user, userData, actionLoading, showModal, navigation]);
 
-    const MenuOption = ({ icon, title, color = "#1E293B", onPress, isLast = false, rightText }: any) => (
-        <TouchableOpacity
-            style={[styles.menuItem, isLast && { borderBottomWidth: 0 }]}
-            onPress={onPress}
-            activeOpacity={0.7}
-        >
-            <View style={[styles.menuIconBox, { backgroundColor: `${color}10` }]}>
-                <MaterialCommunityIcon name={icon} size={22} color={color} />
+    const handleRefreshLocation = React.useCallback(async () => {
+        if (!user || actionLoading) return;
+        setActionLoading(true);
+        await safeRun(
+            async () => {
+                const { getFullLocationData } = require('../services/locationService');
+                const { updateUserLocation } = require('../services/firestoreService');
+                const locData = await getFullLocationData();
+                await updateUserLocation(user.uid, {
+                    latitude: locData.latitude,
+                    longitude: locData.longitude,
+                    geohash: locData.geohash,
+                    address: locData.address,
+                });
+            },
+            {
+                context: 'Settings > handleRefreshLocation',
+                errorTitle: 'Location Update Failed',
+                allowRetry: true,
+                showModal,
+                onSuccess: () => {
+                    showModal({
+                        title: 'Location Updated',
+                        description: 'Your location has been successfully updated.',
+                        type: 'success',
+                        primaryText: 'OK'
+                    });
+                },
+            }
+        );
+        setActionLoading(false);
+    }, [user, actionLoading, showModal]);
+
+    const tabs = React.useMemo(() => [
+        { 
+            key: 'home', 
+            label: 'Home', 
+            icon: 'home', 
+            activeIcon: 'home', 
+            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'home' }) 
+        },
+        { 
+            key: 'requests', 
+            label: 'Requests', 
+            icon: userData?.lastActiveRole === 'donor' ? 'water-drop' : 'list-alt', 
+            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'requests' }) 
+        },
+        { 
+            key: 'history', 
+            label: 'History', 
+            icon: 'history', 
+            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'history' }) 
+        },
+        { 
+            key: 'settings', 
+            label: 'Settings', 
+            icon: 'settings', 
+            activeIcon: 'settings', 
+            onPress: () => { } 
+        },
+    ], [userData?.lastActiveRole, navigation]);
+
+    if (loadingUser) {
+        return (
+            <View style={styles.loadingContainer}>
+                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+                <ActivityIndicator size="large" color="#B62022" />
+                <Text style={styles.loadingSyncText}>Synchronizing your profile...</Text>
             </View>
-            <Text style={[styles.menuTitle, { color }]}>{title}</Text>
-            {rightText && <Text style={styles.rightText}>{rightText}</Text>}
-            <MaterialIcon name="chevron-right" size={20} color="#CBD5E1" />
-        </TouchableOpacity>
-    );
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -166,51 +252,46 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
                 {/* ── Menu Sections ── */}
                 <View style={styles.menuContainer}>
-                    <Text style={styles.menuHeaderLabel}>ACCOUNT</Text>
+                    <Text style={styles.menuHeaderLabel}>ACCOUNT SETTINGS</Text>
                     <View style={styles.menuSectionCard}>
                         <MenuOption
-                            icon="account-edit-outline"
-                            title="Personal Information"
-                            onPress={() => { }}
+                            icon="account-outline"
+                            title="View My Profile"
+                            onPress={() => navigation.navigate('Profile')}
                             color="#3B82F6"
                         />
                         <MenuOption
                             icon="swap-horizontal"
-                            title={`Switch to ${userData?.lastActiveRole === 'donor' ? 'Requester' : 'Donor'}`}
+                            title={`Switch to ${userData?.lastActiveRole === 'donor' ? 'Requester' : 'Donor'} Mode`}
                             onPress={handleSwitchRole}
                             color="#8B5CF6"
                             rightText="Active"
                         />
                         <MenuOption
-                            icon="history"
-                            title="Donation History"
-                            onPress={() => { }}
+                            icon="map-marker-radius"
+                            title="Refresh Location"
+                            onPress={handleRefreshLocation}
                             color="#10B981"
                             isLast
                         />
                     </View>
 
-                    <Text style={styles.menuHeaderLabel}>PREFERENCES</Text>
+                    <Text style={styles.menuHeaderLabel}>SUPPORT & INFO</Text>
                     <View style={styles.menuSectionCard}>
                         <MenuOption
-                            icon="bell-outline"
-                            title="Notifications"
-                            onPress={() => { }}
-                            color="#F59E0B"
-                        />
-                        <MenuOption
-                            icon="shield-check-outline"
-                            title="Privacy & Security"
-                            onPress={() => { }}
+                            icon="information-outline"
+                            title="About BloodReach"
                             color="#64748B"
+                            onPress={() => {
+                                showModal({
+                                    title: 'About BloodReach',
+                                    description: 'BloodReach is a life-saving platform connecting blood donors with those in urgent need. Version 1.0.0 (Build 24)',
+                                    type: 'info',
+                                    primaryText: 'Close'
+                                });
+                            }}
                             isLast
                         />
-                    </View>
-
-                    <Text style={styles.menuHeaderLabel}>SUPPORT</Text>
-                    <View style={styles.menuSectionCard}>
-                        <MenuOption icon="help-circle-outline" title="Help & Feedback" onPress={() => { }} />
-                        <MenuOption icon="information-outline" title="About BloodReach" onPress={() => { }} isLast />
                     </View>
 
                     <TouchableOpacity style={styles.logoutButtonModern} onPress={handleLogout}>
@@ -221,6 +302,10 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                     <Text style={styles.footerVersion}>BloodReach v1.0.0 • Build 24</Text>
                 </View>
             </ScrollView>
+            <BottomTabBar
+                activeTab={activeTab}
+                tabs={tabs}
+            />
         </View>
     );
 };
@@ -359,6 +444,18 @@ const styles = StyleSheet.create({
     },
     logoutButtonText: { color: '#EF4444', fontSize: 16, fontWeight: '900', marginLeft: 10 },
     footerVersion: { textAlign: 'center', marginTop: 30, color: '#CBD5E1', fontSize: 12, fontWeight: '700' },
+    loadingContainer: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingSyncText: {
+        marginTop: 16,
+        fontSize: 14,
+        color: '#64748B',
+        fontWeight: '600',
+    },
 });
 
 export default SettingsScreen;

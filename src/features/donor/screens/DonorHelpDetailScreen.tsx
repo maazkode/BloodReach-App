@@ -214,7 +214,7 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 </View>
 
                 {/* Match Status Logic */}
-                {!myMatch ? (
+                {myMatch === null ? (
                     request.requesterId === currentUser?.uid ? (
                         <View style={[styles.statusBox, { backgroundColor: '#F1F5F9' }]}>
                             <MaterialIcon name="info" size={20} color="#64748B" style={{ marginRight: 10 }} />

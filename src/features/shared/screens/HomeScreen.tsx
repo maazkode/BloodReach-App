@@ -21,6 +21,31 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
             try {
                 const profile = await getUserDocument(user.uid);
+                
+                // Location Refresh Logic (Refresh if older than 6 hours)
+                if (profile) {
+                    const now = Date.now();
+                    const lastUpdate = profile.locationUpdatedAt ? (profile.locationUpdatedAt as any).toMillis() : 0;
+                    const hoursSinceUpdate = (now - lastUpdate) / (1000 * 60 * 60);
+
+                    if (hoursSinceUpdate > 6) {
+                        try {
+                            const { getFullLocationData } = require('../services/locationService');
+                            const { updateUserLocation } = require('../services/firestoreService');
+                            const locData = await getFullLocationData();
+                            await updateUserLocation(user.uid, {
+                                latitude: locData.latitude,
+                                longitude: locData.longitude,
+                                geohash: locData.geohash,
+                                address: locData.address,
+                            });
+                            console.log('[Location] Location updated successfully on app start');
+                        } catch (locErr) {
+                            console.log('[Location] Failed to update location on app start:', locErr);
+                        }
+                    }
+                }
+
                 if (profile && profile.roles) {
                     if (profile.roles.includes('donor')) {
                         navigation.replace('DonorDashboard');
