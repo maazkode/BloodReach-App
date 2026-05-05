@@ -27,10 +27,12 @@ import {
     getMatchForDonor
 } from '../../shared/services/firestoreService';
 import { DonationRequest, DonationMatch, UserDocument } from '../../shared/types/database';
+import { useModal } from '../../shared/context/ModalContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequestDetail'>;
 
 const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
+    const { showModal } = useModal();
     const { requestId } = route.params;
     const [request, setRequest] = useState<DonationRequest | null>(null);
     const [loading, setLoading] = useState(true);
@@ -65,12 +67,22 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         return () => unsub();
                     }
                 } else {
-                    Alert.alert('Error', 'Request not found.');
-                    navigation.goBack();
+                    showModal({
+                        title: 'Error',
+                        description: 'Request not found.',
+                        type: 'error',
+                        primaryText: 'Back',
+                        onPrimaryPress: () => navigation.goBack()
+                    });
                 }
             } catch (error) {
                 console.error('Fetch error:', error);
-                Alert.alert('Error', 'Could not load request details.');
+                showModal({
+                    title: 'Error',
+                    description: 'Could not load request details.',
+                    type: 'error',
+                    primaryText: 'OK'
+                });
             } finally {
                 setLoading(false);
             }
@@ -106,7 +118,12 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`);
             }
         }).catch(() => {
-            Alert.alert('Error', 'Could not open WhatsApp.');
+            showModal({
+                title: 'Error',
+                description: 'Could not open WhatsApp.',
+                type: 'error',
+                primaryText: 'OK'
+            });
         });
     };
 
@@ -122,29 +139,47 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 status: 'matched'
             });
 
-            Alert.alert('Match Accepted', `You can now contact ${donorName}.`);
+            showModal({
+                title: 'Match Accepted',
+                description: `You can now contact ${donorName}.`,
+                type: 'success',
+                primaryText: 'Great'
+            });
         } catch (error) {
-            Alert.alert('Error', 'Could not accept donor.');
+            showModal({
+                title: 'Error',
+                description: 'Could not accept donor.',
+                type: 'error',
+                primaryText: 'OK'
+            });
         } finally {
             setActionLoading(false);
         }
     };
 
     const handleRejectMatch = async (match: DonationMatch) => {
-        Alert.alert('Reject Donor', 'Are you sure you want to reject this donor?', [
-            { text: 'Cancel', style: 'cancel' },
-            { 
-                text: 'Reject', 
-                style: 'destructive',
-                onPress: async () => {
-                    setActionLoading(true);
-                    try {
-                        await updateMatchStatus(match.id!, 'rejected', match);
-                    } catch (e) { Alert.alert('Error', 'Could not reject.'); }
-                    finally { setActionLoading(false); }
+        showModal({
+            title: 'Reject Donor',
+            description: 'Are you sure you want to reject this donor?',
+            type: 'danger',
+            primaryText: 'Reject',
+            onPrimaryPress: async () => {
+                setActionLoading(true);
+                try {
+                    await updateMatchStatus(match.id!, 'rejected', match);
+                } catch (e) {
+                    showModal({
+                        title: 'Error',
+                        description: 'Could not reject.',
+                        type: 'error',
+                        primaryText: 'OK'
+                    });
+                } finally {
+                    setActionLoading(false);
                 }
-            }
-        ]);
+            },
+            secondaryText: 'Cancel'
+        });
     };
 
     const handleInterest = async () => {
@@ -159,10 +194,20 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         try {
             console.log('[RequestDetail] Creating match for:', { requestId, donorId: currentUser.uid, requesterId: request.requesterId });
             await createDonationMatch(requestId, currentUser.uid, request.requesterId);
-            Alert.alert('Request Sent', 'The requester has been notified. You can see their contact once they accept.');
+            showModal({
+                title: 'Request Sent',
+                description: 'The requester has been notified. You can see their contact once they accept.',
+                type: 'success',
+                primaryText: 'OK'
+            });
         } catch (error: any) {
             console.error('[RequestDetail] handleInterest error:', error);
-            Alert.alert('Error', error.message || 'Could not send request.');
+            showModal({
+                title: 'Error',
+                description: error.message || 'Could not send request.',
+                type: 'error',
+                primaryText: 'OK'
+            });
         } finally {
             setActionLoading(false);
         }
@@ -171,28 +216,35 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     const handleCompleteDonation = async () => {
         if (!currentUser) return;
 
-        Alert.alert(
-            'Complete Donation',
-            'Have you successfully donated blood for this patient?',
-            [
-                { text: 'No', style: 'cancel' },
-                {
-                    text: 'Yes, I Donated',
-                    onPress: async () => {
-                        setActionLoading(true);
-                        try {
-                            await completeDonation(requestId, currentUser.uid);
-                            Alert.alert('Thank You!', 'You have saved a life today. Your profile will be on a 3-month cooldown.');
-                            navigation.replace('DonorDashboard');
-                        } catch (error) {
-                            Alert.alert('Error', 'Something went wrong. Please try again.');
-                        } finally {
-                            setActionLoading(false);
-                        }
-                    }
+        showModal({
+            title: 'Complete Donation',
+            description: 'Have you successfully donated blood for this patient?',
+            type: 'info',
+            primaryText: 'Yes, I Donated',
+            onPrimaryPress: async () => {
+                setActionLoading(true);
+                try {
+                    await completeDonation(requestId, currentUser.uid);
+                    showModal({
+                        title: 'Thank You! 🩸',
+                        description: 'You have saved a life today. Your profile will be on a 3-month cooldown.',
+                        type: 'success',
+                        primaryText: 'Finish',
+                        onPrimaryPress: () => navigation.replace('DonorDashboard')
+                    });
+                } catch (error) {
+                    showModal({
+                        title: 'Error',
+                        description: 'Something went wrong. Please try again.',
+                        type: 'error',
+                        primaryText: 'OK'
+                    });
+                } finally {
+                    setActionLoading(false);
                 }
-            ]
-        );
+            },
+            secondaryText: 'No'
+        });
     };
 
     const renderTimeline = () => {

@@ -108,6 +108,8 @@ interface SafeRunOptions {
     onSuccess?: () => void;
     /** Callback invoked on error (after alert) */
     onError?: (error: any) => void;
+    /** Custom modal function from useModal hook */
+    showModal?: (options: any) => void;
 }
 
 /**
@@ -140,11 +142,20 @@ export const safeRun = async (
     const online = await isOnline();
     if (!online) {
         log('warn', context, 'No internet connection');
-        Alert.alert(
-            'No Internet Connection',
-            'Please check your Wi-Fi or mobile data and try again.',
-            [{ text: 'OK' }]
-        );
+        if (options.showModal) {
+            options.showModal({
+                title: 'No Internet Connection',
+                description: 'Please check your Wi-Fi or mobile data and try again.',
+                type: 'error',
+                primaryText: 'OK'
+            });
+        } else {
+            Alert.alert(
+                'No Internet Connection',
+                'Please check your Wi-Fi or mobile data and try again.',
+                [{ text: 'OK' }]
+            );
+        }
         return false;
     }
 
@@ -156,17 +167,25 @@ export const safeRun = async (
         return true;
     } catch (error: any) {
         const userMessage = translateError(error);
-        log('error', context, 'Operation failed', { code: error?.code, message: error?.message });
-
-        const buttons: any[] = [{ text: 'OK' }];
-        if (allowRetry) {
-            buttons.unshift({
-                text: 'Retry',
-                onPress: () => safeRun(fn, options),
+        if (options.showModal) {
+            options.showModal({
+                title: errorTitle,
+                description: userMessage,
+                type: 'error',
+                primaryText: allowRetry ? 'Retry' : 'OK',
+                onPrimaryPress: allowRetry ? () => safeRun(fn, options) : undefined,
+                secondaryText: allowRetry ? 'Cancel' : undefined,
             });
+        } else {
+            const buttons: any[] = [{ text: 'OK' }];
+            if (allowRetry) {
+                buttons.unshift({
+                    text: 'Retry',
+                    onPress: () => safeRun(fn, options),
+                });
+            }
+            Alert.alert(errorTitle, userMessage, buttons);
         }
-
-        Alert.alert(errorTitle, userMessage, buttons);
         onError?.(error);
         return false;
     }

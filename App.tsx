@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider, useAuth } from './src/features/shared/context/AuthContext';
+import { ModalProvider } from './src/features/shared/context/ModalContext';
 import SplashScreen from './src/features/shared/screens/SplashScreen';
 import AuthScreen from './src/features/auth/screens/AuthScreen';
 import HomeScreen from './src/features/shared/screens/HomeScreen';
@@ -105,7 +106,9 @@ function App() {
     <SafeAreaProvider>
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
       <AuthProvider>
-        <RootNavigator />
+        <ModalProvider>
+          <RootNavigator />
+        </ModalProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

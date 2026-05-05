@@ -19,10 +19,13 @@ import { signInWithGoogle } from '../services/authService';
 import { getUserDocument, createUserDocument } from '../../shared/services/firestoreService';
 import { getFCMToken } from '../../shared/services/notificationService';
 import { Colors } from '../../shared/theme/colors';
+import { useModal } from '../../shared/context/ModalContext';
+import { log } from '../../shared/utils/errorHandler';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 
 const AuthScreen: React.FC<Props> = ({ navigation }) => {
+    const { showModal } = useModal();
     const [loading, setLoading] = useState(false);
     const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -69,7 +72,29 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
                 }
             }
         } catch (error: any) {
-            Alert.alert('Sign In Error', error.message || 'Something went wrong');
+            // Ignore cancellation or in-progress errors to prevent annoying modals
+            const isCancelled = 
+                error?.code === 'SIGN_IN_CANCELLED' || 
+                error?.code === '7' || // Common code for sign-in cancelled
+                error?.code === '12501' || // Google Play Services cancellation code
+                error?.code === 'DEVELOPER_ERROR' || // Often happens if config is valid but user backs out
+                (error?.message?.toLowerCase().includes('google sign-in') && !error?.code) || 
+                error?.message?.toLowerCase().includes('cancel') ||
+                error?.message?.toLowerCase().includes('interrupted') ||
+                error?.message?.toLowerCase().includes('id token') ||
+                error?.message?.toLowerCase().includes('signin failed');
+
+            if (isCancelled) {
+                log('info', 'AuthScreen', 'Sign-in attempt silently ignored', { message: error.message });
+                return;
+            }
+
+            showModal({
+                title: 'Sign In Error',
+                description: error.message || 'Something went wrong',
+                type: 'error',
+                primaryText: 'Try Again'
+            });
         } finally {
             setLoading(false);
         }

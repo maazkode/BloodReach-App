@@ -26,12 +26,14 @@ import { createDonationRequest } from '../../shared/services/firestoreService';
 import { DonationRequest } from '../../shared/types/database';
 import { getFullLocationData, forwardGeocode } from '../../shared/services/locationService';
 import { geohashForLocation } from 'geofire-common';
+import { useModal } from '../../shared/context/ModalContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateRequest'>;
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
+    const { showModal } = useModal();
     const insets = useSafeAreaInsets();
 
     const [patientName, setPatientName] = useState('');
@@ -75,10 +77,20 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                         setAddress(geoResult.address);
                         setLastGeocodedAddress(geoResult.address);
                         setIsLocationVerified(true);
-                        Alert.alert('Location Verified ✓', 'Your hospital location has been confirmed.');
+                        showModal({
+                            title: 'Location Verified ✓',
+                            description: 'Your hospital location has been confirmed.',
+                            type: 'success',
+                            primaryText: 'OK'
+                        });
                     } else {
                         setIsLocationVerified(false);
-                        Alert.alert('Location Not Found', 'Could not find coordinates for this address. Please try a more specific address or use GPS.');
+                        showModal({
+                            title: 'Location Not Found',
+                            description: 'Could not find coordinates for this address. Please try a more specific address or use GPS.',
+                            type: 'error',
+                            primaryText: 'Retry'
+                        });
                     }
                 } else {
                     log('info', 'CreateRequest > handleFetchLocation', 'Fetching GPS location');
@@ -97,6 +109,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 context: 'CreateRequest > handleFetchLocation',
                 errorTitle: 'Location Error',
                 allowRetry: true,
+                showModal,
                 onError: () => setIsLocationVerified(false),
             }
         );
@@ -106,18 +119,34 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const handleSubmit = async () => {
         // Validation
         if (!patientName.trim() || !phone.trim() || !bloodGroup || !hospital.trim() || !address.trim()) {
-            Alert.alert('Missing Information', 'Please fill in all required fields before submitting.');
+            showModal({
+                title: 'Missing Information',
+                description: 'Please fill in all required fields before submitting.',
+                type: 'warning',
+                primaryText: 'Fill Form'
+            });
             return;
         }
 
         const currentUser = getAuth().currentUser;
         if (!currentUser) {
-            Alert.alert('Session Expired', 'Please sign in again to continue.');
+            showModal({
+                title: 'Session Expired',
+                description: 'Please sign in again to continue.',
+                type: 'error',
+                primaryText: 'Sign In',
+                onPrimaryPress: () => navigation.replace('Auth')
+            });
             return;
         }
 
         if (!isLocationVerified || !coordinates || address !== lastGeocodedAddress) {
-            Alert.alert('Location Not Verified', 'Please click "Locate" to verify your hospital address before submitting.');
+            showModal({
+                title: 'Location Not Verified',
+                description: 'Please click "Locate" to verify your hospital address before submitting.',
+                type: 'warning',
+                primaryText: 'OK'
+            });
             return;
         }
 
@@ -147,10 +176,15 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 context: 'CreateRequest > handleSubmit',
                 errorTitle: 'Submission Failed',
                 allowRetry: true,
+                showModal,
                 onSuccess: () =>
-                    Alert.alert('Request Submitted ✓', 'Your blood request is now live. Nearby donors will be notified.', [
-                        { text: 'OK', onPress: () => navigation.goBack() },
-                    ]),
+                    showModal({
+                        title: 'Request Submitted ✓',
+                        description: 'Your blood request is now live. Nearby donors will be notified.',
+                        type: 'success',
+                        primaryText: 'Done',
+                        onPrimaryPress: () => navigation.goBack()
+                    }),
             }
         );
         setLoading(false);

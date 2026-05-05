@@ -1,6 +1,5 @@
 import { getAuth, GoogleAuthProvider, signInWithCredential, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from '@react-native-firebase/auth';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import { Alert } from 'react-native';
 import { log, translateError } from '../../shared/utils/errorHandler';
 
 /**
@@ -17,15 +16,22 @@ GoogleSignin.configure({
 export const signInWithGoogle = async () => {
     try {
         const auth = getAuth();
+        // 1. Check for Play Services
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
+        // 2. Perform Google Sign-In
         const signInResult = await GoogleSignin.signIn();
+        
+        // 3. Extract the ID Token (Defensive Check)
         const idToken = signInResult.data?.idToken;
 
+        // If user cancels or idToken is missing, exit early to prevent Firebase crash
         if (!idToken) {
-            throw new Error('Google Sign-In failed: No ID Token found.');
+            log('info', 'Auth > signInWithGoogle', 'No ID Token found - likely cancelled by user');
+            return null;
         }
 
+        // 4. Create Firebase credential and sign in
         const googleCredential = GoogleAuthProvider.credential(idToken);
         const userCredential = await signInWithCredential(auth, googleCredential);
         const firebaseUser = userCredential.user;
@@ -37,18 +43,24 @@ export const signInWithGoogle = async () => {
 
         return null;
     } catch (error: any) {
+        // 5. Handle specific Google error codes
         if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-            log('info', 'Auth > signInWithGoogle', 'User cancelled sign-in');
+            log('info', 'Auth > signInWithGoogle', 'User cancelled Google Sign-In');
+            return null;
         } else if (error.code === statusCodes.IN_PROGRESS) {
-            log('warn', 'Auth > signInWithGoogle', 'Sign-in already in progress');
+            log('warn', 'Auth > signInWithGoogle', 'Google Sign-In already in progress');
+            return null;
         } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-            log('error', 'Auth > signInWithGoogle', 'Play Services unavailable');
-            Alert.alert('Error', 'Google Play Services is not available. Please install it to sign in.');
+            log('error', 'Auth > signInWithGoogle', 'Google Play Services not available');
+            throw new Error('Google Play Services is required for sign-in.');
         } else {
-            log('error', 'Auth > signInWithGoogle', 'Unexpected error', { code: error?.code });
+            // 6. Handle unexpected errors
+            log('error', 'Auth > signInWithGoogle', 'Unexpected Sign-In Error', { 
+                code: error?.code, 
+                message: error?.message 
+            });
             throw error;
         }
-        return null;
     }
 };
 
@@ -96,3 +108,4 @@ export const signOut = async () => {
         throw error;
     }
 };
+

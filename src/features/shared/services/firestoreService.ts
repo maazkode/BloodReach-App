@@ -51,6 +51,20 @@ export const getUserDocument = async (
 };
 
 /**
+ * Subscribes to real-time updates for a user document.
+ */
+export const subscribeToUser = (uid: string, callback: (data: UserDocument | null) => void): Unsubscribe => {
+    const userRef = doc(db, 'users', uid);
+    return onSnapshot(userRef, (snap) => {
+        if (snap.exists()) {
+            callback(snap.data() as UserDocument);
+        } else {
+            callback(null);
+        }
+    });
+};
+
+/**
  * Creates or updates a user document with production-ready field defaults.
  */
 export const createUserDocument = async (

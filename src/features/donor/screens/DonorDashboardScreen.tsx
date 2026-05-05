@@ -29,18 +29,21 @@ import {
     subscribeToNearbyRequests,
     subscribeToMatchingRequests,
     checkAndRefreshEligibility,
-    getActiveDonorMatches
+    getActiveDonorMatches,
+    subscribeToUser
 } from '../../shared/services/firestoreService';
 import { UserDocument, DonationRequest } from '../../shared/types/database';
 import { signOut } from '../../auth/services/authService';
 import { triggerLocalNotification } from '../../shared/services/notificationService';
 import BottomTabBar from '../../shared/components/BottomTabBar';
+import { useModal } from '../../shared/context/ModalContext';
 
 const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DonorDashboard'>;
 
 const DonorDashboard: React.FC<Props> = ({ navigation }) => {
+    const { showModal } = useModal();
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
@@ -49,6 +52,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
     const [loadingRequests, setLoadingRequests] = React.useState(true);
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
     const [activeTab, setActiveTab] = React.useState('home');
+    const [loadingUser, setLoadingUser] = React.useState(true);
 
     // Effect for active matches
     React.useEffect(() => {
@@ -60,15 +64,28 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
     }, [user]);
 
     React.useEffect(() => {
-        const fetchUserData = async () => {
-            if (user) {
-                const data = await checkAndRefreshEligibility(user.uid);
-                setUserData(data);
-            }
-        };
-        fetchUserData();
+        if (!user) return;
 
+        // Initial check and refresh (background)
+        checkAndRefreshEligibility(user.uid);
+
+        // Real-time listener for user document changes (including cooldown updates)
+        const unsubUser = subscribeToUser(user.uid, (data) => {
+            if (data) {
+                setUserData(data);
+                setLoadingUser(false);
+            } else {
+                setLoadingUser(false); // Even if null, stop loading
+            }
+        });
+
+        return () => unsubUser();
+    }, [user]);
+
+    React.useEffect(() => {
         let unsubscribe: () => void = () => { };
+
+        if (!user) return;
 
         // Only subscribe to nearby filtered requests if the user is AVAILABLE and ELIGIBLE
         if (userData?.location?.latitude && userData?.location?.longitude && userData?.isAvailable && userData?.isEligibleToDonate) {
@@ -128,6 +145,40 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
         return () => unsubscribeMatching();
     }, [userData?.bloodGroup, userData?.location?.latitude, userData?.location?.longitude, userData?.isEligibleToDonate]);
 
+    React.useEffect(() => {
+        if (!userData?.donationCooldownUntil || userData?.isEligibleToDonate || !user) return;
+
+        const cooldownDate = (userData.donationCooldownUntil as any).toDate();
+        const now = new Date();
+        const timeUntilEligible = cooldownDate.getTime() - now.getTime();
+
+        if (timeUntilEligible <= 0) {
+            // Already eligible, but Firestore might not be updated yet
+            checkAndRefreshEligibility(user.uid).then(updated => {
+                if (updated) setUserData(updated);
+            });
+            return;
+        }
+
+        console.log(`Setting eligibility timer for ${timeUntilEligible}ms`);
+
+        const timer = setTimeout(() => {
+            checkAndRefreshEligibility(user.uid).then(updated => {
+                if (updated) {
+                    setUserData(updated);
+                    showModal({
+                        title: 'Welcome Back! 🩸',
+                        description: 'Your recovery period is over. You are now eligible to donate and save lives again!',
+                        type: 'success',
+                        primaryText: 'Great'
+                    });
+                }
+            });
+        }, timeUntilEligible + 2000); // 2 second buffer
+
+        return () => clearTimeout(timer);
+    }, [userData?.donationCooldownUntil, userData?.isEligibleToDonate, user]);
+
     const handleLogout = async () => {
         try {
             await signOut();
@@ -145,6 +196,16 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
         const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
         return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     };
+
+    if (loadingUser) {
+        return (
+            <View style={styles.loadingContainer}>
+                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+                <ActivityIndicator size="large" color="#B62022" />
+                <Text style={styles.loadingSyncText}>Synchronizing your profile...</Text>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -176,7 +237,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                             <Text style={styles.eligiblePillText}>
                                 {userData?.isEligibleToDonate === false
                                     ? 'RECOVERY MODE'
-                                    : userData?.isAvailable
+                                    : userData?.isAvailable === true
                                         ? 'ACTIVE'
                                         : 'OFFLINE'}
                             </Text>
@@ -204,7 +265,7 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                             : 'Your donation can save up to 3 lives.'}
                     </Text>
 
-                    {userData?.isEligibleToDonate !== false && (
+                    {userData?.isEligibleToDonate === true && (
                         <TouchableOpacity style={styles.heroActionBtn} activeOpacity={0.8}>
                             <MaterialIcon name="event-available" size={18} color="#B62022" />
                             <Text style={styles.heroActionBtnText}>Schedule a Donation</Text>
@@ -290,102 +351,91 @@ const DonorDashboard: React.FC<Props> = ({ navigation }) => {
                 )}
 
                 {/* ── Nearby Requests ── */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Nearby Requests</Text>
-                </View>
+                {userData?.isEligibleToDonate !== false && (
+                    <>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Nearby Requests</Text>
+                        </View>
 
-                {loadingRequests ? (
-                    <View style={styles.loadingBox}>
-                        <ActivityIndicator size="small" color="#B62022" />
-                        <Text style={styles.loadingText}>Finding requests near you...</Text>
-                    </View>
-                ) : nearbyRequests.length > 0 ? (
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.horizontalScrollContent}
-                    >
-                        {nearbyRequests.map((item: DonationRequest) => {
-                            const urgencyColor = getUrgencyColor(item.urgencyLevel);
-                            const urgencyBg = getUrgencyBg(item.urgencyLevel);
-                            return (
-                                <TouchableOpacity
-                                    key={item.id}
-                                    style={styles.unifiedCardHorizontal}
-                                    activeOpacity={0.82}
-                                    onPress={() => {
-                                        if (userData?.isEligibleToDonate) {
-                                            navigation.navigate('DonorHelpDetail', { requestId: item.id! });
-                                        } else {
-                                            Alert.alert('Cooldown Active', 'You recently donated blood. You will be eligible to help again on ' + formatCooldownDate(userData?.donationCooldownUntil));
-                                        }
-                                    }}
-                                >
-                                    <View style={styles.unifiedCardTop}>
-                                        <View style={styles.bloodBadge}>
-                                            <Text style={styles.bloodBadgeText}>{item.bloodGroup}</Text>
-                                        </View>
-                                        <View style={[styles.statusPill, { backgroundColor: urgencyBg }]}>
-                                            <Text style={[styles.statusPillText, { color: urgencyColor }]}>
-                                                {getUrgencyLabel(item.urgencyLevel)}
+                        {loadingRequests ? (
+                            <View style={styles.loadingBox}>
+                                <ActivityIndicator size="small" color="#B62022" />
+                                <Text style={styles.loadingText}>Finding requests near you...</Text>
+                            </View>
+                        ) : nearbyRequests.length > 0 ? (
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.horizontalScrollContent}
+                            >
+                                {nearbyRequests.map((item: DonationRequest) => {
+                                    const urgencyColor = getUrgencyColor(item.urgencyLevel);
+                                    const urgencyBg = getUrgencyBg(item.urgencyLevel);
+                                    return (
+                                        <TouchableOpacity
+                                            key={item.id}
+                                            style={styles.unifiedCardHorizontal}
+                                            activeOpacity={0.82}
+                                            onPress={() => {
+                                                if (userData?.isEligibleToDonate) {
+                                                    navigation.navigate('DonorHelpDetail', { requestId: item.id! });
+                                                } else {
+                                                    showModal({
+                                                        title: 'Cooldown Active',
+                                                        description: 'You recently donated blood. You will be eligible to help again on ' + formatCooldownDate(userData?.donationCooldownUntil),
+                                                        type: 'warning',
+                                                        primaryText: 'Got it'
+                                                    });
+                                                }
+                                            }}
+                                        >
+                                            <View style={styles.unifiedCardTop}>
+                                                <View style={styles.bloodBadge}>
+                                                    <Text style={styles.bloodBadgeText}>{item.bloodGroup}</Text>
+                                                </View>
+                                                <View style={[styles.statusPill, { backgroundColor: urgencyBg }]}>
+                                                    <Text style={[styles.statusPillText, { color: urgencyColor }]}>
+                                                        {getUrgencyLabel(item.urgencyLevel)}
+                                                    </Text>
+                                                </View>
+                                            </View>
+
+                                            <Text style={styles.unifiedTitle} numberOfLines={1}>
+                                                {item.hospitalName || 'Unknown Hospital'}
                                             </Text>
-                                        </View>
-                                    </View>
 
-                                    <Text style={styles.unifiedTitle} numberOfLines={1}>
-                                        {item.hospitalName || 'Unknown Hospital'}
-                                    </Text>
-
-                                    <Text style={styles.unifiedSubtext} numberOfLines={1}>
-                                        For {item.patientName || 'Patient'}
-                                    </Text>
-
-                                    <View style={styles.unifiedMetaRow}>
-                                        <View style={styles.metaItem}>
-                                            <MaterialIcon name="location-on" size={14} color="#94A3B8" />
-                                            <Text style={styles.metaText} numberOfLines={1}>
-                                                {item.city || 'Location'}
+                                            <Text style={styles.unifiedSubtext} numberOfLines={1}>
+                                                For {item.patientName || 'Patient'}
                                             </Text>
-                                        </View>
-                                        <View style={styles.unitPill}>
-                                            <MaterialCommunityIcon name="water" size={12} color="#B62022" />
-                                            <Text style={styles.unitPillText}>
-                                                {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </ScrollView>
-                ) : (
-                    <View style={styles.emptyBox}>
-                        <MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" />
-                        <Text style={styles.emptyText}>No active requests nearby</Text>
-                    </View>
+
+                                            <View style={styles.unifiedMetaRow}>
+                                                <View style={styles.metaItem}>
+                                                    <MaterialIcon name="location-on" size={14} color="#94A3B8" />
+                                                    <Text style={styles.metaText} numberOfLines={1}>
+                                                        {item.city || 'Location'}
+                                                    </Text>
+                                                </View>
+                                                <View style={styles.unitPill}>
+                                                    <MaterialCommunityIcon name="water" size={12} color="#B62022" />
+                                                    <Text style={styles.unitPillText}>
+                                                        {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+                        ) : (
+                            <View style={styles.emptyBox}>
+                                <MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" />
+                                <Text style={styles.emptyText}>No active requests nearby</Text>
+                            </View>
+                        )}
+                    </>
                 )}
 
-                {/* ── Next Eligibility Card ── */}
-                <View style={styles.unifiedCardFull}>
-                    <View style={styles.unifiedMetaRow}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <View style={styles.iconBoxSmall}>
-                                <MaterialIcon name="calendar-today" size={18} color="#64748B" />
-                            </View>
-                            <View style={{ marginLeft: 12 }}>
-                                <Text style={styles.unifiedMetaLabel}>NEXT ELIGIBILITY WINDOW</Text>
-                                <Text style={[styles.unifiedTitleSmall, userData?.isEligibleToDonate === false && styles.cooldownText]}>
-                                    {userData?.isEligibleToDonate ? 'You are eligible now' : formatCooldownDate(userData?.donationCooldownUntil)}
-                                </Text>
-                            </View>
-                        </View>
-                    </View>
-                    <Text style={[styles.unifiedSubtext, { marginTop: 8 }]}>
-                        {userData?.isEligibleToDonate
-                            ? 'Your health status allows you to save lives today.'
-                            : 'You are currently in a medical recovery period.'}
-                    </Text>
-                </View>
+
             </ScrollView>
 
             <BottomTabBar
@@ -796,6 +846,18 @@ const styles = StyleSheet.create({
     drawerItemText: { fontSize: 15, fontWeight: '700', color: '#475569' },
     drawerDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 10 },
     versionText: { position: 'absolute', bottom: 30, left: 20, fontSize: 11, color: '#94A3B8', fontWeight: '600' },
+    loadingContainer: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingSyncText: {
+        marginTop: 16,
+        fontSize: 14,
+        color: '#64748B',
+        fontWeight: '600',
+    },
 });
 
 export default DonorDashboard;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     StyleSheet,
     View,
@@ -12,6 +12,7 @@ import {
     Alert,
     Switch,
     ActivityIndicator,
+    BackHandler,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,6 +28,7 @@ import { getFullLocationData, forwardGeocode, LocationData } from '../../shared/
 import { getFCMToken } from '../../shared/services/notificationService';
 import { geohashForLocation } from 'geofire-common';
 import { signOut } from '../services/authService';
+import { useModal } from '../../shared/context/ModalContext';
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["Male", "Female", "Other"];
@@ -34,6 +36,7 @@ const GENDERS = ["Male", "Female", "Other"];
 type Props = NativeStackScreenProps<RootStackParamList, 'UnifiedRegistration'>;
 
 const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
+    const { showModal } = useModal();
     // Required Fields
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
@@ -58,6 +61,33 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     const [fetchingLocation, setFetchingLocation] = useState(false);
     const [isDetecting, setIsDetecting] = useState(false);
 
+    useEffect(() => {
+        const backAction = () => {
+            showModal({
+                title: 'Exit Registration?',
+                description: "Going back will sign you out. You'll need to complete this setup next time you log in.",
+                type: 'warning',
+                primaryText: 'Sign Out',
+                onPrimaryPress: async () => {
+                    try {
+                        await signOut();
+                    } catch (error) {
+                        navigation.replace('Auth');
+                    }
+                },
+                secondaryText: 'Stay',
+            });
+            return true;
+        };
+
+        const backHandler = BackHandler.addEventListener(
+            'hardwareBackPress',
+            backAction,
+        );
+
+        return () => backHandler.remove();
+    }, [navigation, showModal]);
+
     const validateForm = () => {
         let tempErrors: { [key: string]: string } = {};
         if (!name.trim()) tempErrors.name = 'Full name is required';
@@ -67,7 +97,12 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
 
         setErrors(tempErrors);
         if (!locationData) {
-            Alert.alert('Location Required', 'Please detect your location or enter it manually to proceed.');
+            showModal({
+                title: 'Location Required',
+                description: 'Please detect your location or enter it manually to proceed.',
+                type: 'warning',
+                primaryText: 'Got it'
+            });
             return false;
         }
         return Object.keys(tempErrors).length === 0;
@@ -109,10 +144,20 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 });
                 setAddress(result.address);
             } else {
-                Alert.alert('Not Found', 'Could not find coordinates for this address.');
+                showModal({
+                    title: 'Not Found',
+                    description: 'Could not find coordinates for this address.',
+                    type: 'error',
+                    primaryText: 'Try Again'
+                });
             }
         } catch (error) {
-            Alert.alert('Error', 'Something went wrong while locating.');
+            showModal({
+                title: 'Error',
+                description: 'Something went wrong while locating.',
+                type: 'error',
+                primaryText: 'OK'
+            });
         } finally {
             setIsDetecting(false);
         }
@@ -137,7 +182,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 const now = new Date();
                 const cooldownDate = new Date(lastDonationDate);
                 cooldownDate.setDate(cooldownDate.getDate() + 90);
-                
+
                 console.log('[Registration] Last Donation:', lastDonationDate.toDateString());
                 console.log('[Registration] Cooldown Until:', cooldownDate.toDateString());
                 console.log('[Registration] Today:', now.toDateString());
@@ -187,7 +232,12 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
             navigation.replace(roles.includes('donor') ? 'DonorDashboard' : 'RequesterDashboard');
         } catch (error: any) {
             console.error('Registration Error:', error);
-            Alert.alert('Registration Failed', error.message || 'Something went wrong');
+            showModal({
+                title: 'Registration Failed',
+                description: error.message || 'Something went wrong',
+                type: 'error',
+                primaryText: 'Retry'
+            });
         } finally {
             setLoading(false);
         }
@@ -196,15 +246,23 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity 
-                    onPress={async () => {
-                        try {
-                            await signOut();
-                            // App.tsx RootNavigator will automatically redirect to Auth when user becomes null
-                        } catch (error) {
-                            navigation.replace('Auth');
-                        }
-                    }} 
+                <TouchableOpacity
+                    onPress={() => {
+                        showModal({
+                            title: 'Exit Registration?',
+                            description: "Going back will sign you out. You'll need to complete this setup next time you log in.",
+                            type: 'warning',
+                            primaryText: 'Sign Out',
+                            onPrimaryPress: async () => {
+                                try {
+                                    await signOut();
+                                } catch (error) {
+                                    navigation.replace('Auth');
+                                }
+                            },
+                            secondaryText: 'Stay',
+                        });
+                    }}
                     style={styles.backButton}
                 >
                     <MaterialIcon name="arrow-back" size={24} color={Colors.primary} />

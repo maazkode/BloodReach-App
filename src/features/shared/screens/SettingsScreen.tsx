@@ -21,12 +21,14 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../App';
 import LinearGradient from 'react-native-linear-gradient';
 import { safeRun, log } from '../utils/errorHandler';
+import { useModal } from '../context/ModalContext';
 
 const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
+    const { showModal } = useModal();
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
@@ -43,29 +45,26 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
     const handleLogout = () => {
         if (actionLoading) return;
-        Alert.alert(
-            'Logout',
-            'Are you sure you want to sign out?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Logout',
-                    style: 'destructive',
-                    onPress: async () => {
-                        setActionLoading(true);
-                        await safeRun(
-                            () => signOut(),
-                            {
-                                context: 'Settings > handleLogout',
-                                errorTitle: 'Logout Failed',
-                                allowRetry: false,
-                            }
-                        );
-                        setActionLoading(false);
-                    },
-                },
-            ]
-        );
+        showModal({
+            title: 'Logout',
+            description: 'Are you sure you want to sign out?',
+            type: 'danger',
+            primaryText: 'Logout',
+            onPrimaryPress: async () => {
+                setActionLoading(true);
+                await safeRun(
+                    () => signOut(),
+                    {
+                        context: 'Settings > handleLogout',
+                        errorTitle: 'Logout Failed',
+                        allowRetry: false,
+                        showModal,
+                    }
+                );
+                setActionLoading(false);
+            },
+            secondaryText: 'Cancel',
+        });
     };
 
     const handleSwitchRole = async () => {
@@ -80,6 +79,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 context: 'Settings > handleSwitchRole',
                 errorTitle: 'Role Switch Failed',
                 allowRetry: true,
+                showModal,
                 onSuccess: () => {
                     log('info', 'Settings > handleSwitchRole', `Switched to ${newRole}`);
                     navigation.replace(targetScreen);

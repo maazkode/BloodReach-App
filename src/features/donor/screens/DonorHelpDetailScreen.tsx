@@ -25,10 +25,12 @@ import {
     updateMatchStatus
 } from '../../shared/services/firestoreService';
 import { DonationRequest, DonationMatch, UserDocument } from '../../shared/types/database';
+import { useModal } from '../../shared/context/ModalContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DonorHelpDetail'>;
 
 const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
+    const { showModal } = useModal();
     const { requestId } = route.params;
     const [request, setRequest] = useState<DonationRequest | null>(null);
     const [loading, setLoading] = useState(true);
@@ -52,14 +54,23 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     });
                     return () => unsub();
                 } else {
-                    Alert.alert('Request Not Found', 'This blood request no longer exists or has been removed.');
-                    navigation.goBack();
+                    showModal({
+                        title: 'Request Not Found',
+                        description: 'This blood request no longer exists or has been removed.',
+                        type: 'error',
+                        primaryText: 'Go Back',
+                        onPrimaryPress: () => navigation.goBack()
+                    });
                 }
             } catch (error: any) {
                 log('error', 'DonorHelpDetail > fetchDetails', 'Failed to load request', { code: error?.code });
-                Alert.alert('Failed to Load', translateError(error), [
-                    { text: 'Go Back', onPress: () => navigation.goBack() },
-                ]);
+                showModal({
+                    title: 'Failed to Load',
+                    description: translateError(error),
+                    type: 'error',
+                    primaryText: 'Go Back',
+                    onPrimaryPress: () => navigation.goBack()
+                });
             } finally {
                 setLoading(false);
             }
@@ -82,7 +93,12 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         const message = `Hi, I am reaching out regarding your urgent blood request for ${request.patientName} (${request.bloodGroup}) on BloodReach. I'm interested in helping.`;
         const url = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(message)}`;
         Linking.openURL(url).catch(() =>
-            Alert.alert('Cannot Open WhatsApp', 'WhatsApp is not installed on this device.')
+            showModal({
+                title: 'Cannot Open WhatsApp',
+                description: 'WhatsApp is not installed on this device.',
+                type: 'error',
+                primaryText: 'OK'
+            })
         );
     };
 
@@ -98,13 +114,14 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             {
                 context: 'DonorHelpDetail > handleInterest',
                 errorTitle: 'Could Not Send Request',
-                allowRetry: true,
-                guard: () => !actionLoading,
+                showModal,
                 onSuccess: () =>
-                    Alert.alert(
-                        'Request Sent ✓',
-                        'The requester has been notified. You will see their contact details once they accept.'
-                    ),
+                    showModal({
+                        title: 'Request Sent ✓',
+                        description: 'The requester has been notified. You will see their contact details once they accept.',
+                        type: 'success',
+                        primaryText: 'OK'
+                    }),
             }
         );
         setActionLoading(false);
@@ -112,32 +129,35 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
     const handleComplete = async () => {
         if (!currentUser) return;
-        Alert.alert(
-            'Confirm Donation',
-            'Have you successfully donated blood? This will start your 90-day recovery period.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Yes, I Donated',
-                    onPress: async () => {
-                        setActionLoading(true);
-                        await safeRun(
-                            () => completeDonation(requestId, currentUser.uid),
-                            {
-                                context: 'DonorHelpDetail > handleComplete',
-                                errorTitle: 'Could Not Mark Donation',
-                                allowRetry: true,
-                                onSuccess: () => {
-                                    Alert.alert('Thank You! 🩸', 'You saved a life! You are now in your 90-day recovery window.');
-                                    navigation.replace('DonorDashboard');
-                                },
-                            }
-                        );
-                        setActionLoading(false);
-                    },
-                },
-            ]
-        );
+        showModal({
+            title: 'Confirm Donation',
+            description: 'Have you successfully donated blood? This will start your 90-day recovery period.',
+            type: 'info',
+            primaryText: 'Yes, I Donated',
+            onPrimaryPress: async () => {
+                setActionLoading(true);
+                await safeRun(
+                    () => completeDonation(requestId, currentUser.uid),
+                    {
+                        context: 'DonorHelpDetail > handleComplete',
+                        errorTitle: 'Could Not Mark Donation',
+                        allowRetry: true,
+                        showModal,
+                        onSuccess: () => {
+                            showModal({
+                                title: 'Thank You! 🩸',
+                                description: 'You saved a life! You are now in your 90-day recovery window.',
+                                type: 'success',
+                                primaryText: 'Finish',
+                                onPrimaryPress: () => navigation.replace('DonorDashboard')
+                            });
+                        },
+                    }
+                );
+                setActionLoading(false);
+            },
+            secondaryText: 'Cancel'
+        });
     };
 
     return (
