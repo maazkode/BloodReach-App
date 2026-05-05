@@ -3,7 +3,8 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../App';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument } from '../services/firestoreService';
+import { getUserDocument, updateUserLocation } from '../services/firestoreService';
+import { getFullLocationData } from '../services/locationService';
 import { Colors } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
@@ -25,13 +26,16 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 // Location Refresh Logic (Refresh if older than 6 hours)
                 if (profile) {
                     const now = Date.now();
-                    const lastUpdate = profile.locationUpdatedAt ? (profile.locationUpdatedAt as any).toMillis() : 0;
+                    let lastUpdate = 0;
+                    if (profile.locationUpdatedAt) {
+                        const ts = profile.locationUpdatedAt as any;
+                        if (typeof ts.toMillis === 'function') lastUpdate = ts.toMillis();
+                        else if (typeof ts.toDate === 'function') lastUpdate = ts.toDate().getTime();
+                    }
                     const hoursSinceUpdate = (now - lastUpdate) / (1000 * 60 * 60);
 
                     if (hoursSinceUpdate > 6) {
                         try {
-                            const { getFullLocationData } = require('../services/locationService');
-                            const { updateUserLocation } = require('../services/firestoreService');
                             const locData = await getFullLocationData();
                             await updateUserLocation(user.uid, {
                                 latitude: locData.latitude,
@@ -48,9 +52,9 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
                 if (profile && profile.roles) {
                     if (profile.roles.includes('donor')) {
-                        navigation.replace('DonorDashboard');
+                        navigation.replace('DonorDashboard', { tab: 'home' });
                     } else {
-                        navigation.replace('RequesterDashboard');
+                        navigation.replace('RequesterDashboard', { tab: 'home' });
                     }
                 } else {
                     // No Firestore document, send to unified registration
