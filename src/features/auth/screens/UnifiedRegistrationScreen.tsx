@@ -42,7 +42,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     const [phone, setPhone] = useState('');
     const [bloodGroup, setBloodGroup] = useState('');
     const [address, setAddress] = useState('');
-    const [manualAddress, setManualAddress] = useState('');
+
 
     // Optional Fields
     const [age, setAge] = useState('');
@@ -88,7 +88,12 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
         return () => backHandler.remove();
     }, [navigation, showModal]);
 
-    const validateForm = () => {
+    const handleDateChange = React.useCallback((event: any, selectedDate?: Date) => {
+        setShowDatePicker(false);
+        if (selectedDate) setLastDonationDate(selectedDate);
+    }, []);
+
+    const validateForm = React.useCallback(() => {
         let tempErrors: { [key: string]: string } = {};
         if (!name.trim()) tempErrors.name = 'Full name is required';
         if (!phone.trim()) tempErrors.phone = 'Phone number is required';
@@ -99,16 +104,16 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
         if (!locationData) {
             showModal({
                 title: 'Location Required',
-                description: 'Please detect your location or enter it manually to proceed.',
+                description: 'Please detect your location using the Fetch button, or ensure your typed address is fully typed and verified.',
                 type: 'warning',
                 primaryText: 'Got it'
             });
             return false;
         }
         return Object.keys(tempErrors).length === 0;
-    };
+    }, [name, phone, bloodGroup, address, locationData, showModal]);
 
-    const handleFetchLocation = async () => {
+    const handleFetchLocation = React.useCallback(async () => {
         setFetchingLocation(true);
         try {
             const data = await getFullLocationData();
@@ -117,53 +122,48 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 setAddress(data.address);
             }
         } catch (error: any) {
-            Alert.alert('Detection Failed', error.message || 'Could not detect location');
-        } finally {
-            setFetchingLocation(false);
-        }
-    };
-
-    const handleAutoDetect = handleFetchLocation;
-
-    const handleManualLocate = async () => {
-        if (!address.trim()) {
-            Alert.alert('Error', 'Please enter an address or city name');
-            return;
-        }
-
-        setIsDetecting(true);
-        try {
-            const result = await forwardGeocode(manualAddress);
-            if (result) {
-                const hash = geohashForLocation([result.latitude, result.longitude]);
-                setLocationData({
-                    latitude: result.latitude,
-                    longitude: result.longitude,
-                    geohash: hash,
-                    address: result.address
-                });
-                setAddress(result.address);
-            } else {
-                showModal({
-                    title: 'Not Found',
-                    description: 'Could not find coordinates for this address.',
-                    type: 'error',
-                    primaryText: 'Try Again'
-                });
-            }
-        } catch (error) {
             showModal({
-                title: 'Error',
-                description: 'Something went wrong while locating.',
+                title: 'Detection Failed',
+                description: error.message || 'Could not detect location. Please type your address manually.',
                 type: 'error',
                 primaryText: 'OK'
             });
         } finally {
-            setIsDetecting(false);
+            setFetchingLocation(false);
         }
-    };
+    }, [showModal]);
 
-    const handleRegister = async () => {
+    // Debounced manual location lookup
+    useEffect(() => {
+        if (!address.trim() || locationData?.address === address) return;
+
+        const delayDebounceFn = setTimeout(async () => {
+            setIsDetecting(true);
+            try {
+                const result = await forwardGeocode(address);
+                if (result) {
+                    const hash = geohashForLocation([result.latitude, result.longitude]);
+                    setLocationData({
+                        latitude: result.latitude,
+                        longitude: result.longitude,
+                        geohash: hash,
+                        address: result.address
+                    });
+                    // We don't overwrite address here so the user can continue typing
+                } else {
+                    setLocationData(null);
+                }
+            } catch (error) {
+                setLocationData(null);
+            } finally {
+                setIsDetecting(false);
+            }
+        }, 1500);
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [address]);
+
+    const handleRegister = React.useCallback(async () => {
         if (!validateForm()) return;
 
         setLoading(true);
@@ -175,7 +175,6 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
             const roles = isAvailable ? ['donor', 'requester'] : ['requester'];
             const lastActiveRole = isAvailable ? 'donor' : 'requester';
 
-            // 90-day eligibility check
             let isEligible = true;
             let cooldownUntil: Timestamp | null = null;
             if (lastDonationDate) {
@@ -183,16 +182,9 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 const cooldownDate = new Date(lastDonationDate);
                 cooldownDate.setDate(cooldownDate.getDate() + 90);
 
-                console.log('[Registration] Last Donation:', lastDonationDate.toDateString());
-                console.log('[Registration] Cooldown Until:', cooldownDate.toDateString());
-                console.log('[Registration] Today:', now.toDateString());
-
                 if (now < cooldownDate) {
                     isEligible = false;
                     cooldownUntil = Timestamp.fromDate(cooldownDate);
-                    console.log('[Registration] Donor is INELIGIBLE');
-                } else {
-                    console.log('[Registration] Donor is ELIGIBLE');
                 }
             }
 
@@ -201,26 +193,22 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 name,
                 phone,
                 bloodGroup,
-                city: address.split(',')[0].trim(), // Extract first part as city for compatibility
+                city: address.split(',')[0].trim(),
                 address: address,
                 age: age ? Number(age) : undefined,
                 gender: gender || undefined,
-                isAvailable: isEligible ? isAvailable : false, // Force false if ineligible
+                isAvailable: isEligible ? isAvailable : false,
                 isEligibleToDonate: isEligible,
                 donationCooldownUntil: cooldownUntil,
                 roles: roles,
                 lastActiveRole: lastActiveRole as 'donor' | 'requester',
                 lastDonationDate: lastDonationDate ? Timestamp.fromDate(lastDonationDate) : null,
                 fcmToken: (await getFCMToken()) || undefined,
-
-                // locationData.address might be more precise if geocoded
                 location: {
                     latitude: locationData.latitude,
                     longitude: locationData.longitude,
                     geohash: locationData.geohash,
                 },
-
-                // System / Placeholders for removed fields
                 email: currentUser.email || '',
                 photoURL: currentUser.photoURL || '',
                 isVerified: false,
@@ -229,7 +217,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
             };
 
             await createUserDocument(userData);
-            navigation.replace(roles.includes('donor') ? 'DonorDashboard' : 'RequesterDashboard');
+            navigation.replace(roles.includes('donor') ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'home' });
         } catch (error: any) {
             console.error('Registration Error:', error);
             showModal({
@@ -241,7 +229,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [validateForm, name, phone, bloodGroup, address, age, gender, isAvailable, lastDonationDate, locationData, navigation, showModal]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -272,10 +260,6 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-                    <View style={styles.brandingSection}>
-                        <Text style={styles.mainTitle}>Join the Community</Text>
-                        <Text style={styles.subtitle}>Enter details to save lives or request help.</Text>
-                    </View>
 
                     <View style={styles.card}>
                         <Text style={styles.sectionTitle}>Required Information</Text>
@@ -334,12 +318,22 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                                     )}
                                 </TouchableOpacity>
                             </View>
-                            {locationData && (
+                            {isDetecting ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                                    <ActivityIndicator size="small" color="#94A3B8" />
+                                    <Text style={{ fontSize: 11, color: '#94A3B8', marginLeft: 4, fontWeight: '500' }}>Verifying address...</Text>
+                                </View>
+                            ) : locationData ? (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
                                     <MaterialIcon name="check-circle" size={14} color="#10B981" />
                                     <Text style={{ fontSize: 11, color: '#10B981', marginLeft: 4, fontWeight: '600' }}>Location Verified</Text>
                                 </View>
-                            )}
+                            ) : address.length > 3 ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                                    <MaterialIcon name="error" size={14} color="#F59E0B" />
+                                    <Text style={{ fontSize: 11, color: '#F59E0B', marginLeft: 4, fontWeight: '600' }}>Location unverified. Keep typing or use Fetch.</Text>
+                                </View>
+                            ) : null}
                             {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
                         </View>
 
@@ -456,10 +450,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                     mode="date"
                     display="default"
                     maximumDate={new Date()}
-                    onChange={(event, selectedDate) => {
-                        setShowDatePicker(false);
-                        if (selectedDate) setLastDonationDate(selectedDate);
-                    }}
+                    onChange={handleDateChange}
                 />
             )}
         </SafeAreaView>
@@ -472,11 +463,8 @@ const styles = StyleSheet.create({
     backButton: { position: 'absolute', left: 16 },
     headerTitle: { fontSize: 18, fontWeight: '800', color: Colors.primary },
     scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
-    brandingSection: { alignItems: 'center', marginVertical: 30 },
     logoContainer: { width: 60, height: 60, backgroundColor: '#FEE2E2', borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-    mainTitle: { fontSize: 24, fontWeight: 'bold', color: '#1E293B' },
-    subtitle: { fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 8, paddingHorizontal: 20 },
-    card: { backgroundColor: 'white', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+    card: { backgroundColor: 'white', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, marginTop: 20 },
     sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1E293B', marginBottom: 16 },
     inputGroup: { marginBottom: 16 },
     label: { fontSize: 13, fontWeight: '600', color: '#475569', marginBottom: 6 },
@@ -493,50 +481,7 @@ const styles = StyleSheet.create({
     registerButtonText: { color: 'white', fontSize: 16, fontWeight: '700' },
     errorText: { color: Colors.error, fontSize: 11, marginTop: 4 },
 
-    // Location Styles
-    locationSection: { marginVertical: 10 },
-    locationActions: { marginTop: 10 },
-    detectButton: {
-        backgroundColor: Colors.primary,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: 48,
-        borderRadius: 12,
-        shadowColor: Colors.primary,
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 3
-    },
-    detectButtonText: { color: 'white', fontWeight: 'bold', marginLeft: 8 },
-    manualInputRow: { flexDirection: 'row', alignItems: 'center' },
-    locateButton: {
-        backgroundColor: Colors.primary,
-        width: 48,
-        height: 48,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginLeft: 8
-    },
-    toggleModeButton: { marginTop: 12, alignItems: 'center' },
-    toggleModeText: { color: '#64748B', fontSize: 13, textDecorationLine: 'underline' },
-    capturedLocation: {
-        backgroundColor: '#F0FDF4',
-        borderRadius: 12,
-        padding: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderWidth: 1,
-        borderColor: '#BBF7D0'
-    },
-    locationInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    locationTextContainer: { marginLeft: 10, flex: 1 },
-    locationFoundTitle: { fontSize: 13, fontWeight: 'bold', color: '#065F46' },
-    capturedAddress: { fontSize: 12, color: '#047857', marginTop: 2 },
-    retryLocation: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#DCFCE7', borderRadius: 8 },
-    retryText: { fontSize: 12, fontWeight: 'bold', color: '#059669' },
+
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalContent: { backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24 },

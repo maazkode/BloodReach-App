@@ -64,6 +64,7 @@ const RootNavigator = () => {
     return unsubscribe;
   }, [user]);
 
+
   if (loading) {
     return <SplashScreen />;
   }

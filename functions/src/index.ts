@@ -43,11 +43,9 @@ export const onNewBloodRequest = onDocumentCreated(
       const promises = [];
 
       for (const b of bounds) {
+        // Query ONLY by geohash to avoid complex composite index failures in Firebase.
+        // All other filtering is done in-memory.
         const q = admin.firestore().collection("users")
-          .where("roles", "array-contains", "donor")
-          .where("isAvailable", "==", true)
-          .where("isEligibleToDonate", "==", true)
-          .where("bloodGroup", "==", bloodGroup)
           .orderBy("location.geohash")
           .startAt(b[0])
           .endAt(b[1]);
@@ -58,6 +56,7 @@ export const onNewBloodRequest = onDocumentCreated(
       // 2. Fetch all potential donors in geohash ranges
       const snapshots = await Promise.all(promises);
       const tokens: string[] = [];
+      const userIdsForTokens: string[] = [];
       const processedUids = new Set<string>();
 
       for (const snap of snapshots) {
@@ -69,8 +68,15 @@ export const onNewBloodRequest = onDocumentCreated(
           if (processedUids.has(donorId)) continue;
           processedUids.add(donorId);
 
-          // Skip if it's the requester themselves
-          if (donorId === requestData.requesterId) continue;
+          // IN-MEMORY FILTERS (Prevents Firestore 'Index Required' errors)
+          if (!donorData.roles || !donorData.roles.includes("donor")) continue;
+          if (donorData.isAvailable !== true) continue;
+          if (donorData.isEligibleToDonate !== true) continue;
+          if (donorData.bloodGroup !== bloodGroup) continue;
+
+          // Skip if it's the requester themselves 
+          // (COMMENTED OUT FOR TESTING: uncomment in production so users don't ping themselves)
+          // if (donorId === requestData.requesterId) continue;
 
           // Verify exact distance (geohash bounds are a square, we want a circle)
           const donorLocation = donorData.location;
@@ -82,6 +88,7 @@ export const onNewBloodRequest = onDocumentCreated(
 
             if (distanceInKm <= 10 && donorData.fcmToken) {
               tokens.push(donorData.fcmToken);
+              userIdsForTokens.push(donorId);
             }
           }
         }
@@ -130,9 +137,33 @@ export const onNewBloodRequest = onDocumentCreated(
 
       logger.info(`Notification Summary: ${response.successCount} success, ${response.failureCount} failure.`);
 
-      // Optional: Clean up stale tokens if any failed
+      // 4. Clean up invalid or stale tokens to maintain database health
       if (response.failureCount > 0) {
-        logger.warn("Some tokens failed. Consider implementing token cleanup logic here.");
+        const batch = admin.firestore().batch();
+        let tokensToRemoveCount = 0;
+
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const errCode = resp.error?.code;
+            if (
+              errCode === "messaging/invalid-registration-token" ||
+              errCode === "messaging/registration-token-not-registered"
+            ) {
+              const uid = userIdsForTokens[idx];
+              const userRef = admin.firestore().collection("users").doc(uid);
+              // Safely remove the stale token
+              batch.update(userRef, { fcmToken: admin.firestore.FieldValue.delete() });
+              tokensToRemoveCount++;
+            } else {
+              logger.warn(`Failed to send to token ${tokens[idx]}: ${errCode}`);
+            }
+          }
+        });
+
+        if (tokensToRemoveCount > 0) {
+          logger.info(`Removing ${tokensToRemoveCount} invalid FCM tokens from Firestore...`);
+          await batch.commit();
+        }
       }
 
     } catch (error) {

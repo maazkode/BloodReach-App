@@ -46,11 +46,11 @@ const getUrgencyColor = (level: string) => level === 'urgent' ? '#B62022' : '#D9
 const getUrgencyBg = (level: string) => level === 'urgent' ? '#FEE2E2' : '#FEF3C7';
 const getUrgencyLabel = (level: string) => level === 'urgent' ? 'EMERGENCY' : 'NEEDED';
 
-const RequestItem = React.memo(({ item, isFullWidth, isEligible, onHelpPress }: { 
-    item: DonationRequest, 
-    isFullWidth?: boolean, 
+const RequestItem = React.memo(({ item, isFullWidth, isEligible, onHelpPress }: {
+    item: DonationRequest,
+    isFullWidth?: boolean,
     isEligible: boolean,
-    onHelpPress: (item: DonationRequest) => void 
+    onHelpPress: (item: DonationRequest) => void
 }) => {
     const urgencyColor = getUrgencyColor(item.urgencyLevel);
     const urgencyBg = getUrgencyBg(item.urgencyLevel);
@@ -76,21 +76,23 @@ const RequestItem = React.memo(({ item, isFullWidth, isEligible, onHelpPress }: 
                 {item.hospitalName || 'Unknown Hospital'}
             </Text>
 
-            <Text style={styles.unifiedSubtext} numberOfLines={1}>
-                For {item.patientName || 'Patient'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <Text style={[styles.unifiedSubtext, { marginBottom: 0, flexShrink: 1, marginRight: 8 }]} numberOfLines={1}>
+                    For {item.patientName || 'Patient'}
+                </Text>
+                <View style={styles.unitPill}>
+                    <MaterialCommunityIcon name="water" size={12} color="#B62022" />
+                    <Text style={styles.unitPillText}>
+                        {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''}
+                    </Text>
+                </View>
+            </View>
 
             <View style={styles.unifiedMetaRow}>
                 <View style={styles.metaItem}>
                     <MaterialIcon name="location-on" size={14} color="#94A3B8" />
                     <Text style={styles.metaText} numberOfLines={1}>
                         {item.city || 'Location'}
-                    </Text>
-                </View>
-                <View style={styles.unitPill}>
-                    <MaterialCommunityIcon name="water" size={12} color="#B62022" />
-                    <Text style={styles.unitPillText}>
-                        {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''}
                     </Text>
                 </View>
             </View>
@@ -114,17 +116,23 @@ const HistoryItem = React.memo(({ match, onPress }: { match: any, onPress: () =>
             </View>
         </View>
         <Text style={styles.unifiedTitle}>{match.request?.hospitalName || 'Hospital Info'}</Text>
-        <Text style={styles.unifiedSubtext}>Donated for {match.request?.patientName || 'Patient'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={[styles.unifiedSubtext, { marginBottom: 0, flexShrink: 1, marginRight: 8 }]} numberOfLines={1}>
+                Donated for {match.request?.patientName || 'Patient'}
+            </Text>
+            <View style={styles.unitPill}>
+                <MaterialCommunityIcon name="water" size={12} color="#B62022" />
+                <Text style={styles.unitPillText}>
+                    {match.request?.unitsRequired || 1} Unit{(match.request?.unitsRequired || 1) > 1 ? 's' : ''}
+                </Text>
+            </View>
+        </View>
         <View style={styles.unifiedMetaRow}>
             <View style={styles.metaItem}>
                 <MaterialIcon name="event" size={14} color="#94A3B8" />
                 <Text style={styles.metaText}>
                     {(match.createdAt as any)?.toDate ? (match.createdAt as any).toDate().toLocaleDateString() : 'N/A'}
                 </Text>
-            </View>
-            <View style={styles.unitPill}>
-                <MaterialCommunityIcon name="check-circle" size={12} color="#16A34A" />
-                <Text style={[styles.unitPillText, { color: '#16A34A' }]}>Done</Text>
             </View>
         </View>
     </TouchableOpacity>
@@ -321,10 +329,10 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                         </View>
                         {nearbyRequests.length > 0 ? (
                             nearbyRequests.map(r => (
-                                <RequestItem 
-                                    key={r.id} 
-                                    item={r} 
-                                    isFullWidth 
+                                <RequestItem
+                                    key={r.id}
+                                    item={r}
+                                    isFullWidth
                                     isEligible={!!userData?.isEligibleToDonate}
                                     onHelpPress={handleHelpPress}
                                 />
@@ -345,10 +353,10 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                         </View>
                         {donationHistory.length > 0 ? (
                             donationHistory.map(match => (
-                                <HistoryItem 
-                                    key={match.id} 
-                                    match={match} 
-                                    onPress={() => navigation.navigate('DonorHelpDetail', { requestId: match.requestId })} 
+                                <HistoryItem
+                                    key={match.id}
+                                    match={match}
+                                    onPress={() => navigation.navigate('DonorHelpDetail', { requestId: match.requestId })}
                                 />
                             ))
                         ) : (
@@ -461,21 +469,23 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                                                     {match.request?.hospitalName || 'Loading...'}
                                                 </Text>
 
-                                                <Text style={styles.unifiedSubtext} numberOfLines={1}>
-                                                    For {match.request?.patientName || 'Patient'}
-                                                </Text>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                                                    <Text style={[styles.unifiedSubtext, { marginBottom: 0, flexShrink: 1, marginRight: 8 }]} numberOfLines={1}>
+                                                        For {match.request?.patientName || 'Patient'}
+                                                    </Text>
+                                                    <View style={styles.unitPill}>
+                                                        <MaterialCommunityIcon name="water" size={12} color="#B62022" />
+                                                        <Text style={styles.unitPillText}>
+                                                            {match.request?.unitsRequired ?? 0} Unit{(match.request?.unitsRequired ?? 0) !== 1 ? 's' : ''}
+                                                        </Text>
+                                                    </View>
+                                                </View>
 
                                                 <View style={styles.unifiedMetaRow}>
                                                     <View style={styles.metaItem}>
                                                         <MaterialIcon name="location-on" size={14} color="#94A3B8" />
                                                         <Text style={styles.metaText} numberOfLines={1}>
                                                             {match.request?.city || 'Location'}
-                                                        </Text>
-                                                    </View>
-                                                    <View style={styles.unitPill}>
-                                                        <MaterialCommunityIcon name="water" size={12} color="#B62022" />
-                                                        <Text style={styles.unitPillText}>
-                                                            {match.request?.unitsRequired ?? 0} Unit{(match.request?.unitsRequired ?? 0) !== 1 ? 's' : ''}
                                                         </Text>
                                                     </View>
                                                 </View>
@@ -508,9 +518,9 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                                         contentContainerStyle={styles.horizontalScrollContent}
                                     >
                                         {nearbyRequests.slice(0, 5).map((item: DonationRequest) => (
-                                            <RequestItem 
-                                                key={item.id} 
-                                                item={item} 
+                                            <RequestItem
+                                                key={item.id}
+                                                item={item}
                                                 isEligible={!!userData?.isEligibleToDonate}
                                                 onHelpPress={handleHelpPress}
                                             />

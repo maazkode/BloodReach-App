@@ -1,9 +1,9 @@
-import { 
-    getMessaging, 
-    getToken, 
-    onMessage, 
-    requestPermission, 
-    onNotificationOpenedApp, 
+import {
+    getMessaging,
+    requestPermission,
+    getToken,
+    onMessage,
+    onNotificationOpenedApp,
     getInitialNotification,
     AuthorizationStatus
 } from '@react-native-firebase/messaging';
@@ -12,9 +12,6 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 import { RootStackParamList } from '../../../../App';
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
-
-// Initialize Messaging Instance
-const messaging = getMessaging();
 
 export function navigate(name: keyof RootStackParamList, params?: any) {
     if (navigationRef.isReady()) {
@@ -38,6 +35,7 @@ export const requestUserPermission = async (): Promise<boolean> => {
         }
     }
     
+    const messaging = getMessaging();
     const authStatus = await requestPermission(messaging);
     const enabled =
         authStatus === AuthorizationStatus.AUTHORIZED ||
@@ -55,6 +53,7 @@ export const getFCMToken = async (): Promise<string | null> => {
         const hasPermission = await requestUserPermission();
         if (!hasPermission) return null;
 
+        const messaging = getMessaging();
         const token = await getToken(messaging);
         if (token) {
             console.log('FCM Token:', token);
@@ -71,6 +70,7 @@ export const getFCMToken = async (): Promise<string | null> => {
  * Handles foreground notifications (shows an alert)
  */
 export const subscribeToForegroundMessages = () => {
+    const messaging = getMessaging();
     return onMessage(messaging, async remoteMessage => {
         console.log('A new FCM message arrived in foreground!', remoteMessage);
         Alert.alert(
@@ -84,6 +84,8 @@ export const subscribeToForegroundMessages = () => {
  * Handles notification clicks when app is in background or quit state
  */
 export const setupNotificationHandlers = () => {
+    const messaging = getMessaging();
+
     // 1. App in Background
     onNotificationOpenedApp(messaging, remoteMessage => {
         console.log('Notification caused app to open from background state:', remoteMessage);
@@ -127,3 +129,4 @@ export const triggerLocalNotification = (title: string, body: string, requestId?
         ]
     );
 };
+

@@ -3,8 +3,9 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../App';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument, updateUserLocation } from '../services/firestoreService';
+import { getUserDocument, updateUserLocation, saveUserFCMToken } from '../services/firestoreService';
 import { getFullLocationData } from '../services/locationService';
+import { getFCMToken } from '../services/notificationService';
 import { Colors } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
@@ -47,6 +48,17 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                         } catch (locErr) {
                             console.log('[Location] Failed to update location on app start:', locErr);
                         }
+                    }
+
+                    // FCM Token Refresh
+                    try {
+                        const token = await getFCMToken();
+                        if (token && profile.fcmToken !== token) {
+                            await saveUserFCMToken(user.uid, token);
+                            console.log('[FCM] Token synced to Firestore on app start');
+                        }
+                    } catch (fcmErr) {
+                        console.log('[FCM] Failed to update token on app start:', fcmErr);
                     }
                 }
 
