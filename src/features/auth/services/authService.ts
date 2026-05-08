@@ -1,6 +1,6 @@
 import { getAuth, GoogleAuthProvider, signInWithCredential, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from '@react-native-firebase/auth';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import { log, translateError } from '../../shared/utils/errorHandler';
+import { log, translateError, isOnline } from '../../shared/utils/errorHandler';
 
 /**
  * Configure Google Sign-In with your Web Client ID from Firebase Console.
@@ -15,13 +15,22 @@ GoogleSignin.configure({
  */
 export const signInWithGoogle = async () => {
     try {
+        // 0. Check internet connectivity before doing anything
+        const online = await isOnline();
+        if (!online) {
+            // log('warn', 'Auth > signInWithGoogle', 'No internet connection detected');
+            const err: any = new Error('No internet connection. Please check your Wi-Fi or mobile data and try again.');
+            err.code = 'NO_INTERNET';
+            throw err;
+        }
+
         const auth = getAuth();
         // 1. Check for Play Services
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
         // 2. Perform Google Sign-In
         const signInResult = await GoogleSignin.signIn();
-        
+
         // 3. Extract the ID Token (Defensive Check)
         const idToken = signInResult.data?.idToken;
 
@@ -55,9 +64,9 @@ export const signInWithGoogle = async () => {
             throw new Error('Google Play Services is required for sign-in.');
         } else {
             // 6. Handle unexpected errors
-            log('error', 'Auth > signInWithGoogle', 'Unexpected Sign-In Error', { 
-                code: error?.code, 
-                message: error?.message 
+            log('error', 'Auth > signInWithGoogle', 'Unexpected Sign-In Error', {
+                code: error?.code,
+                message: error?.message
             });
             throw error;
         }

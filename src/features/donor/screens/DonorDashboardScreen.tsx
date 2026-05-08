@@ -31,7 +31,8 @@ import {
     checkAndRefreshEligibility,
     getActiveDonorMatches,
     subscribeToUser,
-    getDonorHistory
+    getDonorHistory,
+    getCompatibleBloodGroups
 } from '../../shared/services/firestoreService';
 import { UserDocument, DonationRequest } from '../../shared/types/database';
 import { signOut } from '../../auth/services/authService';
@@ -185,10 +186,15 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
         // Real-time listener for user document changes (including cooldown updates)
         const unsubUser = subscribeToUser(user.uid, (data) => {
             if (data) {
+                console.log('[Dashboard] User data updated:', {
+                    eligible: data.isEligibleToDonate,
+                    available: data.isAvailable,
+                    age: data.age
+                });
                 setUserData(data);
                 setLoadingUser(false);
             } else {
-                setLoadingUser(false); // Even if null, stop loading
+                setLoadingUser(false);
             }
         });
 
@@ -210,11 +216,16 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                 userData.bloodGroup || null,
                 (requests) => {
                     const activeRequestIds = activeHelps.map(m => m.requestId);
-                    const filtered = requests.filter(r =>
-                        r.requesterId !== user?.uid &&
-                        !activeRequestIds.includes(r.id!) &&
-                        (!userData?.bloodGroup || r.bloodGroup === userData.bloodGroup)
-                    );
+                    const filtered = requests.filter(r => {
+                        const isNotMe = r.requesterId !== user?.uid;
+                        const isNotActive = !activeRequestIds.includes(r.id!);
+                        let isCompatible = true;
+                        if (userData?.bloodGroup) {
+                            const compatible = getCompatibleBloodGroups(userData.bloodGroup);
+                            isCompatible = compatible.includes(r.bloodGroup);
+                        }
+                        return isNotMe && isNotActive && isCompatible;
+                    });
                     setNearbyRequests(filtered.slice(0, 10));
                     setLoadingRequests(false);
                 }
@@ -223,11 +234,16 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
             console.log('Subscribing to GLOBAL requests (no location)...');
             unsubscribe = subscribeToRequests((requests) => {
                 const activeRequestIds = activeHelps.map(m => m.requestId);
-                const filtered = requests.filter(r =>
-                    r.requesterId !== user?.uid &&
-                    !activeRequestIds.includes(r.id!) &&
-                    (!userData?.bloodGroup || r.bloodGroup === userData.bloodGroup)
-                );
+                const filtered = requests.filter(r => {
+                    const isNotMe = r.requesterId !== user?.uid;
+                    const isNotActive = !activeRequestIds.includes(r.id!);
+                    let isCompatible = true;
+                    if (userData?.bloodGroup) {
+                        const compatible = getCompatibleBloodGroups(userData.bloodGroup);
+                        isCompatible = compatible.includes(r.bloodGroup);
+                    }
+                    return isNotMe && isNotActive && isCompatible;
+                });
                 setNearbyRequests(filtered.slice(0, 5));
                 setLoadingRequests(false);
             });
@@ -307,7 +323,23 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
     }, []);
 
     const handleHelpPress = React.useCallback((item: DonationRequest) => {
-        if (userData?.isEligibleToDonate) {
+        if (!userData) return;
+
+        // 1. Check Age Restriction
+        if (userData.age && (userData.age < 18 || userData.age > 60)) {
+            showModal({
+                title: 'Medical Restriction',
+                description: userData.age < 18 
+                    ? 'You must be at least 18 years old to donate blood.' 
+                    : 'Donors over 60 years of age require special medical clearance and are currently restricted.',
+                type: 'error',
+                primaryText: 'Understood'
+            });
+            return;
+        }
+
+        // 2. Check Cooldown
+        if (userData.isEligibleToDonate) {
             navigation.navigate('DonorHelpDetail', { requestId: item.id! });
         } else {
             showModal({
@@ -317,7 +349,7 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                 primaryText: 'Got it'
             });
         }
-    }, [userData?.isEligibleToDonate, userData?.donationCooldownUntil, navigation, showModal, formatCooldownDate]);
+    }, [userData, navigation, showModal, formatCooldownDate]);
 
     const tabContent = React.useMemo(() => {
         switch (activeTab) {
@@ -367,127 +399,88 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                         )}
                     </View>
                 );
-            default: // home
+            default: { // home
+                const isAgeRestricted = userData?.age && (userData.age < 18 || userData.age > 60);
+                const isCooldownActive = userData?.isEligibleToDonate === false && !isAgeRestricted;
+
                 return (
                     <>
                         {/* ── Eligibility Hero Card ── */}
-                        <View style={[styles.heroCard, userData?.isEligibleToDonate === false && styles.heroCardCooldown]}>
-                            <View style={styles.unifiedCardTop}>
-                                <View style={[
-                                    styles.eligiblePill,
-                                    userData?.isEligibleToDonate === false && styles.cooldownPill
-                                ]}>
-                                    <View style={[
-                                        styles.dot,
-                                        userData?.isEligibleToDonate === false ? styles.redDot : styles.greenDot
-                                    ]} />
-                                    <Text style={styles.eligiblePillText}>
-                                        {userData?.isEligibleToDonate === false
-                                            ? 'RECOVERY MODE'
-                                            : userData?.isAvailable === true
-                                                ? 'ACTIVE'
-                                                : 'OFFLINE'}
-                                    </Text>
+                        {isAgeRestricted ? (
+                            <View style={[styles.heroCard, styles.heroCardRestricted]}>
+                                <View style={styles.unifiedCardTop}>
+                                    <View style={styles.eligiblePillRestricted}>
+                                        <MaterialIcon name="error-outline" size={14} color="#fff" style={{ marginRight: 4 }} />
+                                        <Text style={styles.eligiblePillText}>RESTRICTED</Text>
+                                    </View>
+                                    <View style={styles.bloodBadge}>
+                                        <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || '--'}</Text>
+                                    </View>
                                 </View>
-
-                                <View style={styles.bloodBadge}>
-                                    <Text style={styles.bloodBadgeText}>
-                                        {userData?.bloodGroup || 'A+'}
-                                    </Text>
-                                </View>
+                                <Text style={styles.unifiedTitleLarge}>Medical Restriction</Text>
+                                <Text style={styles.unifiedSubtextLight}>
+                                    {userData?.age! < 18 
+                                        ? "You're a bit too young to donate yet. You'll be ready once you're 18!" 
+                                        : "Donating after 60 requires specific medical conditions. Please consult a doctor."}
+                                </Text>
                             </View>
+                        ) : (
+                            <View style={[styles.heroCard, isCooldownActive && styles.heroCardCooldown]}>
+                                <View style={styles.unifiedCardTop}>
+                                    <View style={[styles.eligiblePill, isCooldownActive && styles.cooldownPill]}>
+                                        <View style={[styles.dot, isCooldownActive ? styles.redDot : styles.greenDot]} />
+                                        <Text style={styles.eligiblePillText}>
+                                            {isCooldownActive ? 'RECOVERY MODE' : (userData?.isAvailable ? 'ACTIVE' : 'OFFLINE')}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.bloodBadge}>
+                                        <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || 'A+'}</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.unifiedTitleLarge}>{isCooldownActive ? 'Take Rest & Recover' : 'Ready to Save Lives'}</Text>
+                                <Text style={styles.unifiedSubtextLight}>
+                                    {isCooldownActive
+                                        ? `Eligible again after ${userData?.donationCooldownUntil ? (userData.donationCooldownUntil as any).toDate().toLocaleDateString() : 'cooldown'}`
+                                        : 'Your donation can save up to 3 lives.'}
+                                </Text>
+                                {!isCooldownActive && (
+                                    <TouchableOpacity style={styles.heroActionBtn} activeOpacity={0.8}>
+                                        <MaterialIcon name="event-available" size={18} color="#B62022" />
+                                        <Text style={styles.heroActionBtnText}>Schedule a Donation</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
 
-                            <Text style={styles.unifiedTitleLarge}>
-                                {userData?.isEligibleToDonate === false
-                                    ? 'Take Rest & Recover'
-                                    : 'Ready to Save Lives'}
-                            </Text>
-
-                            <Text style={styles.unifiedSubtextLight}>
-                                {userData?.isEligibleToDonate === false
-                                    ? `Eligible again after ${userData?.donationCooldownUntil
-                                        ? (userData.donationCooldownUntil as any).toDate().toLocaleDateString()
-                                        : 'cooldown'
-                                    }`
-                                    : 'Your donation can save up to 3 lives.'}
-                            </Text>
-
-                            {userData?.isEligibleToDonate === true && (
-                                <TouchableOpacity style={styles.heroActionBtn} activeOpacity={0.8}>
-                                    <MaterialIcon name="event-available" size={18} color="#B62022" />
-                                    <Text style={styles.heroActionBtnText}>Schedule a Donation</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-
-                        {/* ── Active Helps (Ongoing Donations) ── */}
+                        {/* ── Active Helps ── */}
                         {activeHelps.length > 0 && (
                             <View style={{ marginBottom: 20 }}>
                                 <View style={styles.sectionHeader}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                         <Text style={styles.sectionTitle}>Active Helps</Text>
-                                        <View style={styles.countBadge}>
-                                            <Text style={styles.countBadgeText}>{activeHelps.length}</Text>
-                                        </View>
+                                        <View style={styles.countBadge}><Text style={styles.countBadgeText}>{activeHelps.length}</Text></View>
                                     </View>
                                 </View>
-
-                                <ScrollView
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    contentContainerStyle={styles.horizontalScrollContent}
-                                >
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
                                     {activeHelps.map((match) => {
                                         const isAccepted = match.status === 'accepted';
                                         return (
-                                            <TouchableOpacity
-                                                key={match.id}
-                                                style={styles.unifiedCardHorizontal}
-                                                activeOpacity={0.82}
-                                                onPress={() => navigation.navigate('DonorHelpDetail', { requestId: match.requestId })}
-                                            >
+                                            <TouchableOpacity key={match.id} style={styles.unifiedCardHorizontal} activeOpacity={0.82} onPress={() => navigation.navigate('DonorHelpDetail', { requestId: match.requestId })}>
                                                 <View style={styles.unifiedCardTop}>
-                                                    <View style={styles.bloodBadge}>
-                                                        <Text style={styles.bloodBadgeText}>
-                                                            {match.request?.bloodGroup || '--'}
-                                                        </Text>
-                                                    </View>
-                                                    <View style={[
-                                                        styles.statusPill,
-                                                        { backgroundColor: isAccepted ? '#DCFCE7' : '#F1F5F9' },
-                                                    ]}>
-                                                        <Text style={[
-                                                            styles.statusPillText,
-                                                            { color: isAccepted ? '#16A34A' : '#64748B' },
-                                                        ]}>
-                                                            {(match.status ?? 'pending').toUpperCase()}
-                                                        </Text>
+                                                    <View style={styles.bloodBadge}><Text style={styles.bloodBadgeText}>{match.request?.bloodGroup || '--'}</Text></View>
+                                                    <View style={[styles.statusPill, { backgroundColor: isAccepted ? '#DCFCE7' : '#F1F5F9' }]}>
+                                                        <Text style={[styles.statusPillText, { color: isAccepted ? '#16A34A' : '#64748B' }]}>{(match.status ?? 'pending').toUpperCase()}</Text>
                                                     </View>
                                                 </View>
-
-                                                <Text style={styles.unifiedTitle} numberOfLines={1}>
-                                                    {match.request?.hospitalName || 'Loading...'}
-                                                </Text>
-
+                                                <Text style={styles.unifiedTitle} numberOfLines={1}>{match.request?.hospitalName || 'Loading...'}</Text>
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                                                    <Text style={[styles.unifiedSubtext, { marginBottom: 0, flexShrink: 1, marginRight: 8 }]} numberOfLines={1}>
-                                                        For {match.request?.patientName || 'Patient'}
-                                                    </Text>
+                                                    <Text style={[styles.unifiedSubtext, { marginBottom: 0, flexShrink: 1, marginRight: 8 }]} numberOfLines={1}>For {match.request?.patientName || 'Patient'}</Text>
                                                     <View style={styles.unitPill}>
-                                                        <MaterialCommunityIcon name="water" size={12} color="#B62022" />
-                                                        <Text style={styles.unitPillText}>
-                                                            {match.request?.unitsRequired ?? 0} Unit{(match.request?.unitsRequired ?? 0) !== 1 ? 's' : ''}
-                                                        </Text>
+                                                        <MaterialCommunityIcon name="water" size={12} color="#B62022" /><Text style={styles.unitPillText}>{match.request?.unitsRequired ?? 0} Unit{(match.request?.unitsRequired ?? 0) !== 1 ? 's' : ''}</Text>
                                                     </View>
                                                 </View>
-
                                                 <View style={styles.unifiedMetaRow}>
-                                                    <View style={styles.metaItem}>
-                                                        <MaterialIcon name="location-on" size={14} color="#94A3B8" />
-                                                        <Text style={styles.metaText} numberOfLines={1}>
-                                                            {match.request?.city || 'Location'}
-                                                        </Text>
-                                                    </View>
+                                                    <View style={styles.metaItem}><MaterialIcon name="location-on" size={14} color="#94A3B8" /><Text style={styles.metaText} numberOfLines={1}>{match.request?.city || 'Location'}</Text></View>
                                                 </View>
                                             </TouchableOpacity>
                                         );
@@ -497,45 +490,28 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                         )}
 
                         {/* ── Nearby Requests ── */}
-                        {userData?.isEligibleToDonate !== false && (
+                        {(!isCooldownActive && !isAgeRestricted) && (
                             <>
                                 <View style={styles.sectionHeader}>
                                     <Text style={styles.sectionTitle}>Nearby Requests</Text>
-                                    <TouchableOpacity onPress={() => setActiveTab('requests')}>
-                                        <Text style={styles.seeAllText}>See All</Text>
-                                    </TouchableOpacity>
+                                    <TouchableOpacity onPress={() => setActiveTab('requests')}><Text style={styles.seeAllText}>See All</Text></TouchableOpacity>
                                 </View>
-
                                 {loadingRequests ? (
-                                    <View style={styles.loadingBox}>
-                                        <ActivityIndicator size="small" color="#B62022" />
-                                        <Text style={styles.loadingText}>Finding requests near you...</Text>
-                                    </View>
+                                    <View style={styles.loadingBox}><ActivityIndicator size="small" color="#B62022" /><Text style={styles.loadingText}>Finding requests near you...</Text></View>
                                 ) : nearbyRequests.length > 0 ? (
-                                    <ScrollView
-                                        horizontal
-                                        showsHorizontalScrollIndicator={false}
-                                        contentContainerStyle={styles.horizontalScrollContent}
-                                    >
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
                                         {nearbyRequests.slice(0, 5).map((item: DonationRequest) => (
-                                            <RequestItem
-                                                key={item.id}
-                                                item={item}
-                                                isEligible={!!userData?.isEligibleToDonate}
-                                                onHelpPress={handleHelpPress}
-                                            />
+                                            <RequestItem key={item.id} item={item} isEligible={!!userData?.isEligibleToDonate} onHelpPress={handleHelpPress} />
                                         ))}
                                     </ScrollView>
                                 ) : (
-                                    <View style={styles.emptyBox}>
-                                        <MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" />
-                                        <Text style={styles.emptyText}>No active requests nearby</Text>
-                                    </View>
+                                    <View style={styles.emptyBox}><MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" /><Text style={styles.emptyText}>No active requests nearby</Text></View>
                                 )}
                             </>
                         )}
                     </>
                 );
+            }
         }
     }, [activeTab, nearbyRequests, donationHistory, userData, activeHelps, loadingRequests]);
 
@@ -779,6 +755,17 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(255,255,255,0.15)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 20,
+    },
+    heroCardRestricted: {
+        backgroundColor: '#475569', // Distinct slate color for permanent/age restriction
+    },
+    eligiblePillRestricted: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(245,158,11,0.25)', // Amber tint
         paddingHorizontal: 10,
         paddingVertical: 5,
         borderRadius: 20,

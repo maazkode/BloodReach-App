@@ -38,6 +38,23 @@ export const getDistance = (
     return distanceBetween([lat1, lng1], [lat2, lng2]);
 };
 
+/**
+ * Returns a list of blood groups that a specific donor blood group can donate to.
+ */
+export const getCompatibleBloodGroups = (donorGroup: string): string[] => {
+    const compatibilityMap: Record<string, string[]> = {
+        'O-': ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'],
+        'O+': ['O+', 'A+', 'B+', 'AB+'],
+        'A-': ['A-', 'A+', 'AB-', 'AB+'],
+        'A+': ['A+', 'AB+'],
+        'B-': ['B-', 'B+', 'AB-', 'AB+'],
+        'B+': ['B+', 'AB+'],
+        'AB-': ['AB-', 'AB+'],
+        'AB+': ['AB+'],
+    };
+    return compatibilityMap[donorGroup] || [donorGroup];
+};
+
 // ─── USER SERVICE ─────────────────────────────────────
 
 /**
@@ -92,6 +109,51 @@ export const createUserDocument = async (
                 : (existingData?.lastDonationDate ?? null),
             updatedAt: serverTimestamp(),
         };
+
+        // Age Restriction Check (18-60)
+        const finalAge = userData.age ?? existingData?.age;
+        if (finalAge && (finalAge < 18 || finalAge > 60)) {
+            dataToSave.isEligibleToDonate = false;
+            dataToSave.isAvailable = false;
+            // No cooldown needed if restricted by age
+        }
+
+        // ─── GUARANTEED COOLDOWN RE-CALCULATION ───
+        const lastDonation = dataToSave.lastDonationDate;
+        if (lastDonation) {
+            const lastDate = (lastDonation as Timestamp).toDate();
+            const now = new Date();
+            const cooldownDate = new Date(lastDate);
+            cooldownDate.setDate(lastDate.getDate() + 90);
+
+            if (now < cooldownDate) {
+                // Still in medical cooldown
+                dataToSave.isEligibleToDonate = false;
+                dataToSave.isAvailable = false;
+                dataToSave.donationCooldownUntil = Timestamp.fromDate(cooldownDate);
+                console.log(`[Firestore] Cooldown ACTIVE until: ${cooldownDate.toDateString()}`);
+            } else if (!finalAge || (finalAge >= 18 && finalAge <= 60)) {
+                // Cooldown expired and age is valid
+                dataToSave.isEligibleToDonate = true;
+                dataToSave.isAvailable = true;
+                dataToSave.donationCooldownUntil = null;
+                console.log('[Firestore] Cooldown EXPIRED. User is now ACTIVE.');
+            }
+        } else {
+            // No donation history
+            if (!finalAge || (finalAge >= 18 && finalAge <= 60)) {
+                dataToSave.isEligibleToDonate = true;
+                dataToSave.isAvailable = true;
+                dataToSave.donationCooldownUntil = null;
+            }
+        }
+
+        console.log('[Firestore] Saving Final User State:', {
+            uid: userData.uid,
+            eligible: dataToSave.isEligibleToDonate,
+            available: dataToSave.isAvailable,
+            cooldownUntil: dataToSave.donationCooldownUntil?.toDate?.() || null
+        });
 
         if (!snap.exists()) {
             dataToSave.createdAt = serverTimestamp();
@@ -258,12 +320,14 @@ export const subscribeToNearbyRequests = (
                 ...doc.data()
             } as DonationRequest));
             
-            // Further filter by exact distance AND blood group
+            // Blood Group Compatibility Match
             const filtered = requests.filter((r: DonationRequest) => {
                 if (!r.location?.latitude || !r.location?.longitude) return false;
                 
-                // Blood Group Match
-                if (bloodGroup && r.bloodGroup !== bloodGroup) return false;
+                if (bloodGroup) {
+                    const compatibleGroups = getCompatibleBloodGroups(bloodGroup);
+                    if (!compatibleGroups.includes(r.bloodGroup)) return false;
+                }
 
                 const distance = getDistance(lat, lng, r.location.latitude, r.location.longitude);
                 return distance <= radiusKm;

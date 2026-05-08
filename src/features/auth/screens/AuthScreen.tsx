@@ -63,22 +63,33 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
                     }
 
                     if (profile.roles && profile.roles.includes('donor')) {
-                        navigation.replace('DonorDashboard');
+                        navigation.replace('DonorDashboard', {});
                     } else {
-                        navigation.replace('RequesterDashboard');
+                        navigation.replace('RequesterDashboard', {});
                     }
                 } else {
                     navigation.replace('UnifiedRegistration');
                 }
             }
         } catch (error: any) {
+            // Show a specific modal for no internet — checked before sign-in dialog opens
+            if (error?.code === 'NO_INTERNET') {
+                showModal({
+                    title: 'No Internet Connection',
+                    description: 'Please check your Wi-Fi or mobile data and try again.',
+                    type: 'error',
+                    primaryText: 'OK',
+                });
+                return;
+            }
+
             // Ignore cancellation or in-progress errors to prevent annoying modals
-            const isCancelled = 
-                error?.code === 'SIGN_IN_CANCELLED' || 
+            const isCancelled =
+                error?.code === 'SIGN_IN_CANCELLED' ||
                 error?.code === '7' || // Common code for sign-in cancelled
                 error?.code === '12501' || // Google Play Services cancellation code
                 error?.code === 'DEVELOPER_ERROR' || // Often happens if config is valid but user backs out
-                (error?.message?.toLowerCase().includes('google sign-in') && !error?.code) || 
+                (error?.message?.toLowerCase().includes('google sign-in') && !error?.code) ||
                 error?.message?.toLowerCase().includes('cancel') ||
                 error?.message?.toLowerCase().includes('interrupted') ||
                 error?.message?.toLowerCase().includes('id token') ||

@@ -1,313 +1,384 @@
 import React from 'react';
 import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StatusBar,
-  Image,
-  ActivityIndicator,
+    StyleSheet,
+    View,
+    Text,
+    TouchableOpacity,
+    ScrollView,
+    StatusBar,
+    Image,
+    ActivityIndicator,
+    Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+import LinearGradient from 'react-native-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../App';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument, subscribeToUser } from '../services/firestoreService';
+import { subscribeToUser } from '../services/firestoreService';
 import { UserDocument } from '../types/database';
-import { signOut } from '../../auth/services/authService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
+const { width } = Dimensions.get('window');
+const capitalize = (s?: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '—');
 
-const ProfileScreen: React.FC<Props> = ({ navigation }) => {
-  const insets = useSafeAreaInsets();
-  const { user } = useAuth();
-  const [userData, setUserData] = React.useState<UserDocument | null>(null);
-  const [loadingUser, setLoadingUser] = React.useState(true);
+// ─── Info Row ──────────────────────────────────────────────────────────────
 
-  React.useEffect(() => {
-    if (!user) return;
-    const unsub = subscribeToUser(user.uid, (data) => {
-      setUserData(data);
-      setLoadingUser(false);
-    });
-    return () => unsub();
-  }, [user]);
-
-  const handleLogout = async () => {
-    try {
-      await signOut();
-    } catch (e) {
-      console.error('Logout error:', e);
-    }
-  };
-
-  const goHome = () => {
-    if (userData?.lastActiveRole === 'donor') navigation.navigate('DonorDashboard');
-    else navigation.navigate('RequesterDashboard');
-  };
-
-  if (loadingUser) {
-    return (
-      <View style={styles.loadingContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <ActivityIndicator size="large" color="#B62022" />
-        <Text style={styles.loadingSyncText}>Synchronizing your profile...</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
-          <MaterialIcon name="arrow-back" size={24} color="#0F172A" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity style={styles.iconBtn}>
-          <MaterialIcon name="settings" size={24} color="#0F172A" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 110 }]}
-      >
-        <View style={styles.profileTop}>
-          <View style={styles.avatarWrap}>
-            <Image
-              source={{ uri: userData?.photoURL || 'https://i.pravatar.cc/200?u=bloodreach' }}
-              style={styles.avatar}
-            />
-            <TouchableOpacity style={styles.avatarEditBtn}>
-              <MaterialIcon name="edit" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.nameText}>{userData?.name || 'User'}</Text>
-          <Text style={styles.emailText}>{user?.email || 'user@bloodreach.com'}</Text>
-
-          <View style={styles.bloodPill}>
-            <MaterialIcon name="water-drop" size={16} color="#FFFFFF" />
-            <Text style={styles.bloodPillText}>{(userData?.bloodGroup || '--') + ' POSITIVE'}</Text>
-          </View>
+const InfoRow: React.FC<{
+    icon: string;
+    iconLib?: 'material' | 'community';
+    label: string;
+    value: string;
+    iconBg: string;
+    iconColor: string;
+    isLast?: boolean;
+}> = ({ icon, iconLib = 'community', label, value, iconBg, iconColor, isLast }) => (
+    <View style={[styles.infoRow, !isLast && styles.infoRowBorder]}>
+        <View style={[styles.infoIconBox, { backgroundColor: iconBg }]}>
+            {iconLib === 'material' ? (
+                <MaterialIcon name={icon as any} size={20} color={iconColor} />
+            ) : (
+                <MaterialCommunityIcon name={icon as any} size={20} color={iconColor} />
+            )}
         </View>
-
-        <View style={styles.statsCard}>
-          <View style={styles.statCol}>
-            <Text style={styles.statValue}>12</Text>
-            <Text style={styles.statLabel}>DONATIONS</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statCol}>
-            <Text style={styles.statValue}>36L</Text>
-            <Text style={styles.statLabel}>SAVED LIFE</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statCol}>
-            <Text style={styles.statValue}>Gold</Text>
-            <Text style={styles.statLabel}>BADGE</Text>
-          </View>
+        <View style={styles.infoText}>
+            <Text style={styles.infoLabel}>{label}</Text>
+            <Text style={styles.infoValue}>{value}</Text>
         </View>
-
-        <View style={styles.menuCard}>
-          <MenuRow icon="person" label="Personal Info" onPress={() => {}} />
-          <MenuRow icon="history" label="Donation History" onPress={() => {}} />
-          <MenuRow icon="edit" label="Edit Profile" onPress={() => {}} />
-          <MenuRow icon="security" label="Security & Privacy" onPress={() => {}} />
-          <View style={styles.menuDivider} />
-          <MenuRow icon="logout" label="Logout" onPress={handleLogout} danger />
-        </View>
-
-        <View style={styles.referCard}>
-          <Text style={styles.referTitle}>Refer a Donor</Text>
-          <Text style={styles.referSub}>
-            Invite friends to join BloodReach and save more lives together.
-          </Text>
-          <TouchableOpacity style={styles.inviteBtn}>
-            <Text style={styles.inviteBtnText}>Invite Friends</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      <View style={[styles.bottomNav, { paddingBottom: insets.bottom > 0 ? insets.bottom : 10 }]}>
-        <TouchableOpacity style={styles.navItem} onPress={goHome}>
-          <MaterialIcon name="home" size={26} color="#94A3B8" />
-          <Text style={styles.navText}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <MaterialIcon name="water-drop" size={26} color="#94A3B8" />
-          <Text style={styles.navText}>Requests</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <MaterialIcon name="history" size={26} color="#94A3B8" />
-          <Text style={styles.navText}>History</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <MaterialIcon name="person" size={26} color="#B62022" />
-          <Text style={[styles.navText, { color: '#B62022' }]}>Profile</Text>
-        </TouchableOpacity>
-      </View>
     </View>
-  );
-};
-
-const MenuRow: React.FC<{
-  icon: string;
-  label: string;
-  onPress: () => void;
-  danger?: boolean;
-}> = ({ icon, label, onPress, danger }) => (
-  <TouchableOpacity style={styles.menuRow} onPress={onPress}>
-    <View style={[styles.menuIconBox, danger && styles.menuIconBoxDanger]}>
-      <MaterialIcon name={icon as any} size={22} color={danger ? '#B62022' : '#B62022'} />
-    </View>
-    <Text style={[styles.menuLabel, danger && { color: '#B62022' }]}>{label}</Text>
-    <View style={{ flex: 1 }} />
-    <MaterialIcon name="chevron-right" size={24} color={danger ? '#B62022' : '#CBD5E1'} />
-  </TouchableOpacity>
 );
 
+// ─── Screen ────────────────────────────────────────────────────────────────
+
+const ProfileScreen: React.FC<Props> = ({ navigation }) => {
+    const insets = useSafeAreaInsets();
+    const { user } = useAuth();
+    const [userData, setUserData] = React.useState<UserDocument | null>(null);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        if (!user) return;
+        const unsub = subscribeToUser(user.uid, (data) => {
+            setUserData(data);
+            setLoading(false);
+        });
+        return () => unsub();
+    }, [user]);
+
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+                <ActivityIndicator size="large" color="#B62022" />
+            </View>
+        );
+    }
+
+    const isAvailable = userData?.isAvailable ?? false;
+    const role = capitalize(userData?.lastActiveRole);
+
+    return (
+        <View style={styles.container}>
+            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
+            {/* ── Hero ── */}
+            <LinearGradient
+                colors={['#C0282A', '#8B1214', '#5C0C0E']}
+                style={[styles.hero, { paddingTop: insets.top }]}
+            >
+                {/* Decorative circles */}
+                <View style={styles.decorCircle1} />
+                <View style={styles.decorCircle2} />
+
+                {/* Top bar */}
+                <View style={styles.topBar}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                        <MaterialIcon name="arrow-back" size={22} color="#fff" />
+                    </TouchableOpacity>
+                    <Text style={styles.screenTitle}>My Profile</Text>
+                    <TouchableOpacity onPress={() => navigation.navigate('EditProfile')} style={styles.editBtn}>
+                        <MaterialIcon name="edit" size={20} color="#fff" />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Avatar */}
+                <View style={styles.avatarShadow}>
+                    <LinearGradient
+                        colors={['rgba(255,255,255,0.4)', 'rgba(255,255,255,0.1)']}
+                        style={styles.avatarRing}
+                    >
+                        {userData?.photoURL ? (
+                            <Image source={{ uri: userData.photoURL }} style={styles.avatar} />
+                        ) : (
+                            <View style={styles.avatarFallback}>
+                                <MaterialIcon name="person" size={50} color="#fff" />
+                            </View>
+                        )}
+                    </LinearGradient>
+                </View>
+
+                {/* Name & email */}
+                <Text style={styles.heroName}>{userData?.name || '—'}</Text>
+                <Text style={styles.heroEmail}>{user?.email || '—'}</Text>
+
+            </LinearGradient >
+
+            {/* ── Floating Card ── */}
+            < ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+            >
+                <View style={styles.floatingCard}>
+                    <Text style={styles.cardTitle}>Contact & Details</Text>
+
+                    <InfoRow
+                        icon="phone-outline"
+                        label="Phone Number"
+                        value={userData?.phone || '—'}
+                        iconBg="#EFF6FF"
+                        iconColor="#3B82F6"
+                    />
+                    <InfoRow
+                        icon="city-variant-outline"
+                        label="City"
+                        value={userData?.city || '—'}
+                        iconBg="#F0FDF4"
+                        iconColor="#10B981"
+                    />
+                    <InfoRow
+                        icon="water"
+                        label="Blood Group"
+                        value={userData?.bloodGroup || '—'}
+                        iconBg="#FEF2F2"
+                        iconColor="#B62022"
+                    />
+                    <InfoRow
+                        icon="cake-variant-outline"
+                        label="Age"
+                        value={userData?.age ? `${userData.age} Years` : '—'}
+                        iconBg="#FEF9C3"
+                        iconColor="#CA8A04"
+                    />
+                    <InfoRow
+                        icon="calendar-check-outline"
+                        label="Last Donation"
+                        value={userData?.lastDonationDate
+                            ? (userData.lastDonationDate as any).toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                            : 'Never / Not Sure'}
+                        iconBg="#F5F3FF"
+                        iconColor="#7C3AED"
+                        isLast
+                    />
+                </View>
+            </ScrollView >
+        </View >
+    );
+};
+
+// ─── Styles ────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  iconBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 10 },
-  profileTop: { alignItems: 'center', paddingTop: 10, paddingBottom: 10 },
-  avatarWrap: { position: 'relative', marginBottom: 14 },
-  avatar: { width: 92, height: 92, borderRadius: 46, backgroundColor: '#F1F5F9' },
-  avatarEditBtn: {
-    position: 'absolute',
-    right: 2,
-    bottom: 2,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#B62022',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-  },
-  nameText: { fontSize: 22, fontWeight: '900', color: '#0F172A', marginBottom: 4 },
-  emailText: { fontSize: 13, fontWeight: '600', color: '#94A3B8', marginBottom: 12 },
-  bloodPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#B62022',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    gap: 8,
-    shadowColor: '#B62022',
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  bloodPillText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
-  statsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingVertical: 18,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 14,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 18,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-  },
-  statCol: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 18, fontWeight: '900', color: '#B62022', marginBottom: 6 },
-  statLabel: { fontSize: 10, fontWeight: '900', color: '#94A3B8', letterSpacing: 0.6 },
-  statDivider: { width: 1, height: 42, backgroundColor: '#F1F5F9' },
-  menuCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 18,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    marginBottom: 18,
-  },
-  menuRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 6 },
-  menuIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: '#FDECEC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  menuIconBoxDanger: { backgroundColor: '#FDECEC' },
-  menuLabel: { fontSize: 15, fontWeight: '700', color: '#334155' },
-  menuDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 8 },
-  referCard: {
-    backgroundColor: '#B62022',
-    borderRadius: 18,
-    padding: 18,
-    shadowColor: '#B62022',
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    elevation: 4,
-  },
-  referTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '900', marginBottom: 6 },
-  referSub: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600', lineHeight: 18, marginBottom: 14 },
-  inviteBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  inviteBtnText: { color: '#B62022', fontSize: 13, fontWeight: '900' },
-  bottomNav: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-  },
-  navItem: { alignItems: 'center' },
-  navText: { fontSize: 11, fontWeight: '800', color: '#94A3B8', marginTop: 4 },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingSyncText: {
-    marginTop: 16,
-    fontSize: 14,
-    color: '#64748B',
-    fontWeight: '600',
-  },
+    container: { flex: 1, backgroundColor: '#F1F5F9' },
+    loadingContainer: { flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' },
+
+    // Hero
+    hero: {
+        alignItems: 'center',
+        paddingBottom: 35,
+        overflow: 'hidden',
+        borderBottomLeftRadius: 50,
+        borderBottomRightRadius: 50,
+    },
+
+    // Decorative
+    decorCircle1: {
+        position: 'absolute',
+        width: 260,
+        height: 260,
+        borderRadius: 130,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        top: -60,
+        right: -60,
+    },
+    decorCircle2: {
+        position: 'absolute',
+        width: 180,
+        height: 180,
+        borderRadius: 90,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        bottom: -30,
+        left: -40,
+    },
+
+    topBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 8,
+        width: '100%',
+        zIndex: 10,
+    },
+    screenTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#fff',
+    },
+    backBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.18)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    editBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.18)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    // Avatar
+    avatarShadow: {
+        shadowColor: '#000',
+        shadowOpacity: 0.35,
+        shadowRadius: 20,
+        elevation: 14,
+        borderRadius: 50,
+        marginBottom: 10,
+    },
+    avatarRing: {
+        width: 98,
+        height: 98,
+        borderRadius: 49,
+        padding: 4,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    avatar: {
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.5)',
+    },
+    avatarFallback: {
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.3)',
+    },
+
+    heroName: {
+        fontSize: 22,
+        fontWeight: '900',
+        color: '#fff',
+        marginBottom: 2,
+        letterSpacing: 0.3,
+    },
+    heroEmail: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.65)',
+        fontWeight: '500',
+        marginBottom: 10,
+    },
+
+    // Badges
+    badgesRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    heroBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        backgroundColor: 'rgba(255,255,255,0.18)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+    },
+    heroBadgeText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '800',
+    },
+    badgeSep: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: 'rgba(255,255,255,0.3)',
+    },
+    statusDot: {
+        width: 7,
+        height: 7,
+        borderRadius: 4,
+    },
+
+    // Floating card
+    floatingCard: {
+        backgroundColor: '#fff',
+        marginHorizontal: 20,
+        borderRadius: 24,
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 8,
+        shadowColor: '#000',
+        shadowOpacity: 0.08,
+        shadowRadius: 20,
+        elevation: 6,
+        marginTop: 20,
+    },
+    cardTitle: {
+        fontSize: 13,
+        fontWeight: '900',
+        color: '#94A3B8',
+        letterSpacing: 1.2,
+        marginBottom: 8,
+        textTransform: 'uppercase',
+    },
+
+    // Info Row
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+    },
+    infoRowBorder: {
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    infoIconBox: {
+        width: 42,
+        height: 42,
+        borderRadius: 14,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 14,
+    },
+    infoText: { flex: 1 },
+    infoLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#94A3B8',
+        letterSpacing: 0.4,
+        marginBottom: 3,
+    },
+    infoValue: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#1E293B',
+    },
 });
 
 export default ProfileScreen;
-

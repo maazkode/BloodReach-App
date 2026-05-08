@@ -16,11 +16,7 @@ type LogLevel = 'info' | 'warn' | 'error';
 
 export const log = (level: LogLevel, context: string, message: string, data?: any): void => {
     const prefix = `[BloodReach][${context}]`;
-    if (data !== undefined) {
-        console[level](`${prefix} ${message}`, data);
-    } else {
-        console[level](`${prefix} ${message}`);
-    }
+
 };
 
 // ─── Network Check ────────────────────────────────────────────────────────────
@@ -42,29 +38,29 @@ export const isOnline = async (): Promise<boolean> => {
 
 const FIREBASE_ERROR_MAP: Record<string, string> = {
     // Auth errors
-    'auth/invalid-email':             'The email address is not valid.',
-    'auth/user-disabled':             'This account has been disabled. Please contact support.',
-    'auth/user-not-found':            'No account found with this email.',
-    'auth/wrong-password':            'Incorrect password. Please try again.',
-    'auth/email-already-in-use':      'An account with this email already exists.',
-    'auth/weak-password':             'Password is too weak. Use at least 6 characters.',
-    'auth/network-request-failed':    'Network error. Please check your internet connection.',
-    'auth/too-many-requests':         'Too many failed attempts. Please wait a moment and try again.',
-    'auth/popup-closed-by-user':      'Sign-in was cancelled.',
+    'auth/invalid-email': 'The email address is not valid.',
+    'auth/user-disabled': 'This account has been disabled. Please contact support.',
+    'auth/user-not-found': 'No account found with this email.',
+    'auth/wrong-password': 'Incorrect password. Please try again.',
+    'auth/email-already-in-use': 'An account with this email already exists.',
+    'auth/weak-password': 'Password is too weak. Use at least 6 characters.',
+    'auth/network-request-failed': 'Network error. Please check your internet connection.',
+    'auth/too-many-requests': 'Too many failed attempts. Please wait a moment and try again.',
+    'auth/popup-closed-by-user': 'Sign-in was cancelled.',
     'auth/account-exists-with-different-credential': 'This email is linked to a different sign-in method.',
 
     // Firestore errors
-    'firestore/permission-denied':    'You do not have permission to perform this action.',
-    'firestore/unavailable':          'The service is temporarily unavailable. Please try again.',
-    'firestore/not-found':            'The requested data could not be found.',
-    'firestore/deadline-exceeded':    'The request timed out. Please check your connection.',
-    'firestore/resource-exhausted':   'Request limit reached. Please try again later.',
-    'firestore/aborted':              'The operation was interrupted. Please try again.',
-    'firestore/already-exists':       'This record already exists.',
-    'firestore/cancelled':            'The operation was cancelled.',
+    'firestore/permission-denied': 'You do not have permission to perform this action.',
+    'firestore/unavailable': 'The service is temporarily unavailable. Please try again.',
+    'firestore/not-found': 'The requested data could not be found.',
+    'firestore/deadline-exceeded': 'The request timed out. Please check your connection.',
+    'firestore/resource-exhausted': 'Request limit reached. Please try again later.',
+    'firestore/aborted': 'The operation was interrupted. Please try again.',
+    'firestore/already-exists': 'This record already exists.',
+    'firestore/cancelled': 'The operation was cancelled.',
 
     // Network / Generic
-    'network-request-failed':         'Network error. Please check your internet connection and try again.',
+    'network-request-failed': 'Network error. Please check your internet connection and try again.',
 };
 
 /**
