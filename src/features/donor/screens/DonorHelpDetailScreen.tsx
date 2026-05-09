@@ -7,25 +7,30 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     Alert,
-    Linking
+    Linking,
+    StatusBar,
+    Dimensions,
+    Image
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { safeRun, log, translateError } from '../../shared/utils/errorHandler';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../App';
 import { getAuth } from '@react-native-firebase/auth';
-import { 
-    getDonationRequest, 
-    createDonationMatch, 
-    getMatchForDonor, 
+import {
+    getDonationRequest,
+    createDonationMatch,
+    getMatchForDonor,
     completeDonation,
     getUserDocument,
     updateMatchStatus
 } from '../../shared/services/firestoreService';
 import { DonationRequest, DonationMatch, UserDocument } from '../../shared/types/database';
 import { useModal } from '../../shared/context/ModalContext';
+
+const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DonorHelpDetail'>;
 
@@ -37,7 +42,7 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     const [actionLoading, setActionLoading] = useState(false);
     const [myMatch, setMyMatch] = useState<DonationMatch | null>(null);
     const [requester, setRequester] = useState<UserDocument | null>(null);
-    
+
     const currentUser = getAuth().currentUser;
 
     useEffect(() => {
@@ -149,7 +154,7 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                                 description: 'You saved a life! You are now in your 90-day recovery window.',
                                 type: 'success',
                                 primaryText: 'Finish',
-                                onPrimaryPress: () => navigation.replace('DonorDashboard')
+                                onPrimaryPress: () => navigation.replace('DonorDashboard', { tab: 'home' })
                             });
                         },
                     }
@@ -161,209 +166,434 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <MaterialIcon name="arrow-back" size={24} color="#1E293B" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Help Patient</Text>
-                <View style={{width: 24}}/>
-            </View>
+        <View style={styles.container}>
+            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <View style={styles.patientCard}>
-                    <View style={styles.patientTop}>
-                        <View style={styles.bloodBadge}>
-                            <Text style={styles.bloodBadgeText}>{request.bloodGroup}</Text>
-                        </View>
-                        <View style={{flex: 1, marginLeft: 16}}>
-                            <Text style={styles.patientName}>{request.patientName}</Text>
-                            <Text style={styles.unitsNeeded}>{request.unitsRequired} Unit{request.unitsRequired > 1 ? 's' : ''} Needed</Text>
-                        </View>
-                        {request.urgencyLevel === 'urgent' && (
-                            <View style={styles.urgentTag}>
-                                <Text style={styles.urgentTagText}>EMERGENCY</Text>
-                            </View>
-                        )}
+            <LinearGradient
+                colors={['#B62022', '#801618']}
+                style={styles.headerWrapper}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+            >
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                        <MaterialIcon name="arrow-back" size={24} color="white" />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Patient Details</Text>
+                    <View style={{ width: 40 }} />
+                </View>
+
+                <View style={styles.heroSection}>
+                    <View style={styles.heroBloodBadge}>
+                        <MaterialCommunityIcon name="water" size={20} color="white" />
+                        <Text style={styles.heroBloodText}>{request.bloodGroup}</Text>
                     </View>
-                    <View style={styles.divider} />
-                    <View style={styles.locationRow}>
-                        <View style={styles.locIcon}><MaterialIcon name="local-hospital" size={18} color="#B62022" /></View>
-                        <View style={{flex: 1, marginLeft: 12}}>
-                            <Text style={styles.hospitalName}>{request.hospitalName}</Text>
-                            <Text style={styles.hospitalAddress}>{request.hospitalAddress}, {request.city}</Text>
+                    <Text style={styles.heroPatientName} numberOfLines={2}>{request.patientName}</Text>
+                    <View style={styles.heroStatsRow}>
+                        <View style={styles.heroStatItem}>
+                            <MaterialCommunityIcon name="opacity" size={14} color="rgba(255,255,255,0.8)" />
+                            <Text style={styles.heroStatText}>{request.unitsRequired} Units</Text>
+                        </View>
+                        <View style={styles.heroStatDivider} />
+                        <View style={styles.heroStatItem}>
+                            <MaterialCommunityIcon name="clock-outline" size={14} color="rgba(255,255,255,0.8)" />
+                            <Text style={styles.heroStatText}>{request.urgencyLevel === 'urgent' ? 'Urgent' : 'Normal'}</Text>
                         </View>
                     </View>
                 </View>
+            </LinearGradient>
 
-                {/* Requester Info Section */}
-                <View style={styles.requesterCard}>
-                    <Text style={styles.sectionTitleSmall}>Requested By</Text>
-                    <View style={styles.requesterRow}>
-                        <View style={styles.avatarPlaceholder}>
-                            <MaterialIcon name="person" size={20} color="#64748B" />
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+                stickyHeaderIndices={[]}
+            >
+                {request.urgencyLevel === 'urgent' && (
+                    <View style={styles.emergencyAlertCard}>
+                        <MaterialIcon name="report-problem" size={24} color="#B62022" />
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                            <Text style={styles.emergencyAlertTitle}>High Priority Request</Text>
+                            <Text style={styles.emergencyAlertSub}>This patient requires immediate assistance.</Text>
                         </View>
-                        <View style={{flex: 1}}>
-                            <Text style={styles.requesterName}>{requester?.name || 'BloodReach User'}</Text>
-                            <Text style={styles.requesterLabel}>Registered Requester</Text>
-                        </View>
-                        <View style={styles.verifiedBadge}>
-                            <MaterialIcon name="verified" size={16} color="#16A34A" />
-                        </View>
-                    </View>
-                </View>
-
-                {/* Match Status Logic */}
-                {myMatch === null ? (
-                    request.requesterId === currentUser?.uid ? (
-                        <View style={[styles.statusBox, { backgroundColor: '#F1F5F9' }]}>
-                            <MaterialIcon name="info" size={20} color="#64748B" style={{ marginRight: 10 }} />
-                            <Text style={[styles.statusBoxText, { color: '#64748B' }]}>This is your own request.</Text>
-                        </View>
-                    ) : (
-                        <TouchableOpacity style={styles.actionBtn} onPress={handleInterest} disabled={actionLoading}>
-                            {actionLoading ? <ActivityIndicator color="#fff" /> : (
-                                <>
-                                    <MaterialIcon name="favorite" size={22} color="#fff" style={{ marginRight: 8 }} />
-                                    <Text style={styles.actionBtnText}>I Want to Donate</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
-                    )
-                ) : myMatch.status === 'pending' ? (
-                    <View style={styles.statusBox}>
-                        <ActivityIndicator size="small" color="#B62022" style={{marginRight: 10}} />
-                        <Text style={styles.statusBoxText}>Request Sent. Waiting for approval...</Text>
-                    </View>
-                ) : myMatch.status === 'accepted' ? (
-                    <View style={styles.contactSection}>
-                        <Text style={styles.sectionTitle}>Match Accepted!</Text>
-                        <Text style={styles.sectionSub}>You can now contact the requester to coordinate. Once you are at the hospital or starting the process, click below.</Text>
-                        <View style={styles.contactRow}>
-                             <TouchableOpacity style={styles.contactBtn} onPress={() => Linking.openURL(`tel:${request.phone}`)}>
-                                 <MaterialIcon name="phone" size={24} color="#B62022" />
-                                 <Text style={styles.contactBtnText}>Call</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.contactBtn, {backgroundColor: '#E7F9ED'}]} onPress={() => handleWhatsApp(request.phone, 'Requester')}>
-                                <MaterialCommunityIcon name="whatsapp" size={24} color="#16A34A" />
-                                <Text style={[styles.contactBtnText, {color: '#16A34A'}]}>WhatsApp</Text>
-                            </TouchableOpacity>
-                        </View>
-                        <TouchableOpacity 
-                            style={[styles.actionBtn, {marginTop: 20, backgroundColor: '#1E293B'}]} 
-                            onPress={() => updateMatchStatus(myMatch.id!, 'in_progress', myMatch)}
-                            disabled={actionLoading}
-                        >
-                            <MaterialIcon name="play-circle-outline" size={22} color="#fff" style={{marginRight: 8}} />
-                            <Text style={styles.actionBtnText}>Start Donation Process</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                            style={[styles.cancelBtn, {marginTop: 12}]} 
-                            onPress={() => updateMatchStatus(myMatch.id!, 'cancelled', myMatch)}
-                        >
-                            <Text style={styles.cancelBtnText}>Cancel Helping</Text>
-                        </TouchableOpacity>
-                    </View>
-                ) : myMatch.status === 'in_progress' ? (
-                    <View style={styles.contactSection}>
-                        <View style={styles.statusBadgeLarge}>
-                            <MaterialIcon name="loop" size={20} color="#B62022" />
-                            <Text style={styles.statusBadgeTextLarge}>DONATION IN PROGRESS</Text>
-                        </View>
-                        
-                        <TouchableOpacity style={[styles.actionBtn, {marginTop: 20}]} onPress={handleComplete} disabled={actionLoading}>
-                            <MaterialIcon name="check-circle" size={22} color="#fff" style={{marginRight: 8}} />
-                            <Text style={styles.actionBtnText}>Donation Completed</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity 
-                            style={[styles.failedBtn, {marginTop: 12}]} 
-                            onPress={() => updateMatchStatus(myMatch.id!, 'failed', myMatch)}
-                            disabled={actionLoading}
-                        >
-                            <MaterialIcon name="error-outline" size={20} color="#64748B" style={{marginRight: 8}} />
-                            <Text style={styles.failedBtnText}>Donation Failed</Text>
-                        </TouchableOpacity>
-                    </View>
-                ) : myMatch.status === 'completed' ? (
-                    <View style={[styles.statusBox, {backgroundColor: '#DCFCE7'}]}>
-                        <MaterialIcon name="check-circle" size={20} color="#16A34A" style={{marginRight: 10}} />
-                        <Text style={[styles.statusBoxText, {color: '#16A34A'}]}>Thank you! You saved a life.</Text>
-                    </View>
-                ) : (
-                    <View style={[styles.statusBox, {backgroundColor: '#F1F5F9'}]}>
-                        <MaterialIcon name="info" size={20} color="#64748B" style={{marginRight: 10}} />
-                        <Text style={[styles.statusBoxText, {color: '#64748B'}]}>This donation attempt ended ({myMatch.status}).</Text>
                     </View>
                 )}
 
-                <TouchableOpacity 
-                    style={styles.mapBtn}
-                    onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(request.hospitalName + " " + request.city)}`)}
-                >
-                    <MaterialIcon name="map" size={22} color="#1E293B" style={{marginRight: 8}} />
-                    <Text style={styles.mapBtnText}>Directions in Maps</Text>
-                </TouchableOpacity>
+                <View style={styles.infoSection}>
+                    <Text style={styles.sectionTitleSmall}>Hospital Information</Text>
+                    <View style={styles.infoCard}>
+                        <View style={styles.infoRow}>
+                            <View style={styles.infoIconBox}>
+                                <MaterialIcon name="local-hospital" size={20} color="#B62022" />
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                <Text style={styles.infoMainText}>{request.hospitalName}</Text>
+                                <Text style={styles.infoSubText}>{request.hospitalAddress}, {request.city}</Text>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.mapActionBtn}
+                            onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(request.hospitalName + " " + request.city)}`)}
+                        >
+                            <MaterialIcon name="directions" size={20} color="#B62022" />
+                            <Text style={styles.mapActionText}>Get Directions</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                <View style={styles.infoSection}>
+                    <Text style={styles.sectionTitleSmall}>Requested By</Text>
+                    <View style={styles.infoCard}>
+                        <View style={styles.infoRow}>
+                            <View style={styles.avatarBox}>
+                                {requester?.photoURL ? (
+                                    <Image source={{ uri: requester.photoURL }} style={styles.avatarImage} />
+                                ) : (
+                                    <MaterialIcon name="person" size={24} color="#94A3B8" />
+                                )}
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={styles.infoMainText}>{requester?.name || 'BloodReach User'}</Text>
+                                    <MaterialIcon name="verified" size={14} color="#16A34A" style={{ marginLeft: 4 }} />
+                                </View>
+                                <Text style={styles.infoSubText}>Verified Requester</Text>
+                            </View>
+                        </View>
+                    </View>
+                </View>
+
+                <View style={styles.actionSection}>
+                    {myMatch === null ? (
+                        request.requesterId === currentUser?.uid ? (
+                            <View style={styles.selfRequestBox}>
+                                <MaterialIcon name="info" size={20} color="#64748B" />
+                                <Text style={styles.selfRequestText}>This is your own request.</Text>
+                            </View>
+                        ) : (
+                            <TouchableOpacity style={styles.primaryActionBtn} onPress={handleInterest} disabled={actionLoading}>
+                                {actionLoading ? <ActivityIndicator color="#fff" /> : (
+                                    <>
+                                        <MaterialIcon name="favorite" size={22} color="#fff" style={{ marginRight: 8 }} />
+                                        <Text style={styles.primaryActionText}>I Want to Donate</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        )
+                    ) : myMatch.status === 'pending' ? (
+                        <View style={styles.pendingStatusBox}>
+                            <ActivityIndicator size="small" color="#B62022" />
+                            <Text style={styles.pendingStatusText}>Request Sent. Waiting for approval...</Text>
+                        </View>
+                    ) : myMatch.status === 'accepted' ? (
+                        <View style={styles.activeMatchCard}>
+                            <LinearGradient
+                                colors={['#16A34A', '#15803D']}
+                                style={styles.matchStatusBanner}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            >
+                                <MaterialIcon name="check-circle" size={18} color="white" />
+                                <Text style={styles.matchStatusText}>Match Accepted!</Text>
+                            </LinearGradient>
+
+                            <View style={styles.matchContent}>
+                                <Text style={styles.matchInstruction}>You can now contact the requester to coordinate.</Text>
+
+                                <View style={styles.contactButtonsRow}>
+                                    <TouchableOpacity style={styles.contactButton} onPress={() => Linking.openURL(`tel:${request.phone}`)}>
+                                        <View style={[styles.contactIconBox, { backgroundColor: '#FDECEC' }]}>
+                                            <MaterialIcon name="phone" size={20} color="#B62022" />
+                                        </View>
+                                        <Text style={styles.contactLabel}>Call</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity style={styles.contactButton} onPress={() => handleWhatsApp(request.phone, 'Requester')}>
+                                        <View style={[styles.contactIconBox, { backgroundColor: '#E7F9ED' }]}>
+                                            <MaterialCommunityIcon name="whatsapp" size={20} color="#16A34A" />
+                                        </View>
+                                        <Text style={styles.contactLabel}>WhatsApp</Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                <TouchableOpacity
+                                    style={styles.startProcessBtn}
+                                    onPress={() => updateMatchStatus(myMatch.id!, 'in_progress', myMatch)}
+                                    disabled={actionLoading}
+                                >
+                                    <MaterialIcon name="play-arrow" size={22} color="#fff" />
+                                    <Text style={styles.startProcessText}>Start Donation Process</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.textLinkBtn}
+                                    onPress={() => updateMatchStatus(myMatch.id!, 'cancelled', myMatch)}
+                                >
+                                    <Text style={styles.textLink}>Cancel Helping</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    ) : myMatch.status === 'in_progress' ? (
+                        <View style={styles.activeMatchCard}>
+                            <View style={[styles.matchStatusBanner, { backgroundColor: '#1E293B' }]}>
+                                <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />
+                                <Text style={styles.matchStatusText}>Donation in Progress</Text>
+                            </View>
+
+                            <View style={styles.matchContent}>
+                                <TouchableOpacity style={styles.completeActionBtn} onPress={handleComplete} disabled={actionLoading}>
+                                    <MaterialIcon name="check-circle" size={22} color="#fff" />
+                                    <Text style={styles.completeActionText}>Mark as Completed</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.failedActionBtn}
+                                    onPress={() => updateMatchStatus(myMatch.id!, 'failed', myMatch)}
+                                    disabled={actionLoading}
+                                >
+                                    <MaterialIcon name="error-outline" size={20} color="#64748B" />
+                                    <Text style={styles.failedActionText}>Donation Failed</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    ) : myMatch.status === 'completed' ? (
+                        <View style={styles.successBox}>
+                            <MaterialIcon name="stars" size={32} color="#16A34A" />
+                            <Text style={styles.successTitle}>Heroic Act!</Text>
+                            <Text style={styles.successSub}>Thank you for saving a life today.</Text>
+                        </View>
+                    ) : (
+                        <View style={styles.infoBox}>
+                            <MaterialIcon name="info" size={22} color="#64748B" />
+                            <Text style={styles.infoBoxText}>This donation attempt ended ({myMatch.status}).</Text>
+                        </View>
+                    )}
+                </View>
+
+                <View style={{ height: 40 }} />
             </ScrollView>
-        </SafeAreaView>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAFC' },
     centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
-    header: { height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-    backButton: { padding: 4 },
-    headerTitle: { fontSize: 18, fontWeight: '800', color: '#1E293B' },
-    scrollContent: { padding: 20 },
-    
-    patientCard: { backgroundColor: 'white', borderRadius: 16, padding: 20, marginBottom: 24, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, borderWidth: 1, borderColor: '#F1F5F9' },
-    patientTop: { flexDirection: 'row', alignItems: 'center' },
-    bloodBadge: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#FDECEC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FEE2E2' },
-    bloodBadgeText: { fontSize: 20, fontWeight: '900', color: '#B62022' },
-    patientName: { fontSize: 20, fontWeight: '900', color: '#1E293B' },
-    unitsNeeded: { fontSize: 14, fontWeight: '600', color: '#64748B', marginTop: 4 },
-    urgentTag: { backgroundColor: '#FEF2F2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-    urgentTagText: { color: '#B62022', fontSize: 10, fontWeight: '900' },
-    divider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 16 },
-    locationRow: { flexDirection: 'row', alignItems: 'center' },
-    locIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
-    hospitalName: { fontSize: 15, fontWeight: '800', color: '#1E293B' },
-    hospitalAddress: { fontSize: 13, color: '#64748B', marginTop: 2 },
-    
-    actionBtn: { backgroundColor: '#B62022', height: 56, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', shadowColor: '#B62022', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-    actionBtnText: { color: 'white', fontSize: 16, fontWeight: '800' },
-    
-    failedBtn: { height: 50, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
-    failedBtnText: { color: '#64748B', fontSize: 14, fontWeight: '700' },
 
-    cancelBtn: { height: 44, justifyContent: 'center', alignItems: 'center' },
-    cancelBtnText: { color: '#94A3B8', fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' },
+    headerWrapper: {
+        width: '100%',
+        paddingTop: 50,
+        paddingBottom: 30,
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        height: 60,
+    },
+    backButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerTitle: { fontSize: 18, fontWeight: '800', color: 'white' },
 
-    statusBadgeLarge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', padding: 12, borderRadius: 10, alignSelf: 'flex-start' },
-    statusBadgeTextLarge: { color: '#B62022', fontSize: 12, fontWeight: '900', marginLeft: 8, letterSpacing: 0.5 },
+    heroSection: {
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        marginTop: 15,
+    },
+    heroBloodBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+        gap: 6,
+    },
+    heroBloodText: { fontSize: 20, fontWeight: '900', color: 'white' },
+    heroPatientName: { fontSize: 28, fontWeight: '900', color: 'white', marginTop: 12, textAlign: 'center' },
+    heroStatsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 15 },
+    heroStatItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    heroStatText: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' },
+    heroStatDivider: { width: 1, height: 12, backgroundColor: 'rgba(255,255,255,0.3)', marginHorizontal: 15 },
 
-    sectionSub: { fontSize: 13, color: '#64748B', fontWeight: '500', lineHeight: 18, marginBottom: 16 },
+    scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
 
-    statusBox: { backgroundColor: '#FEF2F2', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-    statusBoxText: { color: '#B62022', fontWeight: '700', fontSize: 14 },
+    emergencyAlertCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FEF2F2',
+        borderRadius: 16,
+        padding: 16,
+        marginTop: 10,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
+    },
+    emergencyAlertTitle: { fontSize: 15, fontWeight: '800', color: '#B62022' },
+    emergencyAlertSub: { fontSize: 12, color: '#991B1B', marginTop: 2, fontWeight: '500' },
 
-    sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1E293B', marginBottom: 16 },
-    contactSection: { backgroundColor: 'white', borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#F1F5F9' },
-    contactRow: { flexDirection: 'row', gap: 12 },
-    contactBtn: { flex: 1, backgroundColor: '#FDECEC', height: 60, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    contactBtnText: { color: '#B62022', fontSize: 14, fontWeight: '800', marginTop: 4 },
+    infoSection: { marginBottom: 24, marginTop: 24 },
+    sectionTitleSmall: { fontSize: 12, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 10, marginLeft: 4, letterSpacing: 1 },
+    infoCard: { backgroundColor: 'white', borderRadius: 20, padding: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+    infoRow: { flexDirection: 'row', alignItems: 'center' },
+    infoIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#FDECEC', justifyContent: 'center', alignItems: 'center' },
+    infoMainText: { fontSize: 16, fontWeight: '800', color: '#1E293B' },
+    infoSubText: { fontSize: 13, color: '#64748B', marginTop: 2, fontWeight: '500' },
 
-    mapBtn: { height: 56, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: 'white', marginTop: 16 },
-    mapBtnText: { color: '#1E293B', fontSize: 15, fontWeight: '700' },
+    mapActionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 16,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#F1F5F9',
+        gap: 8,
+    },
+    mapActionText: { color: '#B62022', fontSize: 14, fontWeight: '700' },
 
-    requesterCard: { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#F1F5F9' },
-    sectionTitleSmall: { fontSize: 13, fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 },
-    requesterRow: { flexDirection: 'row', alignItems: 'center' },
-    avatarPlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    requesterName: { fontSize: 16, fontWeight: '800', color: '#1E293B' },
-    requesterLabel: { fontSize: 12, color: '#64748B', fontWeight: '500' },
-    verifiedBadge: { padding: 4 }
+    avatarBox: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+    avatarImage: { width: 44, height: 44, borderRadius: 22 },
+
+    actionSection: { marginTop: 10 },
+    primaryActionBtn: {
+        backgroundColor: '#B62022',
+        height: 56,
+        borderRadius: 16,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#B62022',
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        elevation: 6,
+    },
+    primaryActionText: { color: 'white', fontSize: 16, fontWeight: '800' },
+
+    pendingStatusBox: {
+        backgroundColor: 'white',
+        borderRadius: 16,
+        padding: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        gap: 12,
+    },
+    pendingStatusText: { color: '#64748B', fontSize: 15, fontWeight: '600' },
+
+    activeMatchCard: {
+        backgroundColor: 'white',
+        borderRadius: 24,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 15,
+        elevation: 4,
+    },
+    matchStatusBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        gap: 8,
+    },
+    matchStatusText: { color: 'white', fontSize: 14, fontWeight: '800', letterSpacing: 0.5 },
+    matchContent: { padding: 20 },
+    matchInstruction: { fontSize: 14, color: '#64748B', textAlign: 'center', lineHeight: 20, marginBottom: 20, fontWeight: '500' },
+
+    contactButtonsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+    contactButton: {
+        flex: 1,
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+        paddingVertical: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+    },
+    contactIconBox: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+    contactLabel: { fontSize: 13, fontWeight: '800', color: '#1E293B' },
+
+    startProcessBtn: {
+        backgroundColor: '#1E293B',
+        height: 56,
+        borderRadius: 16,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+    },
+    startProcessText: { color: 'white', fontSize: 16, fontWeight: '800' },
+
+    textLinkBtn: { marginTop: 16, alignSelf: 'center' },
+    textLink: { color: '#94A3B8', fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
+
+    completeActionBtn: {
+        backgroundColor: '#16A34A',
+        height: 56,
+        borderRadius: 16,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+    },
+    completeActionText: { color: 'white', fontSize: 16, fontWeight: '800' },
+
+    failedActionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 12,
+        height: 50,
+        gap: 8,
+    },
+    failedActionText: { color: '#64748B', fontSize: 14, fontWeight: '700' },
+
+    successBox: {
+        alignItems: 'center',
+        backgroundColor: '#DCFCE7',
+        borderRadius: 24,
+        padding: 30,
+        borderWidth: 1,
+        borderColor: '#BBF7D0',
+    },
+    successTitle: { fontSize: 22, fontWeight: '900', color: '#166534', marginTop: 12 },
+    successSub: { fontSize: 14, color: '#15803D', marginTop: 4, fontWeight: '600' },
+
+    infoBox: {
+        backgroundColor: '#F1F5F9',
+        borderRadius: 16,
+        padding: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    infoBoxText: { color: '#64748B', fontSize: 14, fontWeight: '600' },
+    selfRequestBox: {
+        backgroundColor: '#F1F5F9',
+        borderRadius: 16,
+        padding: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+    },
+    selfRequestText: { color: '#64748B', fontSize: 14, fontWeight: '600' },
 });
 
 export default DonorHelpDetailScreen;

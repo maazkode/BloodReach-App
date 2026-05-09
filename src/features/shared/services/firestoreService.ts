@@ -669,8 +669,9 @@ export const createDonationMatch = async (
             throw new Error('Could not verify request or donor information.');
         }
 
-        if (requestData.bloodGroup !== donorData.bloodGroup) {
-            throw new Error(`Blood group mismatch. This patient needs ${requestData.bloodGroup}, but your blood group is ${donorData.bloodGroup}.`);
+        const compatibleGroups = getCompatibleBloodGroups(donorData.bloodGroup);
+        if (!compatibleGroups.includes(requestData.bloodGroup)) {
+            throw new Error(`Blood group mismatch. This patient needs ${requestData.bloodGroup}, but your blood group (${donorData.bloodGroup}) can only donate to: ${compatibleGroups.join(', ')}.`);
         }
 
         // Strict Range Check (10KM)

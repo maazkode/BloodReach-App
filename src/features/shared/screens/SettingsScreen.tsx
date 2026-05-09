@@ -118,65 +118,33 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         setActionLoading(false);
     }, [user, userData, actionLoading, showModal, navigation]);
 
-    const handleRefreshLocation = React.useCallback(async () => {
-        if (!user || actionLoading) return;
-        setActionLoading(true);
-        await safeRun(
-            async () => {
-                const { getFullLocationData } = require('../services/locationService');
-                const { updateUserLocation } = require('../services/firestoreService');
-                const locData = await getFullLocationData();
-                await updateUserLocation(user.uid, {
-                    latitude: locData.latitude,
-                    longitude: locData.longitude,
-                    geohash: locData.geohash,
-                    address: locData.address,
-                });
-            },
-            {
-                context: 'Settings > handleRefreshLocation',
-                errorTitle: 'Location Update Failed',
-                allowRetry: true,
-                showModal,
-                onSuccess: () => {
-                    showModal({
-                        title: 'Location Updated',
-                        description: 'Your location has been successfully updated.',
-                        type: 'success',
-                        primaryText: 'OK'
-                    });
-                },
-            }
-        );
-        setActionLoading(false);
-    }, [user, actionLoading, showModal]);
 
     const tabs = React.useMemo(() => [
-        { 
-            key: 'home', 
-            label: 'Home', 
-            icon: 'home', 
-            activeIcon: 'home', 
-            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'home' }) 
+        {
+            key: 'home',
+            label: 'Home',
+            icon: 'home',
+            activeIcon: 'home',
+            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'home' })
         },
-        { 
-            key: 'requests', 
-            label: 'Requests', 
-            icon: userData?.lastActiveRole === 'donor' ? 'water-drop' : 'list-alt', 
-            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'requests' }) 
+        {
+            key: 'requests',
+            label: 'Requests',
+            icon: userData?.lastActiveRole === 'donor' ? 'water-drop' : 'list-alt',
+            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'requests' })
         },
-        { 
-            key: 'history', 
-            label: 'History', 
-            icon: 'history', 
-            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'history' }) 
+        {
+            key: 'history',
+            label: 'History',
+            icon: 'history',
+            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'history' })
         },
-        { 
-            key: 'settings', 
-            label: 'Settings', 
-            icon: 'settings', 
-            activeIcon: 'settings', 
-            onPress: () => { } 
+        {
+            key: 'settings',
+            label: 'Settings',
+            icon: 'settings',
+            activeIcon: 'settings',
+            onPress: () => { }
         },
     ], [userData?.lastActiveRole, navigation]);
 
@@ -192,7 +160,6 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
                 {/* ── Immersive Header ── */}
@@ -230,25 +197,6 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                     </View>
                 </View>
 
-                {/* ── Achievements / Stats Grid ── */}
-                <View style={styles.statsGrid}>
-                    <View style={styles.statGridItem}>
-                        <Text style={styles.statGridVal}>{donorStats.count}</Text>
-                        <Text style={styles.statGridLab}>Donations</Text>
-                    </View>
-                    <View style={styles.statGridDivider} />
-                    <View style={styles.statGridItem}>
-                        <Text style={styles.statGridVal}>{donorStats.livesSaved}</Text>
-                        <Text style={styles.statGridLab}>Lives Saved</Text>
-                    </View>
-                    <View style={styles.statGridDivider} />
-                    <View style={styles.statGridItem}>
-                        <View style={styles.rankBadgeSmall}>
-                            <Text style={styles.statGridVal}>{donorStats.rank}</Text>
-                        </View>
-                        <Text style={styles.statGridLab}>Member Rank</Text>
-                    </View>
-                </View>
 
                 {/* ── Menu Sections ── */}
                 <View style={styles.menuContainer}>
@@ -266,30 +214,6 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                             onPress={handleSwitchRole}
                             color="#8B5CF6"
                             rightText="Active"
-                        />
-                        <MenuOption
-                            icon="map-marker-radius"
-                            title="Refresh Location"
-                            onPress={handleRefreshLocation}
-                            color="#10B981"
-                            isLast
-                        />
-                    </View>
-
-                    <Text style={styles.menuHeaderLabel}>SUPPORT & INFO</Text>
-                    <View style={styles.menuSectionCard}>
-                        <MenuOption
-                            icon="information-outline"
-                            title="About BloodReach"
-                            color="#64748B"
-                            onPress={() => {
-                                showModal({
-                                    title: 'About BloodReach',
-                                    description: 'BloodReach is a life-saving platform connecting blood donors with those in urgent need. Version 1.0.0 (Build 24)',
-                                    type: 'info',
-                                    primaryText: 'Close'
-                                });
-                            }}
                             isLast
                         />
                     </View>
@@ -364,7 +288,7 @@ const styles = StyleSheet.create({
     bloodTypeFloatingBadge: {
         position: 'absolute',
         bottom: 50,
-        right: width / 2 - 75,
+        right: width / 2 - 100,
         backgroundColor: '#1E293B',
         flexDirection: 'row',
         alignItems: 'center',
@@ -395,7 +319,7 @@ const styles = StyleSheet.create({
     statGridDivider: { width: 1, height: 40, backgroundColor: '#F1F5F9' },
     rankBadgeSmall: { backgroundColor: '#FEF2F2', paddingHorizontal: 10, borderRadius: 10 },
 
-    menuContainer: { paddingHorizontal: 20, marginTop: 25 },
+    menuContainer: { paddingHorizontal: 20, marginTop: 15 },
     menuHeaderLabel: {
         fontSize: 12,
         fontWeight: '900',

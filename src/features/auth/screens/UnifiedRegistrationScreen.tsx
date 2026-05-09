@@ -17,6 +17,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../../shared/theme/colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../App';
@@ -52,8 +53,8 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
 
     // UI Helpers
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const [isBloodGroupModalVisible, setIsBloodGroupModalVisible] = useState(false);
-    const [isGenderModalVisible, setIsGenderModalVisible] = useState(false);
+    const [showBloodGroupPicker, setShowBloodGroupPicker] = useState(false);
+    const [showGenderPicker, setShowGenderPicker] = useState(false);
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
@@ -276,17 +277,36 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                             {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
                         </View>
 
-                        <View style={styles.inputGroup}>
+                        <View style={[styles.inputGroup, { zIndex: 100 }]}>
                             <Text style={styles.label}>Blood Group <Text style={styles.required}>*</Text></Text>
                             <TouchableOpacity
                                 style={styles.inputWrapper}
-                                onPress={() => setIsBloodGroupModalVisible(true)}
+                                onPress={() => {
+                                    setShowBloodGroupPicker(!showBloodGroupPicker);
+                                    setShowGenderPicker(false);
+                                }}
                             >
                                 <Text style={{ color: bloodGroup ? '#1E293B' : '#94A3B8' }}>
                                     {bloodGroup || "Select blood type"}
                                 </Text>
-                                <MaterialIcon name="bloodtype" size={20} color={Colors.primary} />
+                                <MaterialCommunityIcon name="chevron-down" size={20} color={Colors.primary} />
                             </TouchableOpacity>
+                            {showBloodGroupPicker && (
+                                <View style={styles.dropdown}>
+                                    {BLOOD_GROUPS.map(item => (
+                                        <TouchableOpacity
+                                            key={item}
+                                            style={styles.dropdownItem}
+                                            onPress={() => {
+                                                setBloodGroup(item);
+                                                setShowBloodGroupPicker(false);
+                                            }}
+                                        >
+                                            <Text style={styles.dropdownText}>{item}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
                             {errors.bloodGroup && <Text style={styles.errorText}>{errors.bloodGroup}</Text>}
                         </View>
 
@@ -344,17 +364,36 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                                 <Text style={styles.label}>Age</Text>
                                 <TextInput style={styles.input} placeholder="25" keyboardType="numeric" value={age} onChangeText={setAge} />
                             </View>
-                            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8, zIndex: 90 }]}>
                                 <Text style={styles.label}>Gender</Text>
                                 <TouchableOpacity
                                     style={styles.inputWrapper}
-                                    onPress={() => setIsGenderModalVisible(true)}
+                                    onPress={() => {
+                                        setShowGenderPicker(!showGenderPicker);
+                                        setShowBloodGroupPicker(false);
+                                    }}
                                 >
                                     <Text style={{ color: gender ? '#1E293B' : '#94A3B8' }}>
                                         {gender || "Select"}
                                     </Text>
-                                    <MaterialIcon name="person" size={18} color="#94A3B8" />
+                                    <MaterialCommunityIcon name="chevron-down" size={18} color="#94A3B8" />
                                 </TouchableOpacity>
+                                {showGenderPicker && (
+                                    <View style={styles.dropdown}>
+                                        {GENDERS.map(item => (
+                                            <TouchableOpacity
+                                                key={item}
+                                                style={styles.dropdownItem}
+                                                onPress={() => {
+                                                    setGender(item);
+                                                    setShowGenderPicker(false);
+                                                }}
+                                            >
+                                                <Text style={styles.dropdownText}>{item}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                )}
                             </View>
                         </View>
 
@@ -399,50 +438,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 </KeyboardAvoidingView>
             </ScrollView>
 
-            {/* Blood Group Modal */}
-            <Modal visible={isBloodGroupModalVisible} transparent animationType="slide">
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Select Blood Group</Text>
-                        <View style={styles.bloodGrid}>
-                            {BLOOD_GROUPS.map((item) => (
-                                <TouchableOpacity
-                                    key={item}
-                                    style={[styles.bloodItem, bloodGroup === item && styles.bloodItemSelected]}
-                                    onPress={() => { setBloodGroup(item); setIsBloodGroupModalVisible(false); }}
-                                >
-                                    <Text style={[styles.bloodItemText, bloodGroup === item && styles.bloodItemTextSelected]}>{item}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                        <TouchableOpacity style={styles.modalCloseButton} onPress={() => setIsBloodGroupModalVisible(false)}>
-                            <Text style={styles.modalCloseButtonText}>Close</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
 
-            {/* Gender Modal */}
-            <Modal visible={isGenderModalVisible} transparent animationType="slide">
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Select Gender</Text>
-                        {GENDERS.map((item) => (
-                            <TouchableOpacity
-                                key={item}
-                                style={styles.selectionItem}
-                                onPress={() => { setGender(item); setIsGenderModalVisible(false); }}
-                            >
-                                <Text style={styles.selectionItemText}>{item}</Text>
-                                {gender === item && <MaterialIcon name="check" size={20} color={Colors.primary} />}
-                            </TouchableOpacity>
-                        ))}
-                        <TouchableOpacity style={styles.modalCloseButton} onPress={() => setIsGenderModalVisible(false)}>
-                            <Text style={styles.modalCloseButtonText}>Close</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
 
             {showDatePicker && (
                 <DateTimePicker
@@ -483,18 +479,7 @@ const styles = StyleSheet.create({
 
 
 
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    modalContent: { backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24 },
-    modalTitle: { fontSize: 20, fontWeight: '800', color: '#1E293B', marginBottom: 20, textAlign: 'center' },
-    bloodGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-    bloodItem: { width: '23%', aspectRatio: 1, backgroundColor: '#F1F5F9', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-    bloodItemSelected: { backgroundColor: Colors.primary },
-    bloodItemText: { fontSize: 16, fontWeight: '700', color: '#475569' },
-    bloodItemTextSelected: { color: 'white' },
-    selectionItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-    selectionItemText: { fontSize: 16, color: '#1E293B', fontWeight: '500' },
-    modalCloseButton: { marginTop: 10, paddingVertical: 12, alignItems: 'center' },
-    modalCloseButtonText: { color: '#64748B', fontWeight: '600' },
+
 
     locationButton: {
         flexDirection: 'row',
@@ -511,6 +496,29 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: 'bold',
         marginLeft: 6,
+    },
+    dropdown: {
+        position: 'absolute',
+        top: 70,
+        left: 0,
+        right: 0,
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
+        zIndex: 999,
+        elevation: 5,
+    },
+    dropdownItem: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    dropdownText: {
+        fontSize: 14,
+        color: '#1E293B',
+        fontWeight: '500',
     },
 });
 

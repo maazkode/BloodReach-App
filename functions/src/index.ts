@@ -1,5 +1,6 @@
 import { setGlobalOptions } from "firebase-functions";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { geohashQueryBounds, distanceBetween } from "geofire-common";
@@ -171,3 +172,92 @@ export const onNewBloodRequest = onDocumentCreated(
     }
   }
 );
+
+/**
+ * Triggered when a new document is created in the new "bloodRequests" collection.
+ */
+export const onNewBloodRequestV2 = onDocumentCreated(
+  "bloodRequests/{requestId}",
+  async (event) => {
+    // Reusing the same logic as the legacy trigger
+    // In a real app, I would extract the core logic to a shared helper function,
+    // but here I'll keep it simple for visibility.
+    return onNewBloodRequest(event);
+  }
+);
+
+/**
+ * Cleanup task: Automatically expire active requests older than 48 hours.
+ * Runs every hour.
+ */
+export const expireOldRequests = onSchedule("every 1 hours", async (event) => {
+  const db = admin.firestore();
+  const now = admin.firestore.Timestamp.now();
+  const fortyEightHoursAgo = new Date(now.toDate().getTime() - 48 * 60 * 60 * 1000);
+
+  const q = db.collection("bloodRequests")
+    .where("status", "==", "active")
+    .where("createdAt", "<=", fortyEightHoursAgo);
+
+  const snapshot = await q.get();
+  if (snapshot.empty) return;
+
+  const batch = db.batch();
+  snapshot.docs.forEach((doc) => {
+    batch.update(doc.ref, { 
+      status: "expired", 
+      updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+    });
+  });
+
+  await batch.commit();
+  logger.info(`Expired ${snapshot.size} stale active requests.`);
+});
+
+/**
+ * Cleanup task: Revert matched requests that haven't been completed within 30 minutes.
+ * Runs every 10 minutes.
+ */
+export const revertStaleMatches = onSchedule("every 10 minutes", async (event) => {
+  const db = admin.firestore();
+  const now = admin.firestore.Timestamp.now();
+  const thirtyMinutesAgo = new Date(now.toDate().getTime() - 30 * 60 * 1000);
+
+  const q = db.collection("bloodRequests")
+    .where("status", "==", "matched")
+    .where("acceptedAt", "<=", thirtyMinutesAgo);
+
+  const snapshot = await q.get();
+  if (snapshot.empty) return;
+
+  const batch = db.batch();
+  for (const requestDoc of snapshot.docs) {
+    const requestData = requestDoc.data();
+    batch.update(requestDoc.ref, { 
+      status: "active",
+      donorId: null,
+      acceptedAt: null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+    });
+
+    // Also cancel the specific match record if it exists
+    if (requestData.donorId) {
+      const matchQuery = await db.collection("bloodMatches")
+        .where("requestId", "==", requestDoc.id)
+        .where("donorId", "==", requestData.donorId)
+        .where("status", "==", "accepted")
+        .limit(1)
+        .get();
+      
+      matchQuery.forEach(m => {
+        batch.update(m.ref, { 
+          status: "failed", 
+          updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+        });
+      });
+    }
+  }
+
+  await batch.commit();
+  logger.info(`Reverted ${snapshot.size} stale matches and updated match records.`);
+});
