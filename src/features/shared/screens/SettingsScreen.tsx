@@ -24,6 +24,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { safeRun, log } from '../utils/errorHandler';
 import { useModal } from '../context/ModalContext';
 import BottomTabBar from '../../shared/components/BottomTabBar';
+import LoadingScreen from '../../shared/components/LoadingScreen';
 
 
 const { width } = Dimensions.get('window');
@@ -43,6 +44,22 @@ const MenuOption = React.memo(({ icon, title, color = "#1E293B", onPress, isLast
         {rightText && <Text style={styles.rightText}>{rightText}</Text>}
         <MaterialIcon name="chevron-right" size={20} color="#CBD5E1" />
     </TouchableOpacity>
+));
+
+const InfoRow = React.memo(({ icon, iconLib = 'community', label, value, iconBg, iconColor, isLast }: any) => (
+    <View style={[styles.infoRow, !isLast && styles.infoRowBorder]}>
+        <View style={[styles.infoIconBox, { backgroundColor: iconBg }]}>
+            {iconLib === 'material' ? (
+                <MaterialIcon name={icon} size={20} color={iconColor} />
+            ) : (
+                <MaterialCommunityIcon name={icon} size={20} color={iconColor} />
+            )}
+        </View>
+        <View style={styles.infoText}>
+            <Text style={styles.infoLabel}>{label}</Text>
+            <Text style={styles.infoValue}>{value}</Text>
+        </View>
+    </View>
 ));
 
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
@@ -149,50 +166,49 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     ], [userData?.lastActiveRole, navigation]);
 
     if (loadingUser) {
-        return (
-            <View style={styles.loadingContainer}>
-                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-                <ActivityIndicator size="large" color="#B62022" />
-                <Text style={styles.loadingSyncText}>Synchronizing your profile...</Text>
-            </View>
-        );
+        return <LoadingScreen tagline="Synchronizing your profile data..." />;
     }
 
     return (
         <View style={styles.container}>
 
+            {/* ── White Header ── */}
+            <View style={[styles.whiteHeader, { paddingTop: insets.top + 10 }]}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn}>
+                    <MaterialIcon name="arrow-back" size={24} color="#1E293B" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitleText}>Profile Settings</Text>
+                <TouchableOpacity
+                    onPress={() => navigation.navigate('EditProfile')}
+                    style={styles.headerBackBtn}
+                >
+                    <MaterialIcon name="edit" size={22} color="#1E293B" />
+                </TouchableOpacity>
+            </View>
+
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-                {/* ── Immersive Header ── */}
-                <View style={styles.topProfileContainer}>
-                    <LinearGradient
-                        colors={['#B62022', '#801618']}
-                        style={[styles.gradientHeader, { height: 280 + insets.top }]}
-                    />
 
-                    <View style={[styles.headerContent, { paddingTop: insets.top + 20 }]}>
-                        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn}>
-                            <MaterialIcon name="arrow-back" size={24} color="white" />
-                        </TouchableOpacity>
-                        <Text style={styles.headerTitleText}>Profile Settings</Text>
-                        <View style={{ width: 40 }} />
-                    </View>
-
-                    <View style={styles.profileMainBox}>
-                        <View style={styles.avatarGlow}>
+                <View style={styles.profileHeaderCard}>
+                    <View style={styles.profileIdentityRow}>
+                        <View style={styles.avatarContainer}>
                             {userData?.photoURL ? (
                                 <Image source={{ uri: userData.photoURL }} style={styles.mainAvatar} />
                             ) : (
                                 <View style={styles.avatarPlaceholder}>
-                                    <MaterialIcon name="person" size={50} color="white" />
+                                    <MaterialIcon name="person" size={40} color="white" />
                                 </View>
                             )}
+                            <View style={styles.verifiedBadge}>
+                                <MaterialIcon name="verified" size={16} color="white" />
+                            </View>
                         </View>
-                        <Text style={styles.userNameText}>{userData?.name || 'User Name'}</Text>
-                        <Text style={styles.userEmailText}>{user?.email}</Text>
-
-                        <View style={styles.bloodTypeFloatingBadge}>
-                            <MaterialCommunityIcon name="water" size={16} color="white" />
-                            <Text style={styles.floatingBadgeText}>{userData?.bloodGroup || '--'}</Text>
+                        <View style={styles.identityTextContainer}>
+                            <Text style={styles.userNameText}>{userData?.name || 'User Name'}</Text>
+                            <Text style={styles.userEmailText}>{user?.email}</Text>
+                            <View style={styles.bloodBadgeSmall}>
+                                <MaterialCommunityIcon name="water" size={14} color="#B62022" />
+                                <Text style={styles.bloodBadgeTextSmall}>{userData?.bloodGroup || '--'}</Text>
+                            </View>
                         </View>
                     </View>
                 </View>
@@ -200,20 +216,55 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
                 {/* ── Menu Sections ── */}
                 <View style={styles.menuContainer}>
+                    <Text style={styles.menuHeaderLabel}>PERSONAL INFORMATION</Text>
+                    <View style={styles.menuSectionCard}>
+                        <InfoRow
+                            icon="phone-outline"
+                            label="Phone Number"
+                            value={userData?.phone || '—'}
+                            iconBg="#EFF6FF"
+                            iconColor="#3B82F6"
+                        />
+                        <InfoRow
+                            icon="city-variant-outline"
+                            label="City"
+                            value={userData?.city || '—'}
+                            iconBg="#F0FDF4"
+                            iconColor="#10B981"
+                        />
+                        <InfoRow
+                            icon="water"
+                            label="Blood Group"
+                            value={userData?.bloodGroup || '—'}
+                            iconBg="#FEF2F2"
+                            iconColor="#B62022"
+                        />
+                        <InfoRow
+                            icon="cake-variant-outline"
+                            label="Age"
+                            value={userData?.age ? `${userData.age} Years` : '—'}
+                            iconBg="#FEF9C3"
+                            iconColor="#CA8A04"
+                        />
+                        <InfoRow
+                            icon="calendar-check-outline"
+                            label="Last Donation"
+                            value={userData?.lastDonationDate
+                                ? (userData.lastDonationDate as any).toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                                : 'Never / Not Sure'}
+                            iconBg="#F5F3FF"
+                            iconColor="#7C3AED"
+                            isLast
+                        />
+                    </View>
+
                     <Text style={styles.menuHeaderLabel}>ACCOUNT SETTINGS</Text>
                     <View style={styles.menuSectionCard}>
-                        <MenuOption
-                            icon="account-outline"
-                            title="View My Profile"
-                            onPress={() => navigation.navigate('Profile')}
-                            color="#3B82F6"
-                        />
                         <MenuOption
                             icon="swap-horizontal"
                             title={`Switch to ${userData?.lastActiveRole === 'donor' ? 'Requester' : 'Donor'} Mode`}
                             onPress={handleSwitchRole}
                             color="#8B5CF6"
-                            rightText="Active"
                             isLast
                         />
                     </View>
@@ -236,69 +287,83 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F1F5F9' },
-    topProfileContainer: { width: '100%', marginBottom: 30 },
-    gradientHeader: {
-        width: '100%',
-        position: 'absolute',
-        top: 0,
-        borderBottomLeftRadius: 50,
-        borderBottomRightRadius: 50,
-    },
-    headerContent: {
+    whiteHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
+        paddingBottom: 15,
+        backgroundColor: 'white',
     },
     headerBackBtn: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        backgroundColor: '#F1F5F9',
         justifyContent: 'center',
         alignItems: 'center',
     },
-    headerTitleText: { fontSize: 18, fontWeight: '800', color: 'white' },
+    headerTitleText: { fontSize: 18, fontWeight: '800', color: '#1E293B' },
 
-    profileMainBox: {
-        alignItems: 'center',
-        marginTop: 30,
-    },
-    avatarGlow: {
-        width: 110,
-        height: 110,
-        borderRadius: 55,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        padding: 5,
+    profileHeaderCard: {
+        backgroundColor: 'white',
+        marginHorizontal: 20,
+        marginTop: 10,
+        borderRadius: 24,
+        padding: 20,
         shadowColor: '#000',
-        shadowOpacity: 0.2,
-        shadowRadius: 10,
-        elevation: 10,
+        shadowOpacity: 0.08,
+        shadowRadius: 20,
+        elevation: 8,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
     },
-    mainAvatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: 'white' },
-    avatarPlaceholder: {
-        width: 100, height: 100, borderRadius: 50,
-        backgroundColor: '#B62022',
-        justifyContent: 'center', alignItems: 'center',
-        borderWidth: 3, borderColor: 'white'
-    },
-    userNameText: { fontSize: 24, fontWeight: '900', color: 'white', marginTop: 15 },
-    userEmailText: { fontSize: 14, color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginTop: 4 },
-
-    bloodTypeFloatingBadge: {
-        position: 'absolute',
-        bottom: 50,
-        right: width / 2 - 100,
-        backgroundColor: '#1E293B',
+    profileIdentityRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
+    },
+    avatarContainer: {
+        position: 'relative',
+    },
+    mainAvatar: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: '#F8FAFC' },
+    avatarPlaceholder: {
+        width: 80, height: 80, borderRadius: 40,
+        backgroundColor: '#B62022',
+        justifyContent: 'center', alignItems: 'center',
+        borderWidth: 3, borderColor: '#F8FAFC'
+    },
+    verifiedBadge: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        backgroundColor: '#3B82F6',
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
         borderWidth: 2,
         borderColor: 'white',
     },
-    floatingBadgeText: { color: 'white', fontWeight: '900', fontSize: 14, marginLeft: 4 },
+    identityTextContainer: {
+        marginLeft: 18,
+        flex: 1,
+    },
+    userNameText: { fontSize: 22, fontWeight: '900', color: '#1E293B' },
+    userEmailText: { fontSize: 13, color: '#64748B', fontWeight: '600', marginTop: 2 },
+    bloodBadgeSmall: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FEF2F2',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+        marginTop: 8,
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
+    },
+    bloodBadgeTextSmall: { color: '#B62022', fontWeight: '900', fontSize: 12, marginLeft: 4 },
 
     statsGrid: {
         flexDirection: 'row',
@@ -368,17 +433,37 @@ const styles = StyleSheet.create({
     },
     logoutButtonText: { color: '#EF4444', fontSize: 16, fontWeight: '900', marginLeft: 10 },
     footerVersion: { textAlign: 'center', marginTop: 30, color: '#CBD5E1', fontSize: 12, fontWeight: '700' },
-    loadingContainer: {
-        flex: 1,
-        backgroundColor: '#FFFFFF',
+
+    // Info Row Styles
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+    },
+    infoRowBorder: {
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    infoIconBox: {
+        width: 42,
+        height: 42,
+        borderRadius: 14,
         justifyContent: 'center',
         alignItems: 'center',
+        marginRight: 14,
     },
-    loadingSyncText: {
-        marginTop: 16,
-        fontSize: 14,
-        color: '#64748B',
-        fontWeight: '600',
+    infoText: { flex: 1 },
+    infoLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#94A3B8',
+        letterSpacing: 0.4,
+        marginBottom: 3,
+    },
+    infoValue: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#1E293B',
     },
 });
 

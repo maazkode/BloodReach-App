@@ -25,6 +25,7 @@ import { getFullLocationData, forwardGeocode, LocationData } from '../services/l
 import { geohashForLocation } from 'geofire-common';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Timestamp } from '@react-native-firebase/firestore';
+import LoadingScreen from '../../shared/components/LoadingScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
 
@@ -180,11 +181,7 @@ const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
     };
 
     if (loading) {
-        return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#B62022" />
-            </View>
-        );
+        return <LoadingScreen tagline="Loading your profile details..." />;
     }
 
     return (
@@ -392,7 +389,6 @@ const SelectionModal = ({ visible, onClose, title, data, selected, onSelect, isG
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAFC' },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
     header: {
         flexDirection: 'row',
         alignItems: 'center',

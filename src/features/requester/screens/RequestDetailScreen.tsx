@@ -10,17 +10,17 @@ import {
     Linking,
     Dimensions
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../App';
 import { getAuth } from '@react-native-firebase/auth';
-import { 
-    getDonationRequest, 
-    updateDonationRequest, 
-    completeDonation, 
-    getMatchesForRequest, 
+import {
+    getDonationRequest,
+    updateDonationRequest,
+    completeDonation,
+    getMatchesForRequest,
     updateMatchStatus,
     getUserDocument,
     createDonationMatch,
@@ -28,10 +28,12 @@ import {
 } from '../../shared/services/firestoreService';
 import { DonationRequest, DonationMatch, UserDocument } from '../../shared/types/database';
 import { useModal } from '../../shared/context/ModalContext';
+import LoadingScreen from '../../shared/components/LoadingScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequestDetail'>;
 
 const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
+    const insets = useSafeAreaInsets();
     const { showModal } = useModal();
     const { requestId } = route.params;
     const [request, setRequest] = useState<DonationRequest | null>(null);
@@ -47,7 +49,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 const data = await getDonationRequest(requestId);
                 if (data) {
                     setRequest(data);
-                    
+
                     // If I am the requester, listen for matches
                     if (data.requesterId === currentUser?.uid) {
                         const unsub = getMatchesForRequest(requestId, async (matchList) => {
@@ -92,11 +94,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }, [requestId]);
 
     if (loading) {
-        return (
-            <View style={styles.centerContainer}>
-                <ActivityIndicator size="large" color="#B62022" />
-            </View>
-        );
+        return <LoadingScreen tagline="Loading request details..." />;
     }
 
     if (!request) return null;
@@ -131,7 +129,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         setActionLoading(true);
         try {
             await updateMatchStatus(match.id!, 'accepted', match);
-            
+
             // Also add to request's matchedDonorIds
             const updatedMatchedIds = [...(request.matchedDonorIds || []), match.donorId];
             await updateDonationRequest(requestId, {
@@ -187,7 +185,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             console.error('[RequestDetail] Missing user or request:', { currentUser: !!currentUser, request: !!request });
             return;
         }
-        
+
         if (actionLoading) return;
 
         setActionLoading(true);
@@ -230,7 +228,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         description: 'You have saved a life today. Your profile will be on a 3-month cooldown.',
                         type: 'success',
                         primaryText: 'Finish',
-                        onPrimaryPress: () => navigation.replace('DonorDashboard')
+                        onPrimaryPress: () => navigation.replace('DonorDashboard', {})
                     });
                 } catch (error) {
                     showModal({
@@ -272,13 +270,14 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <View style={styles.container}>
+            {/* ── Premium White Header ── */}
+            <View style={[styles.whiteHeader, { paddingTop: insets.top + 10 }]}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtnHeader}>
                     <MaterialIcon name="arrow-back" size={24} color="#1E293B" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>{isRequester ? 'Request Control' : 'Donation Details'}</Text>
-                <View style={{ width: 24 }} />
+                <Text style={styles.whiteHeaderTitle}>{isRequester ? 'Request Control' : 'Donation Details'}</Text>
+                <View style={{ width: 40 }} />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -324,7 +323,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                                         <View style={styles.donorAvatar}>
                                             <MaterialIcon name="person" size={24} color="#64748B" />
                                         </View>
-                                        <View style={{flex: 1}}>
+                                        <View style={{ flex: 1 }}>
                                             <Text style={styles.donorName}>{m.donor?.name || 'Anonymous Donor'}</Text>
                                             <Text style={styles.donorStatus}>{m.status.toUpperCase()}</Text>
                                         </View>
@@ -337,15 +336,15 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
                                     {m.status === 'pending' ? (
                                         <View style={styles.matchActions}>
-                                            <TouchableOpacity 
-                                                style={[styles.smallBtn, styles.rejectBtn]} 
+                                            <TouchableOpacity
+                                                style={[styles.smallBtn, styles.rejectBtn]}
                                                 onPress={() => handleRejectMatch(m)}
                                                 disabled={actionLoading}
                                             >
                                                 <Text style={styles.rejectBtnText}>Reject</Text>
                                             </TouchableOpacity>
-                                            <TouchableOpacity 
-                                                style={[styles.smallBtn, styles.acceptBtn]} 
+                                            <TouchableOpacity
+                                                style={[styles.smallBtn, styles.acceptBtn]}
                                                 onPress={() => handleAcceptMatch(m, m.donor?.name || 'Donor')}
                                                 disabled={actionLoading}
                                             >
@@ -353,20 +352,20 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                                             </TouchableOpacity>
                                         </View>
                                     ) : m.status === 'accepted' ? (
-                                        <View style={styles.matchContactRow}>
-                                             <TouchableOpacity 
-                                                style={styles.contactIconBtn} 
+                                        <View style={styles.contactRow}>
+                                            <TouchableOpacity
+                                                style={styles.contactBtn}
                                                 onPress={() => Linking.openURL(`tel:${m.donor?.phone}`)}
                                             >
                                                 <MaterialIcon name="phone" size={20} color="#B62022" />
-                                                <Text style={styles.contactIconText}>Call</Text>
+                                                <Text style={styles.contactBtnText}>Call</Text>
                                             </TouchableOpacity>
-                                            <TouchableOpacity 
-                                                style={[styles.contactIconBtn, {backgroundColor: '#E7F9ED'}]} 
+                                            <TouchableOpacity
+                                                style={[styles.contactBtn, { backgroundColor: '#F0FDF4' }]}
                                                 onPress={() => handleWhatsApp(m.donor?.phone || '', m.donor?.name || 'Donor')}
                                             >
-                                                <MaterialCommunityIcon name="whatsapp" size={20} color="#16A34A" />
-                                                <Text style={[styles.contactIconText, {color: '#16A34A'}]}>WhatsApp</Text>
+                                                <MaterialCommunityIcon name="whatsapp" size={20} color="#22C55E" />
+                                                <Text style={[styles.contactBtnText, { color: '#22C55E' }]}>WhatsApp</Text>
                                             </TouchableOpacity>
                                         </View>
                                     ) : (
@@ -383,12 +382,12 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         <Text style={styles.sectionTitle}>Contact Requester</Text>
                         <View style={styles.contactRow}>
                             <TouchableOpacity style={styles.contactBtn} onPress={() => Linking.openURL(`tel:${request.phone}`)}>
-                                <MaterialIcon name="phone" size={24} color="#B62022" />
+                                <MaterialIcon name="phone" size={20} color="#B62022" />
                                 <Text style={styles.contactBtnText}>Call</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={[styles.contactBtn, { backgroundColor: '#E7F9ED' }]} onPress={() => handleWhatsApp(request.phone, 'Requester')}>
-                                <MaterialCommunityIcon name="whatsapp" size={24} color="#16A34A" />
-                                <Text style={[styles.contactBtnText, { color: '#16A34A' }]}>WhatsApp</Text>
+                            <TouchableOpacity style={[styles.contactBtn, { backgroundColor: '#F0FDF4' }]} onPress={() => handleWhatsApp(request.phone, 'Requester')}>
+                                <MaterialCommunityIcon name="whatsapp" size={20} color="#22C55E" />
+                                <Text style={[styles.contactBtnText, { color: '#22C55E' }]}>WhatsApp</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -396,7 +395,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
                 {!isRequester && myMatch?.status === 'pending' && (
                     <View style={styles.statusBox}>
-                        <ActivityIndicator size="small" color="#B62022" style={{marginRight: 10}} />
+                        <ActivityIndicator size="small" color="#B62022" style={{ marginRight: 10 }} />
                         <Text style={styles.statusBoxText}>Request Sent. Waiting for approval...</Text>
                     </View>
                 )}
@@ -418,7 +417,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     </TouchableOpacity>
                 )}
                 {isRequester && request.status === 'open' && !myMatch && (
-                     <View style={[styles.statusBox, { backgroundColor: '#F1F5F9', marginBottom: 24 }]}>
+                    <View style={[styles.statusBox, { backgroundColor: '#F1F5F9', marginBottom: 24 }]}>
                         <MaterialIcon name="info" size={20} color="#64748B" style={{ marginRight: 10 }} />
                         <Text style={[styles.statusBoxText, { color: '#64748B' }]}>This is your own request.</Text>
                     </View>
@@ -464,16 +463,31 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     </TouchableOpacity>
                 )}
             </ScrollView>
-        </SafeAreaView>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAFC' },
-    centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
-    header: { height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-    backButton: { padding: 4 },
-    headerTitle: { fontSize: 18, fontWeight: '800', color: '#1E293B' },
+
+    whiteHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingBottom: 15,
+        backgroundColor: 'white',
+    },
+    backBtnHeader: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F1F5F9',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    whiteHeaderTitle: { fontSize: 18, fontWeight: '800', color: '#1E293B' },
+
     scrollContent: { padding: 20, paddingBottom: 60 },
 
     timelineContainer: { marginBottom: 30, marginTop: 10, position: 'relative' },
@@ -502,10 +516,6 @@ const styles = StyleSheet.create({
 
     sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1E293B', marginBottom: 16 },
 
-    contactCard: { backgroundColor: 'white', borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#F1F5F9' },
-    contactRow: { flexDirection: 'row', gap: 12 },
-    contactBtn: { flex: 1, backgroundColor: '#FDECEC', height: 60, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    contactBtnText: { color: '#B62022', fontSize: 14, fontWeight: '800', marginTop: 4 },
 
     fulfillBtn: { backgroundColor: '#B62022', height: 56, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 16, shadowColor: '#B62022', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
     fulfillBtnText: { color: 'white', fontSize: 16, fontWeight: '800' },
@@ -516,24 +526,25 @@ const styles = StyleSheet.create({
     matchesSection: { marginBottom: 24 },
     noMatchesBox: { backgroundColor: 'white', borderRadius: 16, padding: 30, alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9', borderStyle: 'dashed' },
     noMatchesText: { color: '#94A3B8', fontSize: 14, fontWeight: '600', marginTop: 12 },
-    
-    matchCard: { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F1F5F9' },
+
+    matchCard: { backgroundColor: 'white', borderRadius: 20, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
     donorInfoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     donorAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     donorName: { fontSize: 16, fontWeight: '800', color: '#1E293B' },
-    donorStatus: { fontSize: 10, color: '#64748B', fontWeight: '700', letterSpacing: 0.5, marginTop: 2 },
+    donorStatus: { fontSize: 11, color: '#94A3B8', fontWeight: '700', letterSpacing: 0.5, marginTop: 2 },
     acceptedBadge: { marginLeft: 8 },
-    
+
     matchActions: { flexDirection: 'row', gap: 10 },
     smallBtn: { flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     rejectBtn: { backgroundColor: '#F1F5F9' },
     rejectBtnText: { color: '#64748B', fontWeight: '700', fontSize: 14 },
     acceptBtn: { backgroundColor: '#B62022' },
     acceptBtnText: { color: 'white', fontWeight: '800', fontSize: 14 },
-    
-    matchContactRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-    contactIconBtn: { flex: 1, height: 48, borderRadius: 10, backgroundColor: '#FDECEC', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
-    contactIconText: { color: '#B62022', fontWeight: '800', fontSize: 14 },
+
+    contactCard: { backgroundColor: 'white', borderRadius: 20, padding: 16, marginBottom: 24, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+    contactRow: { flexDirection: 'row', gap: 12 },
+    contactBtn: { flex: 1, flexDirection: 'row', backgroundColor: '#FEF2F2', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', gap: 8 },
+    contactBtnText: { color: '#B62022', fontSize: 15, fontWeight: '800' },
     rejectedText: { fontSize: 13, color: '#94A3B8', fontStyle: 'italic', textAlign: 'center', paddingVertical: 8 },
 
     statusBox: { backgroundColor: '#FEF2F2', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: '#FEE2E2' },

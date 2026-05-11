@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FAIcon from 'react-native-vector-icons/FontAwesome';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import LoadingScreen from '../../shared/components/LoadingScreen';
 
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../../../App';
@@ -110,6 +111,10 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
             setLoading(false);
         }
     };
+
+    if (loading) {
+        return <LoadingScreen title="Authenticating" tagline="Signing you in securely..." />;
+    }
 
     return (
         <SafeAreaView style={styles.container}>

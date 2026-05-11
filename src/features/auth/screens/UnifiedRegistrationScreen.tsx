@@ -30,6 +30,7 @@ import { getFCMToken } from '../../shared/services/notificationService';
 import { geohashForLocation } from 'geofire-common';
 import { signOut } from '../services/authService';
 import { useModal } from '../../shared/context/ModalContext';
+import LoadingScreen from '../../shared/components/LoadingScreen';
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["Male", "Female", "Other"];
@@ -231,6 +232,10 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
             setLoading(false);
         }
     }, [validateForm, name, phone, bloodGroup, address, age, gender, isAvailable, lastDonationDate, locationData, navigation, showModal]);
+    
+    if (loading) {
+        return <LoadingScreen title="Creating Profile" tagline="Finalizing your secure setup..." />;
+    }
 
     return (
         <SafeAreaView style={styles.container}>

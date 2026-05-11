@@ -14,6 +14,7 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import LoadingScreen from '../../shared/components/LoadingScreen';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { Colors } from '../../shared/theme/colors';
 import { useAuth } from '../../shared/context/AuthContext';
@@ -266,13 +267,7 @@ const RequesterDashboard: React.FC<Props> = ({ route, navigation }) => {
     }, [activeTab, myRequests, activeMatchesCount, pendingUnitsTotal, loadingRequests]);
 
     if (loadingUser) {
-        return (
-            <View style={styles.loadingContainer}>
-                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-                <ActivityIndicator size="large" color="#B62022" />
-                <Text style={styles.loadingSyncText}>Synchronizing your profile...</Text>
-            </View>
-        );
+        return <LoadingScreen tagline="Synchronizing your requester profile..." />;
     }
 
     return (
@@ -530,18 +525,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginTop: 12,
         textAlign: 'center',
-    },
-    loadingContainer: {
-        flex: 1,
-        backgroundColor: '#FFFFFF',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loadingSyncText: {
-        marginTop: 16,
-        fontSize: 14,
-        color: '#64748B',
-        fontWeight: '600',
     },
 });
 

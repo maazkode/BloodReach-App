@@ -12,6 +12,9 @@ import {
     Dimensions,
     Image
 } from 'react-native';
+import {
+    useSafeAreaInsets
+} from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { safeRun, log, translateError } from '../../shared/utils/errorHandler';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
@@ -29,6 +32,7 @@ import {
 } from '../../shared/services/firestoreService';
 import { DonationRequest, DonationMatch, UserDocument } from '../../shared/types/database';
 import { useModal } from '../../shared/context/ModalContext';
+import LoadingScreen from '../../shared/components/LoadingScreen';
 
 const { width } = Dimensions.get('window');
 
@@ -43,6 +47,7 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     const [myMatch, setMyMatch] = useState<DonationMatch | null>(null);
     const [requester, setRequester] = useState<UserDocument | null>(null);
 
+    const insets = useSafeAreaInsets();
     const currentUser = getAuth().currentUser;
 
     useEffect(() => {
@@ -85,11 +90,7 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     }, [requestId]);
 
     if (loading) {
-        return (
-            <View style={styles.centerContainer}>
-                <ActivityIndicator size="large" color="#B62022" />
-            </View>
-        );
+        return <LoadingScreen tagline="Fetching request details..." />;
     }
 
     if (!request) return null;
@@ -166,211 +167,207 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     };
 
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+        <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
+            <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
-            <LinearGradient
-                colors={['#B62022', '#801618']}
-                style={styles.headerWrapper}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            >
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                        <MaterialIcon name="arrow-back" size={24} color="white" />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Patient Details</Text>
-                    <View style={{ width: 40 }} />
-                </View>
-
-                <View style={styles.heroSection}>
-                    <View style={styles.heroBloodBadge}>
-                        <MaterialCommunityIcon name="water" size={20} color="white" />
-                        <Text style={styles.heroBloodText}>{request.bloodGroup}</Text>
-                    </View>
-                    <Text style={styles.heroPatientName} numberOfLines={2}>{request.patientName}</Text>
-                    <View style={styles.heroStatsRow}>
-                        <View style={styles.heroStatItem}>
-                            <MaterialCommunityIcon name="opacity" size={14} color="rgba(255,255,255,0.8)" />
-                            <Text style={styles.heroStatText}>{request.unitsRequired} Units</Text>
-                        </View>
-                        <View style={styles.heroStatDivider} />
-                        <View style={styles.heroStatItem}>
-                            <MaterialCommunityIcon name="clock-outline" size={14} color="rgba(255,255,255,0.8)" />
-                            <Text style={styles.heroStatText}>{request.urgencyLevel === 'urgent' ? 'Urgent' : 'Normal'}</Text>
-                        </View>
-                    </View>
-                </View>
-            </LinearGradient>
+            <View style={[styles.whiteHeader, { paddingTop: insets.top + 10 }]}>
+                <TouchableOpacity
+                    onPress={() => navigation.goBack()}
+                    style={styles.backBtnHeader}
+                >
+                    <MaterialIcon name="arrow-back" size={24} color="#1E293B" />
+                </TouchableOpacity>
+                <Text style={styles.whiteHeaderTitle}>Request Details</Text>
+                <View style={{ width: 40 }} />
+            </View>
 
             <ScrollView
-                contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
-                stickyHeaderIndices={[]}
+                contentContainerStyle={{ paddingBottom: 40 }}
             >
-                {request.urgencyLevel === 'urgent' && (
-                    <View style={styles.emergencyAlertCard}>
-                        <MaterialIcon name="report-problem" size={24} color="#B62022" />
-                        <View style={{ flex: 1, marginLeft: 12 }}>
-                            <Text style={styles.emergencyAlertTitle}>High Priority Request</Text>
-                            <Text style={styles.emergencyAlertSub}>This patient requires immediate assistance.</Text>
-                        </View>
-                    </View>
-                )}
 
-                <View style={styles.infoSection}>
-                    <Text style={styles.sectionTitleSmall}>Hospital Information</Text>
-                    <View style={styles.infoCard}>
-                        <View style={styles.infoRow}>
-                            <View style={styles.infoIconBox}>
-                                <MaterialIcon name="local-hospital" size={20} color="#B62022" />
-                            </View>
-                            <View style={{ flex: 1, marginLeft: 12 }}>
-                                <Text style={styles.infoMainText}>{request.hospitalName}</Text>
-                                <Text style={styles.infoSubText}>{request.hospitalAddress}, {request.city}</Text>
+
+                <View style={styles.patientHeroCard}>
+                    <View style={styles.patientHeroIdentity}>
+                        <View style={styles.patientNameContainer}>
+                            <Text style={styles.patientLabel}>PATIENT NAME</Text>
+                            <Text style={styles.patientNameHero} numberOfLines={2}>{request.patientName}</Text>
+                            <View style={styles.urgencyBadgeHero}>
+                                <MaterialCommunityIcon
+                                    name={request.urgencyLevel === 'urgent' ? 'lightning-bolt' : 'clock-outline'}
+                                    size={14}
+                                    color={request.urgencyLevel === 'urgent' ? '#B62022' : '#64748B'}
+                                />
+                                <Text style={[styles.urgencyTextHero, request.urgencyLevel === 'urgent' && { color: '#B62022' }]}>
+                                    {request.urgencyLevel === 'urgent' ? 'CRITICAL PRIORITY' : 'NORMAL PRIORITY'}
+                                </Text>
                             </View>
                         </View>
 
-                        <TouchableOpacity
-                            style={styles.mapActionBtn}
-                            onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(request.hospitalName + " " + request.city)}`)}
-                        >
-                            <MaterialIcon name="directions" size={20} color="#B62022" />
-                            <Text style={styles.mapActionText}>Get Directions</Text>
-                        </TouchableOpacity>
+                        <View style={styles.patientHeroBloodBadge}>
+                            <View style={styles.bloodBadgeInner}>
+                                <MaterialCommunityIcon name="water" size={24} color="#B62022" />
+                                <Text style={styles.bloodBadgeValueHero}>{request.bloodGroup}</Text>
+                            </View>
+                        </View>
                     </View>
-                </View>
 
-                <View style={styles.infoSection}>
-                    <Text style={styles.sectionTitleSmall}>Requested By</Text>
-                    <View style={styles.infoCard}>
-                        <View style={styles.infoRow}>
-                            <View style={styles.avatarBox}>
-                                {requester?.photoURL ? (
-                                    <Image source={{ uri: requester.photoURL }} style={styles.avatarImage} />
-                                ) : (
-                                    <MaterialIcon name="person" size={24} color="#94A3B8" />
-                                )}
-                            </View>
-                            <View style={{ flex: 1, marginLeft: 12 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <Text style={styles.infoMainText}>{requester?.name || 'BloodReach User'}</Text>
-                                    <MaterialIcon name="verified" size={14} color="#16A34A" style={{ marginLeft: 4 }} />
-                                </View>
-                                <Text style={styles.infoSubText}>Verified Requester</Text>
-                            </View>
+                    <View style={styles.patientHeroDivider} />
+
+                    <View style={styles.patientHeroStatsGrid}>
+                        <View style={styles.patientHeroStat}>
+                            <Text style={styles.patientHeroStatValue}>{request.unitsRequired}</Text>
+                            <Text style={styles.patientHeroStatLabel}>UNITS NEEDED</Text>
+                        </View>
+                        <View style={styles.patientHeroStatDivider} />
+                        <View style={styles.patientHeroStat}>
+                            <Text style={styles.patientHeroStatValue}>Pending</Text>
+                            <Text style={styles.patientHeroStatLabel}>STATUS</Text>
                         </View>
                     </View>
                 </View>
 
-                <View style={styles.actionSection}>
-                    {myMatch === null ? (
-                        request.requesterId === currentUser?.uid ? (
-                            <View style={styles.selfRequestBox}>
-                                <MaterialIcon name="info" size={20} color="#64748B" />
-                                <Text style={styles.selfRequestText}>This is your own request.</Text>
+                <View style={styles.scrollContent}>
+                    {request.urgencyLevel === 'urgent' && (
+                        <View style={styles.emergencyAlertCard}>
+                            <MaterialIcon name="report-problem" size={24} color="#B62022" />
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                <Text style={styles.emergencyAlertTitle}>High Priority Request</Text>
+                                <Text style={styles.emergencyAlertSub}>This patient requires immediate assistance.</Text>
                             </View>
-                        ) : (
-                            <TouchableOpacity style={styles.primaryActionBtn} onPress={handleInterest} disabled={actionLoading}>
-                                {actionLoading ? <ActivityIndicator color="#fff" /> : (
-                                    <>
-                                        <MaterialIcon name="favorite" size={22} color="#fff" style={{ marginRight: 8 }} />
-                                        <Text style={styles.primaryActionText}>I Want to Donate</Text>
-                                    </>
-                                )}
-                            </TouchableOpacity>
-                        )
-                    ) : myMatch.status === 'pending' ? (
-                        <View style={styles.pendingStatusBox}>
-                            <ActivityIndicator size="small" color="#B62022" />
-                            <Text style={styles.pendingStatusText}>Request Sent. Waiting for approval...</Text>
-                        </View>
-                    ) : myMatch.status === 'accepted' ? (
-                        <View style={styles.activeMatchCard}>
-                            <LinearGradient
-                                colors={['#16A34A', '#15803D']}
-                                style={styles.matchStatusBanner}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                            >
-                                <MaterialIcon name="check-circle" size={18} color="white" />
-                                <Text style={styles.matchStatusText}>Match Accepted!</Text>
-                            </LinearGradient>
-
-                            <View style={styles.matchContent}>
-                                <Text style={styles.matchInstruction}>You can now contact the requester to coordinate.</Text>
-
-                                <View style={styles.contactButtonsRow}>
-                                    <TouchableOpacity style={styles.contactButton} onPress={() => Linking.openURL(`tel:${request.phone}`)}>
-                                        <View style={[styles.contactIconBox, { backgroundColor: '#FDECEC' }]}>
-                                            <MaterialIcon name="phone" size={20} color="#B62022" />
-                                        </View>
-                                        <Text style={styles.contactLabel}>Call</Text>
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity style={styles.contactButton} onPress={() => handleWhatsApp(request.phone, 'Requester')}>
-                                        <View style={[styles.contactIconBox, { backgroundColor: '#E7F9ED' }]}>
-                                            <MaterialCommunityIcon name="whatsapp" size={20} color="#16A34A" />
-                                        </View>
-                                        <Text style={styles.contactLabel}>WhatsApp</Text>
-                                    </TouchableOpacity>
-                                </View>
-
-                                <TouchableOpacity
-                                    style={styles.startProcessBtn}
-                                    onPress={() => updateMatchStatus(myMatch.id!, 'in_progress', myMatch)}
-                                    disabled={actionLoading}
-                                >
-                                    <MaterialIcon name="play-arrow" size={22} color="#fff" />
-                                    <Text style={styles.startProcessText}>Start Donation Process</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.textLinkBtn}
-                                    onPress={() => updateMatchStatus(myMatch.id!, 'cancelled', myMatch)}
-                                >
-                                    <Text style={styles.textLink}>Cancel Helping</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    ) : myMatch.status === 'in_progress' ? (
-                        <View style={styles.activeMatchCard}>
-                            <View style={[styles.matchStatusBanner, { backgroundColor: '#1E293B' }]}>
-                                <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />
-                                <Text style={styles.matchStatusText}>Donation in Progress</Text>
-                            </View>
-
-                            <View style={styles.matchContent}>
-                                <TouchableOpacity style={styles.completeActionBtn} onPress={handleComplete} disabled={actionLoading}>
-                                    <MaterialIcon name="check-circle" size={22} color="#fff" />
-                                    <Text style={styles.completeActionText}>Mark as Completed</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.failedActionBtn}
-                                    onPress={() => updateMatchStatus(myMatch.id!, 'failed', myMatch)}
-                                    disabled={actionLoading}
-                                >
-                                    <MaterialIcon name="error-outline" size={20} color="#64748B" />
-                                    <Text style={styles.failedActionText}>Donation Failed</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    ) : myMatch.status === 'completed' ? (
-                        <View style={styles.successBox}>
-                            <MaterialIcon name="stars" size={32} color="#16A34A" />
-                            <Text style={styles.successTitle}>Heroic Act!</Text>
-                            <Text style={styles.successSub}>Thank you for saving a life today.</Text>
-                        </View>
-                    ) : (
-                        <View style={styles.infoBox}>
-                            <MaterialIcon name="info" size={22} color="#64748B" />
-                            <Text style={styles.infoBoxText}>This donation attempt ended ({myMatch.status}).</Text>
                         </View>
                     )}
-                </View>
 
-                <View style={{ height: 40 }} />
+                    <View style={styles.infoSection}>
+                        <Text style={styles.sectionTitleSmall}>Hospital Information</Text>
+                        <View style={styles.infoCard}>
+                            <View style={styles.infoRow}>
+                                <View style={styles.infoIconBox}>
+                                    <MaterialIcon name="local-hospital" size={20} color="#B62022" />
+                                </View>
+                                <View style={{ flex: 1, marginLeft: 12 }}>
+                                    <Text style={styles.infoMainText}>{request.hospitalName}</Text>
+                                    <Text style={styles.infoSubText}>{request.hospitalAddress}, {request.city}</Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity
+                                style={styles.mapActionBtn}
+                                onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(request.hospitalName + " " + request.city)}`)}
+                            >
+                                <MaterialIcon name="directions" size={20} color="#B62022" />
+                                <Text style={styles.mapActionText}>Get Directions</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    <View style={styles.infoSection}>
+                        <Text style={styles.sectionTitleSmall}>Requested By</Text>
+                        <View style={styles.infoCard}>
+                            <View style={styles.infoRow}>
+                                <View style={styles.avatarBox}>
+                                    {requester?.photoURL ? (
+                                        <Image source={{ uri: requester.photoURL }} style={styles.avatarImage} />
+                                    ) : (
+                                        <MaterialIcon name="person" size={24} color="#94A3B8" />
+                                    )}
+                                </View>
+                                <View style={{ flex: 1, marginLeft: 12 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Text style={styles.infoMainText}>{requester?.name || 'BloodReach User'}</Text>
+                                        <MaterialIcon name="verified" size={14} color="#16A34A" style={{ marginLeft: 4 }} />
+                                    </View>
+                                    <Text style={styles.infoSubText}>{myMatch?.status === 'accepted' ? 'ACCEPTED' : 'Verified Requester'}</Text>
+                                </View>
+                                {myMatch?.status === 'accepted' && (
+                                    <MaterialIcon name="check-circle" size={22} color="#22C55E" />
+                                )}
+                            </View>
+
+                            {myMatch?.status === 'accepted' && (
+                                <>
+                                    <View style={styles.contactRow}>
+                                        <TouchableOpacity style={styles.contactBtn} onPress={() => Linking.openURL(`tel:${request.phone}`)}>
+                                            <MaterialIcon name="phone" size={20} color="#B62022" />
+                                            <Text style={styles.contactBtnText}>Call</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={[styles.contactBtn, { backgroundColor: '#F0FDF4' }]} onPress={() => handleWhatsApp(request.phone, 'Requester')}>
+                                            <MaterialCommunityIcon name="whatsapp" size={20} color="#22C55E" />
+                                            <Text style={[styles.contactBtnText, { color: '#22C55E' }]}>WhatsApp</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={[styles.cancelActionBtn, { marginTop: 12 }]}
+                                        onPress={() => updateMatchStatus(myMatch.id!, 'cancelled', myMatch)}
+                                    >
+                                        <MaterialCommunityIcon name="close-circle-outline" size={20} color="#94A3B8" />
+                                        <Text style={styles.cancelActionText}>Cancel Helping</Text>
+                                    </TouchableOpacity>
+                                </>
+                            )}
+                        </View>
+                    </View>
+
+                    <View style={styles.actionSection}>
+                        {myMatch === null ? (
+                            request.requesterId === currentUser?.uid ? (
+                                <View style={styles.selfRequestBox}>
+                                    <MaterialIcon name="info" size={20} color="#64748B" />
+                                    <Text style={styles.selfRequestText}>This is your own request.</Text>
+                                </View>
+                            ) : (
+                                <TouchableOpacity style={styles.primaryActionBtn} onPress={handleInterest} disabled={actionLoading}>
+                                    {actionLoading ? <ActivityIndicator color="#fff" /> : (
+                                        <>
+                                            <MaterialIcon name="favorite" size={22} color="#fff" style={{ marginRight: 8 }} />
+                                            <Text style={styles.primaryActionText}>I Want to Donate</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            )
+                        ) : myMatch.status === 'pending' ? (
+                            <View style={styles.pendingStatusBox}>
+                                <ActivityIndicator size="small" color="#B62022" />
+                                <Text style={styles.pendingStatusText}>Request Sent. Waiting for approval...</Text>
+                            </View>
+                        ) : myMatch.status === 'accepted' ? null : myMatch.status === 'in_progress' ? (
+                            <View style={styles.activeMatchCard}>
+                                <View style={[styles.matchStatusBanner, { backgroundColor: '#1E293B' }]}>
+                                    <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />
+                                    <Text style={styles.matchStatusText}>Donation in Progress</Text>
+                                </View>
+
+                                <View style={styles.matchContent}>
+                                    <TouchableOpacity style={styles.completeActionBtn} onPress={handleComplete} disabled={actionLoading}>
+                                        <MaterialIcon name="check-circle" size={22} color="#fff" />
+                                        <Text style={styles.completeActionText}>Mark as Completed</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.failedActionBtn}
+                                        onPress={() => updateMatchStatus(myMatch.id!, 'failed', myMatch)}
+                                        disabled={actionLoading}
+                                    >
+                                        <MaterialIcon name="error-outline" size={20} color="#64748B" />
+                                        <Text style={styles.failedActionText}>Donation Failed</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ) : myMatch.status === 'completed' ? (
+                            <View style={styles.successBox}>
+                                <MaterialIcon name="stars" size={32} color="#16A34A" />
+                                <Text style={styles.successTitle}>Heroic Act!</Text>
+                                <Text style={styles.successSub}>Thank you for saving a life today.</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.infoBox}>
+                                <MaterialIcon name="info" size={22} color="#64748B" />
+                                <Text style={styles.infoBoxText}>This donation attempt ended ({myMatch.status}).</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={{ height: 40 }} />
+                </View>
             </ScrollView>
         </View>
     );
@@ -378,56 +375,135 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAFC' },
-    centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
 
-    headerWrapper: {
-        width: '100%',
-        paddingTop: 50,
-        paddingBottom: 30,
-        borderBottomLeftRadius: 32,
-        borderBottomRightRadius: 32,
-    },
-    header: {
+    whiteHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
-        height: 60,
+        paddingBottom: 15,
+        backgroundColor: 'white',
     },
-    backButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: 'rgba(255,255,255,0.15)',
+    backBtnHeader: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F1F5F9',
         justifyContent: 'center',
         alignItems: 'center',
     },
-    headerTitle: { fontSize: 18, fontWeight: '800', color: 'white' },
+    whiteHeaderTitle: { fontSize: 18, fontWeight: '800', color: '#1E293B' },
 
-    heroSection: {
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        marginTop: 15,
+    heroBackground: {
+        height: 120,
+        width: '100%',
+        borderBottomLeftRadius: 30,
+        borderBottomRightRadius: 30,
     },
-    heroBloodBadge: {
+    patientHeroCard: {
+        backgroundColor: 'white',
+        marginHorizontal: 20,
+        marginTop: 20,
+        marginBottom: 20,
+        borderRadius: 24,
+        padding: 20,
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+    },
+    patientHeroIdentity: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.3)',
-        gap: 6,
+        justifyContent: 'space-between',
     },
-    heroBloodText: { fontSize: 20, fontWeight: '900', color: 'white' },
-    heroPatientName: { fontSize: 28, fontWeight: '900', color: 'white', marginTop: 12, textAlign: 'center' },
-    heroStatsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 15 },
-    heroStatItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    heroStatText: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' },
-    heroStatDivider: { width: 1, height: 12, backgroundColor: 'rgba(255,255,255,0.3)', marginHorizontal: 15 },
+    patientNameContainer: {
+        flex: 1,
+        paddingRight: 15,
+    },
+    patientLabel: {
+        fontSize: 10,
+        fontWeight: '900',
+        color: '#94A3B8',
+        letterSpacing: 1,
+        marginBottom: 6,
+    },
+    patientNameHero: {
+        fontSize: 24,
+        fontWeight: '900',
+        color: '#1E293B',
+        marginBottom: 8,
+    },
+    urgencyBadgeHero: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+    },
+    urgencyTextHero: {
+        fontSize: 10,
+        fontWeight: '900',
+        color: '#64748B',
+        marginLeft: 4,
+        letterSpacing: 0.5,
+    },
+    patientHeroBloodBadge: {
+        width: 60,
+        height: 60,
+    },
+    bloodBadgeInner: {
+        width: 60,
+        height: 60,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#FEF2F2',
+        borderWidth: 1,
+        borderColor: '#FEE2E2',
+    },
+    bloodBadgeValueHero: {
+        fontSize: 18,
+        fontWeight: '900',
+        color: '#B62022',
+        marginTop: -2,
+    },
+    patientHeroDivider: {
+        height: 1,
+        backgroundColor: '#F1F5F9',
+        marginVertical: 20,
+    },
+    patientHeroStatsGrid: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    patientHeroStat: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    patientHeroStatValue: {
+        fontSize: 18,
+        fontWeight: '900',
+        color: '#1E293B',
+    },
+    patientHeroStatLabel: {
+        fontSize: 9,
+        fontWeight: '800',
+        color: '#94A3B8',
+        marginTop: 4,
+        letterSpacing: 0.5,
+    },
+    patientHeroStatDivider: {
+        width: 1,
+        height: 20,
+        backgroundColor: '#F1F5F9',
+    },
 
-    scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
+    scrollContent: { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 0 },
 
     emergencyAlertCard: {
         flexDirection: 'row',
@@ -435,15 +511,14 @@ const styles = StyleSheet.create({
         backgroundColor: '#FEF2F2',
         borderRadius: 16,
         padding: 16,
-        marginTop: 10,
-        marginBottom: 24,
+        marginBottom: 20,
         borderWidth: 1,
         borderColor: '#FEE2E2',
     },
     emergencyAlertTitle: { fontSize: 15, fontWeight: '800', color: '#B62022' },
     emergencyAlertSub: { fontSize: 12, color: '#991B1B', marginTop: 2, fontWeight: '500' },
 
-    infoSection: { marginBottom: 24, marginTop: 24 },
+    infoSection: { marginBottom: 20 },
     sectionTitleSmall: { fontSize: 12, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 10, marginLeft: 4, letterSpacing: 1 },
     infoCard: { backgroundColor: 'white', borderRadius: 20, padding: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
     infoRow: { flexDirection: 'row', alignItems: 'center' },
@@ -466,7 +541,7 @@ const styles = StyleSheet.create({
     avatarBox: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
     avatarImage: { width: 44, height: 44, borderRadius: 22 },
 
-    actionSection: { marginTop: 10 },
+    actionSection: { marginTop: 0, marginBottom: 20 },
     primaryActionBtn: {
         backgroundColor: '#B62022',
         height: 56,
@@ -516,32 +591,28 @@ const styles = StyleSheet.create({
     matchContent: { padding: 20 },
     matchInstruction: { fontSize: 14, color: '#64748B', textAlign: 'center', lineHeight: 20, marginBottom: 20, fontWeight: '500' },
 
-    contactButtonsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-    contactButton: {
-        flex: 1,
-        alignItems: 'center',
-        backgroundColor: '#F8FAFC',
-        paddingVertical: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-    },
-    contactIconBox: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-    contactLabel: { fontSize: 13, fontWeight: '800', color: '#1E293B' },
+    contactCard: { backgroundColor: 'white', borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+    donorInfoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+    donorAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    donorName: { fontSize: 16, fontWeight: '800', color: '#1E293B' },
+    donorStatus: { fontSize: 11, color: '#94A3B8', fontWeight: '700', letterSpacing: 0.5 },
 
-    startProcessBtn: {
-        backgroundColor: '#1E293B',
+    contactRow: { flexDirection: 'row', gap: 12, marginTop: 16 },
+    contactBtn: { flex: 1, flexDirection: 'row', backgroundColor: '#FEF2F2', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', gap: 8 },
+    contactBtnText: { color: '#B62022', fontSize: 15, fontWeight: '800' },
+
+    cancelActionBtn: {
         height: 56,
         borderRadius: 16,
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        backgroundColor: '#F8FAFC',
         gap: 8,
     },
-    startProcessText: { color: 'white', fontSize: 16, fontWeight: '800' },
-
-    textLinkBtn: { marginTop: 16, alignSelf: 'center' },
-    textLink: { color: '#94A3B8', fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
+    cancelActionText: { color: '#64748B', fontSize: 15, fontWeight: '700' },
 
     completeActionBtn: {
         backgroundColor: '#16A34A',

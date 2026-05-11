@@ -12,7 +12,6 @@ import UnifiedRegistrationScreen from './src/features/auth/screens/UnifiedRegist
 import DonorDashboard from './src/features/donor/screens/DonorDashboardScreen';
 import RequesterDashboard from './src/features/requester/screens/RequesterDashboardScreen';
 import CreateRequestScreen from './src/features/requester/screens/CreateRequestScreen';
-import ProfileScreen from './src/features/shared/screens/ProfileScreen';
 import RequestDetailScreen from './src/features/requester/screens/RequestDetailScreen';
 import DonorHelpDetailScreen from './src/features/donor/screens/DonorHelpDetailScreen';
 import SettingsScreen from './src/features/shared/screens/SettingsScreen';
@@ -33,7 +32,6 @@ export type RootStackParamList = {
   DonorDashboard: { tab?: string };
   RequesterDashboard: { tab?: string };
   CreateRequest: undefined;
-  Profile: undefined;
   RequestDetail: { requestId: string };
   DonorHelpDetail: { requestId: string };
   Settings: undefined;
@@ -87,7 +85,6 @@ const RootNavigator = () => {
             <Stack.Screen name="DonorDashboard" component={DonorDashboard} />
             <Stack.Screen name="RequesterDashboard" component={RequesterDashboard} />
             <Stack.Screen name="CreateRequest" component={CreateRequestScreen} />
-            <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
             <Stack.Screen name="DonorHelpDetail" component={DonorHelpDetailScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />

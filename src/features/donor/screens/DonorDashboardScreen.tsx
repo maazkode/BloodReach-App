@@ -16,6 +16,7 @@ import {
     Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import LoadingScreen from '../../shared/components/LoadingScreen';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors } from '../../shared/theme/colors';
@@ -329,8 +330,8 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
         if (userData.age && (userData.age < 18 || userData.age > 60)) {
             showModal({
                 title: 'Medical Restriction',
-                description: userData.age < 18 
-                    ? 'You must be at least 18 years old to donate blood.' 
+                description: userData.age < 18
+                    ? 'You must be at least 18 years old to donate blood.'
                     : 'Donors over 60 years of age require special medical clearance and are currently restricted.',
                 type: 'error',
                 primaryText: 'Understood'
@@ -419,8 +420,8 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                                 </View>
                                 <Text style={styles.unifiedTitleLarge}>Medical Restriction</Text>
                                 <Text style={styles.unifiedSubtextLight}>
-                                    {userData?.age! < 18 
-                                        ? "You're a bit too young to donate yet. You'll be ready once you're 18!" 
+                                    {userData?.age! < 18
+                                        ? "You're a bit too young to donate yet. You'll be ready once you're 18!"
                                         : "Donating after 60 requires specific medical conditions. Please consult a doctor."}
                                 </Text>
                             </View>
@@ -516,13 +517,7 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
     }, [activeTab, nearbyRequests, donationHistory, userData, activeHelps, loadingRequests]);
 
     if (loadingUser) {
-        return (
-            <View style={styles.loadingContainer}>
-                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-                <ActivityIndicator size="large" color="#B62022" />
-                <Text style={styles.loadingSyncText}>Synchronizing your profile...</Text>
-            </View>
-        );
+        return <LoadingScreen tagline="Synchronizing your dashboard..." />;
     }
 
     return (
@@ -968,18 +963,6 @@ const styles = StyleSheet.create({
     drawerItemText: { fontSize: 15, fontWeight: '700', color: '#475569' },
     drawerDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 10 },
     versionText: { position: 'absolute', bottom: 30, left: 20, fontSize: 11, color: '#94A3B8', fontWeight: '600' },
-    loadingContainer: {
-        flex: 1,
-        backgroundColor: '#FFFFFF',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loadingSyncText: {
-        marginTop: 16,
-        fontSize: 14,
-        color: '#64748B',
-        fontWeight: '600',
-    },
 });
 
 export default DonorDashboard;
