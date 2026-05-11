@@ -101,11 +101,11 @@ export const createUserDocument = async (
             lastActiveRole: userData.lastActiveRole || (existingData?.lastActiveRole || 'requester'),
             isVerified: userData.isVerified ?? (existingData?.isVerified ?? false),
             isEligibleToDonate: userData.isEligibleToDonate ?? (existingData?.isEligibleToDonate ?? true),
-            donationCooldownUntil: userData.donationCooldownUntil !== undefined 
-                ? userData.donationCooldownUntil 
+            donationCooldownUntil: userData.donationCooldownUntil !== undefined
+                ? userData.donationCooldownUntil
                 : (existingData?.donationCooldownUntil ?? null),
-            lastDonationDate: userData.lastDonationDate !== undefined 
-                ? userData.lastDonationDate 
+            lastDonationDate: userData.lastDonationDate !== undefined
+                ? userData.lastDonationDate
                 : (existingData?.lastDonationDate ?? null),
             updatedAt: serverTimestamp(),
         };
@@ -284,10 +284,10 @@ export const subscribeToNearbyRequests = (
     const triggerCallback = () => {
         const allRequests: DonationRequest[] = [];
         resultsMap.forEach(list => allRequests.push(...list));
-        
+
         // Remove duplicates (by ID) and sort by proximity or date
         const uniqueRequests = Array.from(new Map(allRequests.map(r => [r.id, r])).values());
-        
+
         // Sort by distance
         uniqueRequests.sort((a, b) => {
             const distA = getDistance(lat, lng, a.location.latitude, a.location.longitude);
@@ -319,11 +319,11 @@ export const subscribeToNearbyRequests = (
                 id: doc.id,
                 ...doc.data()
             } as DonationRequest));
-            
+
             // Blood Group Compatibility Match
             const filtered = requests.filter((r: DonationRequest) => {
                 if (!r.location?.latitude || !r.location?.longitude) return false;
-                
+
                 if (bloodGroup) {
                     const compatibleGroups = getCompatibleBloodGroups(bloodGroup);
                     if (!compatibleGroups.includes(r.bloodGroup)) return false;
@@ -354,7 +354,7 @@ export const getRequesterRequests = (
             where('requesterId', '==', uid)
         );
 
-        return onSnapshot(q, 
+        return onSnapshot(q,
             (snapshot) => {
                 if (!snapshot) {
                     callback([]);
@@ -364,7 +364,7 @@ export const getRequesterRequests = (
                     id: doc.id,
                     ...doc.data()
                 } as DonationRequest));
-                
+
                 // Sort client-side to avoid index requirements
                 const sorted = requests.sort((a: DonationRequest, b: DonationRequest) => {
                     const timeA = (a.createdAt as any)?.seconds || 0;
@@ -382,7 +382,7 @@ export const getRequesterRequests = (
     } catch (error) {
         console.error('[Firestore] getRequesterRequests error:', error);
         callback([]);
-        return () => {};
+        return () => { };
     }
 };
 
@@ -561,7 +561,7 @@ export const getDonorStats = (
         return onSnapshot(q, (snapshot) => {
             const count = snapshot.size;
             const livesSaved = count * 3; // Each donation saves up to 3 lives
-            
+
             let rank = 'Bronze';
             if (count >= 10) rank = 'Gold';
             else if (count >= 4) rank = 'Silver';
@@ -570,7 +570,7 @@ export const getDonorStats = (
         });
     } catch (error) {
         console.error('[Firestore] getDonorStats error:', error);
-        return () => {};
+        return () => { };
     }
 };
 
@@ -602,7 +602,7 @@ export const getActiveDonorMatches = (
         });
     } catch (error) {
         console.error('[Firestore] getActiveDonorMatches error:', error);
-        return () => {};
+        return () => { };
     }
 };
 
@@ -630,19 +630,19 @@ export const getDonorHistory = (
                 const requestData = await getDonationRequest(match.requestId);
                 return { ...match, request: requestData || undefined };
             }));
-            
+
             // Sort by date descending
             const sorted = matches.sort((a, b) => {
                 const timeA = (a.createdAt as any)?.seconds || 0;
                 const timeB = (b.createdAt as any)?.seconds || 0;
                 return timeB - timeA;
             });
-            
+
             callback(sorted as (DonationMatch & { request?: DonationRequest })[]);
         });
     } catch (error) {
         console.error('[Firestore] getDonorHistory error:', error);
-        return () => {};
+        return () => { };
     }
 };
 
@@ -817,7 +817,7 @@ export const getMatchForDonor = (
 ) => {
     return onSnapshot(
         query(
-            collection(db, 'donation_matches'), 
+            collection(db, 'donation_matches'),
             where('requestId', '==', requestId),
             where('donorId', '==', donorId)
         ),

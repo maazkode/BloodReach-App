@@ -280,14 +280,6 @@ const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
                         <InputField label="City" icon="location-city" value={city} onChange={setCity} placeholder="City name" />
                     </View>
 
-                    <TouchableOpacity
-                        style={[styles.footerSaveBtn, saving && { opacity: 0.7 }]}
-                        onPress={handleSave}
-                        disabled={saving}
-                    >
-                        <Text style={styles.footerSaveText}>{saving ? 'Updating Backend...' : 'Update Profile'}</Text>
-                    </TouchableOpacity>
-
                 </ScrollView>
             </KeyboardAvoidingView>
 
@@ -414,9 +406,6 @@ const styles = StyleSheet.create({
     statusText: { fontSize: 11, color: '#94A3B8', marginLeft: 4, fontWeight: '600' },
     row: { flexDirection: 'row' },
     fetchBtn: { padding: 10 },
-    footerSaveBtn: { backgroundColor: '#B62022', height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#B62022', shadowOpacity: 0.2, shadowRadius: 10, elevation: 5, marginTop: 10 },
-    footerSaveText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-
     // Modal
     modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', padding: 30 },
     modalContent: { backgroundColor: '#fff', borderRadius: 24, padding: 24 },
