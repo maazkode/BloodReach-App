@@ -1,459 +1,304 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     StyleSheet,
     View,
     Text,
     TouchableOpacity,
-    ScrollView,
     FlatList,
     StatusBar,
     Image,
     Dimensions,
-    Modal,
     Animated,
-    Pressable,
     ActivityIndicator,
-    Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LoadingScreen from '../components/common/LoadingScreen';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../constants/Colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../context/AuthContext';
-import {
-    getUserDocument,
-    createUserDocument,
-    subscribeToRequests,
-    subscribeToNearbyRequests,
-    subscribeToMatchingRequests,
-    checkAndRefreshEligibility,
-    getActiveDonorMatches,
-    subscribeToUser,
-    getDonorHistory,
-    getCompatibleBloodGroups
-} from '../api/firestoreService';
-import { UserDocument, DonationRequest } from '../types/database';
+import { DonationRequest } from '../types/database';
 import { signOut } from '../api/authService';
-import { triggerLocalNotification } from '../api/notificationService';
 import BottomTabBar from '../components/common/BottomTabBar';
 import { useModal } from '../context/ModalContext';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'DonorDashboard'>;
+// Hooks
+import { useDonorEligibility } from '../hooks/useDonorEligibility';
+import { useDonorRequests } from '../hooks/useDonorRequests';
+import { useDonorMatches } from '../hooks/useDonorMatches';
+import { useDonorHistory } from '../hooks/useDonorHistory';
+
+// Components
+import { RestrictedHero, CooldownHero, ActiveHero } from '../components/donor/HeroSection';
+
 const { width } = Dimensions.get('window');
 
-const getUrgencyColor = (level: string) => level === 'urgent' ? '#B62022' : '#D97706';
-const getUrgencyBg = (level: string) => level === 'urgent' ? '#FEE2E2' : '#FEF3C7';
-const getUrgencyLabel = (level: string) => level === 'urgent' ? 'EMERGENCY' : 'NEEDED';
+const getTimeAgo = (timestamp: any) => {
+    if (!timestamp) return 'Just now';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const now = new Date();
+    const diff = Math.max(0, now.getTime() - date.getTime());
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(mins / 60);
+    const days = Math.floor(hours / 24);
 
-const RequestItem = React.memo(({ item, isFullWidth, isEligible, onHelpPress }: {
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (mins > 0) return `${mins}m ago`;
+    return 'Just now';
+};
+
+const getUrgencyText = (level: string) => {
+    switch (level) {
+        case 'critical': return 'Needed Immediately';
+        case 'urgent': return 'Needed within 2 hours';
+        default: return 'Needed within 24 hours';
+    }
+};
+
+const PulseIndicator = React.memo(() => {
+    const scale = React.useRef(new Animated.Value(1)).current;
+    const opacity = React.useRef(new Animated.Value(0.7)).current;
+
+    useEffect(() => {
+        const animation = Animated.loop(
+            Animated.parallel([
+                Animated.timing(scale, { toValue: 2.2, duration: 1500, useNativeDriver: true }),
+                Animated.timing(opacity, { toValue: 0, duration: 1500, useNativeDriver: true }),
+            ])
+        );
+        animation.start();
+        return () => animation.stop();
+    }, [scale, opacity]);
+
+    return (
+        <Animated.View style={[styles.pulseCircle, { transform: [{ scale }], opacity }]} />
+    );
+});
+
+const RequestItem = React.memo(({ item, isFullWidth, isEligible, onHelpPress, eligibilityDate }: {
     item: DonationRequest,
     isFullWidth?: boolean,
     isEligible: boolean,
-    onHelpPress: (item: DonationRequest) => void
+    onHelpPress: (item: DonationRequest) => void,
+    eligibilityDate?: string
 }) => {
-    const urgencyColor = getUrgencyColor(item.urgencyLevel);
-    const urgencyBg = getUrgencyBg(item.urgencyLevel);
+    const isUrgent = item.urgencyLevel === 'urgent' || item.urgencyLevel === 'critical';
+    const urgencyColor = isUrgent ? '#E11D48' : '#D97706';
+    const urgencyBg = isUrgent ? '#FFF1F2' : '#FEF3C7';
+    const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+    const handlePressIn = () => Animated.spring(scaleAnim, { toValue: 0.98, useNativeDriver: true }).start();
+    const handlePressOut = () => Animated.spring(scaleAnim, { toValue: 1, friction: 3, tension: 40, useNativeDriver: true }).start();
 
     return (
-        <TouchableOpacity
-            style={isFullWidth ? styles.unifiedCardFull : styles.unifiedCardHorizontal}
-            activeOpacity={0.82}
-            onPress={() => onHelpPress(item)}
-        >
-            <View style={styles.unifiedCardTop}>
-                <View style={styles.bloodBadge}>
-                    <Text style={styles.bloodBadgeText}>{item.bloodGroup}</Text>
-                </View>
-                <View style={[styles.statusPill, { backgroundColor: urgencyBg }]}>
-                    <Text style={[styles.statusPillText, { color: urgencyColor }]}>
-                        {getUrgencyLabel(item.urgencyLevel)}
-                    </Text>
-                </View>
-            </View>
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+            <TouchableOpacity
+                style={[isFullWidth ? styles.newCardFull : styles.newCardHorizontal, isUrgent && styles.urgentCardBorder]}
+                activeOpacity={0.9}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                onPress={() => onHelpPress(item)}
+                accessibilityRole="button"
+                accessibilityLabel={`Blood request for ${item.patientName}. Group ${item.bloodGroup}. Urgency: ${item.urgencyLevel}. Hospital: ${item.hospitalName}. Units needed: ${item.unitsRequired}.`}
+            >
+                {isUrgent && (
+                    <View style={styles.emergencyIndicator}>
+                        <PulseIndicator />
+                        <View style={styles.emergencyDot} />
+                    </View>
+                )}
 
-            <Text style={styles.unifiedTitle} numberOfLines={1}>
-                {item.hospitalName || 'Unknown Hospital'}
-            </Text>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                <Text style={[styles.unifiedSubtext, { marginBottom: 0, flexShrink: 1, marginRight: 8 }]} numberOfLines={1}>
-                    For {item.patientName || 'Patient'}
-                </Text>
-                <View style={styles.unitPill}>
-                    <MaterialCommunityIcon name="water" size={12} color="#B62022" />
-                    <Text style={styles.unitPillText}>
-                        {item.unitsRequired} Unit{item.unitsRequired > 1 ? 's' : ''}
-                    </Text>
+                <View style={styles.cardHeader}>
+                    <View style={styles.bloodGroupContainer}>
+                        <Text style={styles.bloodGroupText}>{item.bloodGroup}</Text>
+                        <Text style={styles.bloodGroupLabel}>Group</Text>
+                    </View>
+                    <View style={styles.headerRight}>
+                        <View style={[styles.urgencyBadge, { backgroundColor: urgencyBg }]}>
+                            <MaterialCommunityIcon name={isUrgent ? "fire" : "clock-outline"} size={14} color={urgencyColor} />
+                            <Text style={[styles.urgencyBadgeText, { color: urgencyColor }]}>{item.urgencyLevel.toUpperCase()}</Text>
+                        </View>
+                        <Text style={styles.postedTime}>{getTimeAgo(item.createdAt)}</Text>
+                    </View>
                 </View>
-            </View>
 
-            <View style={styles.unifiedMetaRow}>
-                <View style={styles.metaItem}>
-                    <MaterialIcon name="location-on" size={14} color="#94A3B8" />
-                    <Text style={styles.metaText} numberOfLines={1}>
-                        {item.city || 'Location'}
-                    </Text>
+                <View style={styles.cardBody}>
+                    <Text style={styles.patientName} numberOfLines={1}>For {item.patientName}</Text>
+                    <View style={styles.infoRow}>
+                        <MaterialIcon name="local-hospital" size={14} color="#64748B" />
+                        <Text style={styles.infoText} numberOfLines={1}>{item.hospitalName}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                        <MaterialIcon name="near-me" size={14} color="#64748B" />
+                        <Text style={styles.infoText}>
+                            {(item as any).distance !== undefined ? `${(item as any).distance} km` : '...'}
+                        </Text>
+                        <View style={styles.dotSeparator} />
+                        <Text style={styles.urgencyDetail}>{getUrgencyText(item.urgencyLevel)}</Text>
+                    </View>
+                    <View style={styles.metricsRow}>
+                        <View style={styles.metric}>
+                            <MaterialCommunityIcon name="water" size={16} color="#E11D48" />
+                            <Text style={styles.metricText}>{item.unitsRequired} Units</Text>
+                        </View>
+                        <View style={styles.metric}>
+                            <MaterialCommunityIcon name="account-group" size={16} color="#64748B" />
+                            <Text style={styles.metricText}>{item.matchedDonorIds?.length || 0} Responses</Text>
+                        </View>
+                    </View>
+
+                    {/* Eligibility & Click Indicator */}
+                    <View style={styles.compactFooter}>
+                        <View style={styles.eligibilityRow}>
+                            <View style={[styles.statusDot, { backgroundColor: isEligible ? '#22C55E' : '#F59E0B' }]} />
+                            <Text style={[styles.statusText, { color: isEligible ? '#059669' : '#D97706' }]}>
+                                {isEligible ? 'You are eligible' : (eligibilityDate ? `Eligible ${eligibilityDate}` : 'Not eligible')}
+                            </Text>
+                        </View>
+                        <MaterialIcon name="chevron-right" size={20} color="#94A3B8" />
+                    </View>
                 </View>
-            </View>
-        </TouchableOpacity>
+            </TouchableOpacity>
+        </Animated.View>
     );
 });
 
 const HistoryItem = React.memo(({ match, onPress }: { match: any, onPress: () => void }) => (
     <TouchableOpacity
-        style={styles.unifiedCardFull}
+        style={styles.newCardFull}
         onPress={onPress}
+        activeOpacity={0.9}
+        accessibilityRole="button"
+        accessibilityLabel={`Completed donation for ${match.request?.patientName || 'Patient'} at ${match.request?.hospitalName || 'Hospital'}.`}
     >
-        <View style={styles.unifiedCardTop}>
-            <View style={styles.bloodBadge}>
-                <Text style={styles.bloodBadgeText}>{match.request?.bloodGroup || '--'}</Text>
+        <View style={styles.cardHeader}>
+            <View style={styles.bloodGroupContainer}>
+                <Text style={styles.bloodGroupText}>{match.request?.bloodGroup || '--'}</Text>
+                <Text style={styles.bloodGroupLabel}>Group</Text>
             </View>
-            <View style={[styles.statusPill, { backgroundColor: '#F1F5F9' }]}>
-                <Text style={[styles.statusPillText, { color: '#64748B' }]}>
-                    {(match.status ?? 'pending').toUpperCase()}
-                </Text>
-            </View>
-        </View>
-        <Text style={styles.unifiedTitle}>{match.request?.hospitalName || 'Hospital Info'}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-            <Text style={[styles.unifiedSubtext, { marginBottom: 0, flexShrink: 1, marginRight: 8 }]} numberOfLines={1}>
-                Donated for {match.request?.patientName || 'Patient'}
-            </Text>
-            <View style={styles.unitPill}>
-                <MaterialCommunityIcon name="water" size={12} color="#B62022" />
-                <Text style={styles.unitPillText}>
-                    {match.request?.unitsRequired || 1} Unit{(match.request?.unitsRequired || 1) > 1 ? 's' : ''}
-                </Text>
-            </View>
-        </View>
-        <View style={styles.unifiedMetaRow}>
-            <View style={styles.metaItem}>
-                <MaterialIcon name="event" size={14} color="#94A3B8" />
-                <Text style={styles.metaText}>
+            <View style={styles.headerRight}>
+                <View style={[styles.urgencyBadge, { backgroundColor: '#F1F5F9' }]}>
+                    <Text style={[styles.urgencyBadgeText, { color: '#64748B' }]}>{(match.status ?? 'pending').toUpperCase()}</Text>
+                </View>
+                <Text style={styles.postedTime}>
                     {(match.createdAt as any)?.toDate ? (match.createdAt as any).toDate().toLocaleDateString() : 'N/A'}
                 </Text>
+            </View>
+        </View>
+        <View style={styles.cardBody}>
+            <Text style={styles.patientName} numberOfLines={1}>Donated for {match.request?.patientName || 'Patient'}</Text>
+            <View style={styles.infoRow}>
+                <MaterialIcon name="local-hospital" size={16} color="#64748B" />
+                <Text style={styles.infoText} numberOfLines={1}>{match.request?.hospitalName || 'Hospital Info'}</Text>
+            </View>
+            <View style={styles.metricsRow}>
+                <View style={styles.metric}>
+                    <MaterialCommunityIcon name="water" size={18} color="#E11D48" />
+                    <Text style={styles.metricText}>
+                        {match.request?.unitsRequired || 1} Unit{(match.request?.unitsRequired || 1) > 1 ? 's' : ''}
+                    </Text>
+                </View>
             </View>
         </View>
     </TouchableOpacity>
 ));
 
+type Props = NativeStackScreenProps<RootStackParamList, 'DonorDashboard'>;
+
 const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
     const { showModal } = useModal();
     const insets = useSafeAreaInsets();
-    const { user } = useAuth();
-    const [userData, setUserData] = React.useState<UserDocument | null>(null);
-    const [nearbyRequests, setNearbyRequests] = React.useState<DonationRequest[]>([]);
-    const [activeHelps, setActiveHelps] = React.useState<any[]>([]);
-    const [loadingRequests, setLoadingRequests] = React.useState(true);
-    const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
-    const [activeTab, setActiveTab] = React.useState(route.params?.tab || 'home');
+    const [activeTab, setActiveTab] = useState(route.params?.tab || 'home');
 
-    // Sync activeTab when route.params.tab changes
-    React.useEffect(() => {
-        if (route.params?.tab) {
-            setActiveTab(route.params.tab);
-        }
+    // Custom Hooks
+    const { userData, loadingUser, isAgeRestricted, isCooldownActive, formatCooldownDate } = useDonorEligibility();
+    const { activeHelps, loadingMatches } = useDonorMatches();
+    const { nearbyRequests, loadingRequests } = useDonorRequests(userData, activeHelps);
+    const { donationHistory, loadingHistory } = useDonorHistory(activeTab);
+
+    useEffect(() => {
+        if (route.params?.tab) setActiveTab(route.params.tab);
     }, [route.params?.tab]);
-    const [loadingUser, setLoadingUser] = React.useState(true);
-    const [donationHistory, setDonationHistory] = React.useState<any[]>([]);
 
-    // Effect for history
-    React.useEffect(() => {
-        if (!user || activeTab !== 'history') return;
-        const unsubHistory = getDonorHistory(user.uid, (history) => {
-            setDonationHistory(history);
-        });
-        return () => unsubHistory();
-    }, [user, activeTab]);
-
-    // Effect for active matches
-    React.useEffect(() => {
-        if (!user) return;
-        const unsubMatches = getActiveDonorMatches(user.uid, (matches) => {
-            setActiveHelps(matches);
-        });
-        return () => unsubMatches();
-    }, [user]);
-
-    React.useEffect(() => {
-        if (!user) return;
-
-        // Initial check and refresh (background)
-        checkAndRefreshEligibility(user.uid);
-
-        // Real-time listener for user document changes (including cooldown updates)
-        const unsubUser = subscribeToUser(user.uid, (data) => {
-            if (data) {
-                console.log('[Dashboard] User data updated:', {
-                    eligible: data.isEligibleToDonate,
-                    available: data.isAvailable,
-                    age: data.age
-                });
-                setUserData(data);
-                setLoadingUser(false);
-            } else {
-                setLoadingUser(false);
-            }
-        });
-
-        return () => unsubUser();
-    }, [user]);
-
-    React.useEffect(() => {
-        let unsubscribe: () => void = () => { };
-
-        if (!user) return;
-
-        // Only subscribe to nearby filtered requests if the user is AVAILABLE and ELIGIBLE
-        if (userData?.location?.latitude && userData?.location?.longitude && userData?.isAvailable && userData?.isEligibleToDonate) {
-            console.log(`Subscribing to NEARBY requests (10KM) for ${userData.bloodGroup}...`);
-            unsubscribe = subscribeToNearbyRequests(
-                userData.location.latitude,
-                userData.location.longitude,
-                10, // 10KM radius for dashboard
-                userData.bloodGroup || null,
-                (requests) => {
-                    const activeRequestIds = activeHelps.map(m => m.requestId);
-                    const filtered = requests.filter(r => {
-                        const isNotMe = r.requesterId !== user?.uid;
-                        const isNotActive = !activeRequestIds.includes(r.id!);
-                        let isCompatible = true;
-                        if (userData?.bloodGroup) {
-                            const compatible = getCompatibleBloodGroups(userData.bloodGroup);
-                            isCompatible = compatible.includes(r.bloodGroup);
-                        }
-                        return isNotMe && isNotActive && isCompatible;
-                    });
-                    setNearbyRequests(filtered.slice(0, 10));
-                    setLoadingRequests(false);
-                }
-            );
-        } else {
-            console.log('Subscribing to GLOBAL requests (no location)...');
-            unsubscribe = subscribeToRequests((requests) => {
-                const activeRequestIds = activeHelps.map(m => m.requestId);
-                const filtered = requests.filter(r => {
-                    const isNotMe = r.requesterId !== user?.uid;
-                    const isNotActive = !activeRequestIds.includes(r.id!);
-                    let isCompatible = true;
-                    if (userData?.bloodGroup) {
-                        const compatible = getCompatibleBloodGroups(userData.bloodGroup);
-                        isCompatible = compatible.includes(r.bloodGroup);
-                    }
-                    return isNotMe && isNotActive && isCompatible;
-                });
-                setNearbyRequests(filtered.slice(0, 5));
-                setLoadingRequests(false);
-            });
-        }
-
-        return () => unsubscribe();
-    }, [user, userData?.location?.latitude, userData?.location?.longitude, activeHelps]);
-
-    // Separate effect for matching request notifications
-    React.useEffect(() => {
-        if (!userData || !userData.bloodGroup || !userData.location || !userData.isEligibleToDonate || !userData.isAvailable) return;
-
-        console.log(`Starting matching listener for ${userData.bloodGroup} within 10KM`);
-
-        const unsubscribeMatching = subscribeToMatchingRequests(
-            userData.bloodGroup,
-            userData.location.latitude,
-            userData.location.longitude,
-            (newRequest) => {
-                triggerLocalNotification(
-                    'Urgent Blood Request!',
-                    `A new ${newRequest.bloodGroup} request has been posted nearby.`,
-                    newRequest.id
-                );
-            }
-        );
-
-        return () => unsubscribeMatching();
-    }, [userData?.bloodGroup, userData?.location?.latitude, userData?.location?.longitude, userData?.isEligibleToDonate]);
-
-    React.useEffect(() => {
-        if (!userData?.donationCooldownUntil || userData?.isEligibleToDonate || !user) return;
-
-        const cooldownDate = (userData.donationCooldownUntil as any).toDate();
-        const now = new Date();
-        const timeUntilEligible = cooldownDate.getTime() - now.getTime();
-
-        if (timeUntilEligible <= 0) {
-            // Already eligible, but Firestore might not be updated yet
-            checkAndRefreshEligibility(user.uid).then(updated => {
-                if (updated) setUserData(updated);
-            });
-            return;
-        }
-
-        console.log(`Setting eligibility timer for ${timeUntilEligible}ms`);
-
-        const timer = setTimeout(() => {
-            checkAndRefreshEligibility(user.uid).then(updated => {
-                if (updated) {
-                    setUserData(updated);
-                    showModal({
-                        title: 'Welcome Back! 🩸',
-                        description: 'Your recovery period is over. You are now eligible to donate and save lives again!',
-                        type: 'success',
-                        primaryText: 'Great'
-                    });
-                }
-            });
-        }, timeUntilEligible + 2000); // 2 second buffer
-
-        return () => clearTimeout(timer);
-    }, [userData?.donationCooldownUntil, userData?.isEligibleToDonate, user]);
-
-    const handleLogout = async () => {
-        try {
-            await signOut();
-        } catch (error) {
-            console.error('Logout error:', error);
-        }
-    };
-
-    const formatCooldownDate = React.useCallback((timestamp: any) => {
-        if (!timestamp) return 'Available Now';
-        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-        return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    }, []);
-
-    const handleHelpPress = React.useCallback((item: DonationRequest) => {
+    const handleHelpPress = useCallback((item: DonationRequest) => {
         if (!userData) return;
-
-        // 1. Check Age Restriction
-        if (userData.age && (userData.age < 18 || userData.age > 60)) {
+        if (isAgeRestricted) {
             showModal({
                 title: 'Medical Restriction',
-                description: userData.age < 18
-                    ? 'You must be at least 18 years old to donate blood.'
-                    : 'Donors over 60 years of age require special medical clearance and are currently restricted.',
+                description: userData.age && userData.age < 18 ? 'You must be at least 18 years old to donate blood.' : 'Donors over 60 years of age require special medical clearance.',
                 type: 'error',
                 primaryText: 'Understood'
             });
             return;
         }
-
-        // 2. Check Cooldown
         if (userData.isEligibleToDonate) {
             navigation.navigate('DonorHelpDetail', { requestId: item.id! });
         } else {
             showModal({
                 title: 'Cooldown Active',
-                description: 'You recently donated blood. You will be eligible to help again on ' + formatCooldownDate(userData?.donationCooldownUntil),
+                description: `You recently donated blood. You will be eligible to help again on ${formatCooldownDate(userData?.donationCooldownUntil)}`,
                 type: 'warning',
                 primaryText: 'Got it'
             });
         }
-    }, [userData, navigation, showModal, formatCooldownDate]);
+    }, [userData, isAgeRestricted, navigation, showModal, formatCooldownDate]);
 
-    const tabContent = React.useMemo(() => {
-        switch (activeTab) {
-            case 'requests':
-                return (
-                    <View style={{ paddingBottom: 20 }}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Matching Requests</Text>
-                        </View>
-                        {nearbyRequests.length > 0 ? (
-                            nearbyRequests.map(r => (
-                                <RequestItem
-                                    key={r.id}
-                                    item={r}
-                                    isFullWidth
-                                    isEligible={!!userData?.isEligibleToDonate}
-                                    onHelpPress={handleHelpPress}
-                                />
-                            ))
-                        ) : (
-                            <View style={styles.emptyBox}>
-                                <MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" />
-                                <Text style={styles.emptyText}>No active matching requests nearby</Text>
-                            </View>
-                        )}
-                    </View>
-                );
-            case 'history':
-                return (
-                    <View style={{ paddingBottom: 20 }}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Donation History</Text>
-                        </View>
-                        {donationHistory.length > 0 ? (
-                            donationHistory.map(match => (
-                                <HistoryItem
-                                    key={match.id}
-                                    match={match}
-                                    onPress={() => navigation.navigate('DonorHelpDetail', { requestId: match.requestId })}
-                                />
-                            ))
-                        ) : (
-                            <View style={styles.emptyBox}>
-                                <MaterialCommunityIcon name="history" size={36} color="#CBD5E1" />
-                                <Text style={styles.emptyText}>You haven't completed any donations yet.</Text>
-                            </View>
-                        )}
-                    </View>
-                );
-            default: { // home
-                const isAgeRestricted = userData?.age && (userData.age < 18 || userData.age > 60);
-                const isCooldownActive = userData?.isEligibleToDonate === false && !isAgeRestricted;
+    const renderHero = () => {
+        if (isAgeRestricted) return <RestrictedHero userData={userData} styles={styles} />;
+        if (isCooldownActive) return <CooldownHero userData={userData} styles={styles} />;
+        return <ActiveHero userData={userData} styles={styles} />;
+    };
 
-                return (
+    const renderContent = () => {
+        if (activeTab === 'requests') {
+            return (
+                <FlatList
+                    data={nearbyRequests}
+                    keyExtractor={(item) => item.id!}
+                    renderItem={({ item }) => (
+                        <RequestItem
+                            item={item}
+                            isFullWidth
+                            isEligible={!!userData?.isEligibleToDonate}
+                            onHelpPress={handleHelpPress}
+                            eligibilityDate={userData?.donationCooldownUntil ? formatCooldownDate(userData.donationCooldownUntil) : undefined}
+                        />
+                    )}
+                    ListHeaderComponent={<View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Matching Requests</Text></View>}
+                    ListEmptyComponent={<View style={styles.emptyBox}><MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" /><Text style={styles.emptyText}>No active matching requests nearby</Text></View>}
+                    contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+                />
+            );
+        }
+        if (activeTab === 'history') {
+            return (
+                <FlatList
+                    data={donationHistory}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                        <HistoryItem
+                            match={item}
+                            onPress={() => navigation.navigate('DonorHelpDetail', { requestId: item.requestId })}
+                        />
+                    )}
+                    ListHeaderComponent={<View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Donation History</Text></View>}
+                    ListEmptyComponent={<View style={styles.emptyBox}><MaterialCommunityIcon name="history" size={36} color="#CBD5E1" /><Text style={styles.emptyText}>You haven't completed any donations yet.</Text></View>}
+                    contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+                />
+            );
+        }
+
+        // Home Tab
+        return (
+            <FlatList
+                data={[]} // Using FlatList as a container for Home sections
+                renderItem={null}
+                ListHeaderComponent={
                     <>
-                        {/* ── Eligibility Hero Card ── */}
-                        {isAgeRestricted ? (
-                            <View style={[styles.heroCard, styles.heroCardRestricted]}>
-                                <View style={styles.unifiedCardTop}>
-                                    <View style={styles.eligiblePillRestricted}>
-                                        <MaterialIcon name="error-outline" size={14} color="#fff" style={{ marginRight: 4 }} />
-                                        <Text style={styles.eligiblePillText}>RESTRICTED</Text>
-                                    </View>
-                                    <View style={styles.bloodBadge}>
-                                        <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || '--'}</Text>
-                                    </View>
-                                </View>
-                                <Text style={styles.unifiedTitleLarge}>Medical Restriction</Text>
-                                <Text style={styles.unifiedSubtextLight}>
-                                    {userData?.age! < 18
-                                        ? "You're a bit too young to donate yet. You'll be ready once you're 18!"
-                                        : "Donating after 60 requires specific medical conditions. Please consult a doctor."}
-                                </Text>
-                            </View>
-                        ) : (
-                            <View style={[styles.heroCard, isCooldownActive && styles.heroCardCooldown]}>
-                                <View style={styles.unifiedCardTop}>
-                                    <View style={[styles.eligiblePill, isCooldownActive && styles.cooldownPill]}>
-                                        <View style={[styles.dot, isCooldownActive ? styles.redDot : styles.greenDot]} />
-                                        <Text style={styles.eligiblePillText}>
-                                            {isCooldownActive ? 'RECOVERY MODE' : (userData?.isAvailable ? 'ACTIVE' : 'OFFLINE')}
-                                        </Text>
-                                    </View>
-                                    <View style={styles.bloodBadge}>
-                                        <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || 'A+'}</Text>
-                                    </View>
-                                </View>
-                                <Text style={styles.unifiedTitleLarge}>{isCooldownActive ? 'Take Rest & Recover' : 'Ready to Save Lives'}</Text>
-                                <Text style={styles.unifiedSubtextLight}>
-                                    {isCooldownActive
-                                        ? `Eligible again after ${userData?.donationCooldownUntil ? (userData.donationCooldownUntil as any).toDate().toLocaleDateString() : 'cooldown'}`
-                                        : 'Your donation can save up to 3 lives.'}
-                                </Text>
-                                {!isCooldownActive && (
-                                    <TouchableOpacity style={styles.heroActionBtn} activeOpacity={0.8}>
-                                        <MaterialIcon name="event-available" size={18} color="#B62022" />
-                                        <Text style={styles.heroActionBtnText}>Schedule a Donation</Text>
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-                        )}
+                        {renderHero()}
 
-                        {/* ── Active Helps ── */}
                         {activeHelps.length > 0 && (
                             <View style={{ marginBottom: 20 }}>
                                 <View style={styles.sectionHeader}>
@@ -462,35 +307,24 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                                         <View style={styles.countBadge}><Text style={styles.countBadgeText}>{activeHelps.length}</Text></View>
                                     </View>
                                 </View>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
-                                    {activeHelps.map((match) => {
-                                        const isAccepted = match.status === 'accepted';
-                                        return (
-                                            <TouchableOpacity key={match.id} style={styles.unifiedCardHorizontal} activeOpacity={0.82} onPress={() => navigation.navigate('DonorHelpDetail', { requestId: match.requestId })}>
-                                                <View style={styles.unifiedCardTop}>
-                                                    <View style={styles.bloodBadge}><Text style={styles.bloodBadgeText}>{match.request?.bloodGroup || '--'}</Text></View>
-                                                    <View style={[styles.statusPill, { backgroundColor: isAccepted ? '#DCFCE7' : '#F1F5F9' }]}>
-                                                        <Text style={[styles.statusPillText, { color: isAccepted ? '#16A34A' : '#64748B' }]}>{(match.status ?? 'pending').toUpperCase()}</Text>
-                                                    </View>
-                                                </View>
-                                                <Text style={styles.unifiedTitle} numberOfLines={1}>{match.request?.hospitalName || 'Loading...'}</Text>
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                                                    <Text style={[styles.unifiedSubtext, { marginBottom: 0, flexShrink: 1, marginRight: 8 }]} numberOfLines={1}>For {match.request?.patientName || 'Patient'}</Text>
-                                                    <View style={styles.unitPill}>
-                                                        <MaterialCommunityIcon name="water" size={12} color="#B62022" /><Text style={styles.unitPillText}>{match.request?.unitsRequired ?? 0} Unit{(match.request?.unitsRequired ?? 0) !== 1 ? 's' : ''}</Text>
-                                                    </View>
-                                                </View>
-                                                <View style={styles.unifiedMetaRow}>
-                                                    <View style={styles.metaItem}><MaterialIcon name="location-on" size={14} color="#94A3B8" /><Text style={styles.metaText} numberOfLines={1}>{match.request?.city || 'Location'}</Text></View>
-                                                </View>
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </ScrollView>
+                                <FlatList
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    data={activeHelps.filter(m => !!m.request)}
+                                    keyExtractor={(item) => item.id}
+                                    renderItem={({ item }) => (
+                                        <RequestItem
+                                            item={item.request}
+                                            isEligible={!!userData?.isEligibleToDonate}
+                                            onHelpPress={() => navigation.navigate('DonorHelpDetail', { requestId: item.requestId })}
+                                            eligibilityDate={userData?.donationCooldownUntil ? formatCooldownDate(userData.donationCooldownUntil) : undefined}
+                                        />
+                                    )}
+                                    contentContainerStyle={styles.horizontalScrollContent}
+                                />
                             </View>
                         )}
 
-                        {/* ── Nearby Requests ── */}
                         {(!isCooldownActive && !isAgeRestricted) && (
                             <>
                                 <View style={styles.sectionHeader}>
@@ -500,52 +334,52 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                                 {loadingRequests ? (
                                     <View style={styles.loadingBox}><ActivityIndicator size="small" color="#B62022" /><Text style={styles.loadingText}>Finding requests near you...</Text></View>
                                 ) : nearbyRequests.length > 0 ? (
-                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
-                                        {nearbyRequests.slice(0, 5).map((item: DonationRequest) => (
-                                            <RequestItem key={item.id} item={item} isEligible={!!userData?.isEligibleToDonate} onHelpPress={handleHelpPress} />
-                                        ))}
-                                    </ScrollView>
+                                    <FlatList
+                                        horizontal
+                                        showsHorizontalScrollIndicator={false}
+                                        data={nearbyRequests.slice(0, 5)}
+                                        keyExtractor={(item) => item.id!}
+                                        renderItem={({ item }) => (
+                                            <RequestItem
+                                                item={item}
+                                                isEligible={!!userData?.isEligibleToDonate}
+                                                onHelpPress={handleHelpPress}
+                                                eligibilityDate={userData?.donationCooldownUntil ? formatCooldownDate(userData.donationCooldownUntil) : undefined}
+                                            />
+                                        )}
+                                        contentContainerStyle={styles.horizontalScrollContent}
+                                    />
                                 ) : (
                                     <View style={styles.emptyBox}><MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" /><Text style={styles.emptyText}>No active requests nearby</Text></View>
                                 )}
                             </>
                         )}
                     </>
-                );
-            }
-        }
-    }, [activeTab, nearbyRequests, donationHistory, userData, activeHelps, loadingRequests]);
+                }
+                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+            />
+        );
+    };
 
-    if (loadingUser) {
-        return <LoadingScreen tagline="Synchronizing your dashboard..." />;
-    }
+    if (loadingUser) return <LoadingScreen tagline="Synchronizing your dashboard..." />;
 
     return (
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
-            {/* ── Header ── */}
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
                 <View style={styles.headerBrand}>
                     <Image source={require('../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />
                     <Text style={styles.headerBrandName}>BloodReach</Text>
                 </View>
             </View>
-
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 90 }]}
-            >
-                {tabContent}
-            </ScrollView>
-
+            {renderContent()}
             <BottomTabBar
                 activeTab={activeTab}
                 tabs={[
                     { key: 'home', label: 'Home', icon: 'home', activeIcon: 'home', onPress: () => setActiveTab('home') },
                     { key: 'requests', label: 'Requests', icon: 'water-drop', onPress: () => setActiveTab('requests') },
                     { key: 'history', label: 'History', icon: 'history', onPress: () => setActiveTab('history') },
-                    { key: 'settings', label: 'Settings', icon: 'settings', activeIcon: 'settings', onPress: () => { setActiveTab('settings'); navigation.navigate('Settings'); } },
+                    { key: 'settings', label: 'Settings', icon: 'settings', activeIcon: 'settings', onPress: () => { navigation.navigate('Settings'); } },
                 ]}
             />
         </View>
@@ -554,8 +388,6 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAFC' },
-
-    // ─── Header ───
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -570,37 +402,209 @@ const styles = StyleSheet.create({
     headerBrand: { flexDirection: 'row', alignItems: 'center' },
     headerLogo: { width: 45, height: 45, marginRight: 8 },
     headerBrandName: { fontSize: 20, fontWeight: '900', color: '#000000', letterSpacing: 0.5 },
-
     scrollContent: { paddingTop: 20 },
-
-    // ─── Unified Card System ───
-    unifiedCardHorizontal: {
-        width: 260,
+    newCardHorizontal: {
+        width: 300,
         backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        padding: 16,
+        borderRadius: 20,
+        padding: 10,
         marginRight: 16,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
+        marginBottom: 8,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 8,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 15,
+        elevation: 8,
+        position: 'relative',
+        overflow: 'hidden',
     },
-    unifiedCardFull: {
+    newCardFull: {
         marginHorizontal: 16,
         backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        padding: 16,
+        borderRadius: 20,
+        padding: 10,
         marginBottom: 20,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 8,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 15,
+        elevation: 8,
+        position: 'relative',
+        overflow: 'hidden',
+    },
+    urgentCardBorder: {
+        borderLeftWidth: 6,
+        borderLeftColor: '#E11D48',
+        backgroundColor: '#FFF5F5',
+    },
+    emergencyIndicator: {
+        position: 'absolute',
+        top: 20,
+        right: 20,
+        width: 12,
+        height: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    emergencyDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#E11D48',
+    },
+    pulseCircle: {
+        position: 'absolute',
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: '#E11D48',
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 6,
+    },
+    bloodGroupContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#F1F5F9',
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        minWidth: 50,
+    },
+    bloodGroupText: {
+        fontSize: 20,
+        fontWeight: '900',
+        color: '#E11D48',
+        lineHeight: 24,
+    },
+    bloodGroupLabel: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#64748B',
+        textTransform: 'uppercase',
+        marginTop: -2,
+    },
+    headerRight: {
+        alignItems: 'flex-end',
+    },
+    urgencyBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        gap: 4,
+        marginBottom: 4,
+    },
+    urgencyBadgeText: {
+        fontSize: 10,
+        fontWeight: '900',
+    },
+    postedTime: {
+        fontSize: 11,
+        color: '#94A3B8',
+        fontWeight: '600',
+    },
+    cardBody: {
+        marginBottom: 8,
+    },
+    patientName: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#0F172A',
+        marginBottom: 0,
+    },
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 2,
+        gap: 6,
+    },
+    infoText: {
+        fontSize: 13,
+        color: '#475569',
+        fontWeight: '600',
+        flex: 1,
+    },
+    dotSeparator: {
+        width: 3,
+        height: 3,
+        borderRadius: 1.5,
+        backgroundColor: '#CBD5E1',
+    },
+    urgencyDetail: {
+        fontSize: 12,
+        color: '#E11D48',
+        fontWeight: '700',
+    },
+    metricsRow: {
+        flexDirection: 'row',
+        marginTop: 4,
+        gap: 16,
+    },
+    metric: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    metricText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#1E293B',
+    },
+    cardFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingTop: 4,
+    },
+    eligibilityContainer: {
+        flex: 1,
+    },
+    eligibleBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    eligibleText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#059669',
+    },
+    compactFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: 6,
+        paddingTop: 6,
+        borderTopWidth: 1,
+        borderTopColor: '#F1F5F9',
+    },
+    eligibilityRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    statusDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    statusText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    ineligibleBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    ineligibleText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#D97706',
     },
     unifiedCardTop: {
         flexDirection: 'row',
@@ -623,41 +627,11 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         color: '#B62022',
     },
-    statusPill: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 20,
-    },
-    statusPillText: {
-        fontSize: 10,
-        fontWeight: '800',
-        letterSpacing: 0.3,
-    },
-    unifiedTitle: {
-        fontSize: 16,
-        fontWeight: '800',
-        color: '#1E293B',
-        marginBottom: 4,
-        textAlign: 'left',
-    },
-    unifiedTitleSmall: {
-        fontSize: 14,
-        fontWeight: '800',
-        color: '#1E293B',
-        textAlign: 'left',
-    },
     unifiedTitleLarge: {
         fontSize: 20,
         fontWeight: '800',
         color: 'white',
         marginBottom: 8,
-        textAlign: 'left',
-    },
-    unifiedSubtext: {
-        fontSize: 13,
-        color: '#64748B',
-        fontWeight: '500',
-        marginBottom: 12,
         textAlign: 'left',
     },
     unifiedSubtextLight: {
@@ -667,67 +641,14 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         textAlign: 'left',
     },
-    unifiedMetaRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginTop: 'auto',
-    },
-    unifiedMetaLabel: {
-        fontSize: 10,
-        fontWeight: '800',
-        color: '#94A3B8',
-        marginBottom: 2,
-    },
-    metaItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-        marginRight: 8,
-    },
-    metaText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#64748B',
-        marginLeft: 4,
-    },
-    unitPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FEF2F2',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: '#FEE2E2',
-    },
-    unitPillText: {
-        fontSize: 11,
-        fontWeight: '800',
-        color: '#B62022',
-        marginLeft: 4,
-    },
-    iconBoxSmall: {
-        width: 36,
-        height: 36,
-        borderRadius: 8,
-        backgroundColor: '#F8FAFC',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    cooldownText: {
-        color: '#D97706',
-    },
-
-    // ─── Hero eligibility specifics ───
     heroCard: {
         marginHorizontal: 16,
         backgroundColor: '#B62022',
         borderRadius: 16,
         padding: 20,
         marginBottom: 20,
-        height: 200, // Fixed height for total consistency
-        justifyContent: 'center', // Keep content balanced
+        height: 200,
+        justifyContent: 'center',
     },
     heroCardCooldown: {
         backgroundColor: '#64748B',
@@ -755,12 +676,12 @@ const styles = StyleSheet.create({
         borderRadius: 20,
     },
     heroCardRestricted: {
-        backgroundColor: '#475569', // Distinct slate color for permanent/age restriction
+        backgroundColor: '#475569',
     },
     eligiblePillRestricted: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(245,158,11,0.25)', // Amber tint
+        backgroundColor: 'rgba(245,158,11,0.25)',
         paddingHorizontal: 10,
         paddingVertical: 5,
         borderRadius: 20,
@@ -781,8 +702,6 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '700',
     },
-
-    // ─── General Components ───
     horizontalScrollContent: {
         paddingLeft: 16,
         paddingRight: 8,
@@ -794,14 +713,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         marginBottom: 12,
+        marginTop: 20,
     },
     sectionTitle: {
         fontSize: 18,
         fontWeight: '900',
-        color: '#1E293B',
+        color: '#0F172A',
     },
     countBadge: {
-        backgroundColor: '#B62022',
+        backgroundColor: '#E11D48',
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 10,
@@ -814,71 +734,26 @@ const styles = StyleSheet.create({
     },
     seeAllText: {
         fontSize: 14,
-        color: '#B62022',
+        color: '#E11D48',
         fontWeight: '700',
     },
     loadingBox: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 20,
+        padding: 40,
     },
     loadingText: {
         marginLeft: 12,
         fontSize: 14,
-        color: '#94A3B8',
+        color: '#64748B',
         fontWeight: '600',
     },
-
-    // ─── Stats Refined ───
-    statsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        marginBottom: 20,
-        gap: 12,
-    },
-    statCard: {
-        flex: 1,
-        backgroundColor: 'white',
-        borderRadius: 12,
-        padding: 16,
-        alignItems: 'flex-start',
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.02,
-        shadowRadius: 4,
-        elevation: 1,
-    },
-    statIconBox: {
-        width: 36,
-        height: 36,
-        borderRadius: 8,
-        backgroundColor: '#FDECEC',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    statValue: {
-        fontSize: 20,
-        fontWeight: '900',
-        color: '#1E293B',
-    },
-    statLabel: {
-        fontSize: 11,
-        fontWeight: '700',
-        color: '#94A3B8',
-        marginTop: 2,
-    },
-
-    // ─── Empty State ───
     emptyBox: {
         marginHorizontal: 16,
-        height: 140,
-        backgroundColor: 'white',
-        borderRadius: 12,
+        padding: 40,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1.5,
@@ -890,79 +765,9 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#94A3B8',
         fontWeight: '600',
-        marginTop: 10,
+        marginTop: 12,
+        textAlign: 'center',
     },
-
-    // ─── Bottom Nav ───
-    navBar: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: 'white',
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: '#F1F5F9',
-    },
-    navItem: { alignItems: 'center' },
-    navText: { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginTop: 3 },
-
-    // ─── Drawer ───
-    modalOverlayOuter: { flex: 1, flexDirection: 'row' },
-    modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
-    drawerContainer: {
-        width: width * 0.75,
-        height: '100%',
-        backgroundColor: 'white',
-        borderTopRightRadius: 10,
-        borderBottomRightRadius: 10,
-        paddingHorizontal: 20,
-        elevation: 16,
-        shadowColor: '#000',
-        shadowOpacity: 0.12,
-        shadowRadius: 20,
-    },
-    drawerHeader: { paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginBottom: 10 },
-    drawerAvatarRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-    drawerAvatarBox: {
-        width: 60,
-        height: 60,
-        borderRadius: 10,
-        backgroundColor: '#FDECEC',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 2,
-        borderColor: '#FEE2E2',
-    },
-    drawerAvatar: { width: '100%', height: '100%', borderRadius: 10 },
-    drawerName: { fontSize: 17, fontWeight: '900', color: '#1E293B', marginBottom: 4 },
-    drawerEmail: { fontSize: 12, color: '#64748B', fontWeight: '500' },
-    drawerBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    bloodTypeBadge: {
-        backgroundColor: '#B62022',
-        paddingHorizontal: 12,
-        paddingVertical: 5,
-        borderRadius: 10,
-    },
-    bloodTypeBadgeText: { color: 'white', fontSize: 13, fontWeight: '800' },
-    statusBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-    statusBadgeText: { fontSize: 10, fontWeight: '800', color: '#64748B' },
-    drawerItems: { marginTop: 16 },
-    drawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, marginBottom: 4 },
-    drawerIconBox: {
-        width: 38,
-        height: 38,
-        borderRadius: 10,
-        backgroundColor: '#F8FAFC',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 14,
-    },
-    drawerItemText: { fontSize: 15, fontWeight: '700', color: '#475569' },
-    drawerDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 10 },
-    versionText: { position: 'absolute', bottom: 30, left: 20, fontSize: 11, color: '#94A3B8', fontWeight: '600' },
 });
 
 export default DonorDashboard;

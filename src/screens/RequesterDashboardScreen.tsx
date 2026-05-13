@@ -25,6 +25,7 @@ import BottomTabBar from '../components/common/BottomTabBar';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 
+
 const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequesterDashboard'>;
@@ -272,7 +273,6 @@ const RequesterDashboard: React.FC<Props> = ({ route, navigation }) => {
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>

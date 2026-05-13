@@ -39,6 +39,10 @@ const AppNavigator = () => {
   const { user, loading } = useAuth();
 
   useEffect(() => {
+    // Initialize Notification Channels (Notifee)
+    const { initializeNotificationChannel } = require('../api/notificationService');
+    initializeNotificationChannel();
+
     // Initialize Notification Listeners
     const unsubscribe = subscribeToForegroundMessages();
     setupNotificationHandlers();

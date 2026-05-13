@@ -52,6 +52,7 @@ export interface DonationRequest {
     urgencyLevel: 'normal' | 'urgent' | 'critical';
     status: 'open' | 'matched' | 'completed' | 'cancelled';
     matchedDonorIds: string[];
+    isTest?: boolean;
     createdAt: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
     updatedAt: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
 }

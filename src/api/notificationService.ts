@@ -7,11 +7,28 @@ import {
     getInitialNotification,
     AuthorizationStatus
 } from '@react-native-firebase/messaging';
+import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import { createNavigationContainerRef } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+/**
+ * Creates the required Android notification channels
+ */
+export const initializeNotificationChannel = async () => {
+    if (Platform.OS === 'android') {
+        await notifee.createChannel({
+            id: 'default',
+            name: 'Urgent Notifications',
+            importance: AndroidImportance.HIGH,
+            sound: 'default',
+            vibration: true,
+        });
+        console.log('[FCM] Notification channel "default" created/verified.');
+    }
+};
 
 export function navigate(name: keyof RootStackParamList, params?: any) {
     if (navigationRef.isReady()) {
@@ -35,6 +52,9 @@ export const requestUserPermission = async (): Promise<boolean> => {
         }
     }
     
+    // Notifee permission request (Android 13+)
+    await notifee.requestPermission();
+    
     const messaging = getMessaging();
     const authStatus = await requestPermission(messaging);
     const enabled =
@@ -56,7 +76,7 @@ export const getFCMToken = async (): Promise<string | null> => {
         const messaging = getMessaging();
         const token = await getToken(messaging);
         if (token) {
-            console.log('FCM Token:', token);
+            console.log('[FCM] Token Retrieved:', token);
             return token;
         }
         return null;
@@ -72,11 +92,21 @@ export const getFCMToken = async (): Promise<string | null> => {
 export const subscribeToForegroundMessages = () => {
     const messaging = getMessaging();
     return onMessage(messaging, async remoteMessage => {
-        console.log('A new FCM message arrived in foreground!', remoteMessage);
-        Alert.alert(
-            remoteMessage.notification?.title || 'Urgent Update',
-            remoteMessage.notification?.body || 'Matching blood request found nearby.'
-        );
+        console.log('[FCM] Foreground Message Received:', JSON.stringify(remoteMessage, null, 2));
+        
+        // Display a real notification using Notifee
+        await notifee.displayNotification({
+            title: remoteMessage.notification?.title || 'Urgent Update',
+            body: remoteMessage.notification?.body || 'Matching blood request found nearby.',
+            android: {
+                channelId: 'default',
+                importance: AndroidImportance.HIGH,
+                pressAction: {
+                    id: 'default',
+                },
+            },
+            data: remoteMessage.data,
+        });
     });
 };
 
@@ -110,6 +140,7 @@ export const setupNotificationHandlers = () => {
  * Triggers a local notification alert (Foreground)
  */
 export const triggerLocalNotification = (title: string, body: string, requestId?: string) => {
+    console.log('[FCM] Triggering Local Notification:', { title, body, requestId });
     Alert.alert(
         title,
         body,

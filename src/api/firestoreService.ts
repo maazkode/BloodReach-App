@@ -330,6 +330,8 @@ export const subscribeToNearbyRequests = (
                 }
 
                 const distance = getDistance(lat, lng, r.location.latitude, r.location.longitude);
+                // Attach distance to the request object for UI display
+                (r as any).distance = Math.round(distance * 10) / 10;
                 return distance <= radiusKm;
             });
 

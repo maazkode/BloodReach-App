@@ -20,7 +20,6 @@ import { getUserDocument, getDonorStats, createUserDocument, subscribeToUser } f
 import { UserDocument } from '../types/database';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import LinearGradient from 'react-native-linear-gradient';
 import { safeRun, log } from '../utility/errorHandler';
 import { useModal } from '../context/ModalContext';
 import BottomTabBar from '../components/common/BottomTabBar';
