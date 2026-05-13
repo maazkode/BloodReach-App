@@ -18,19 +18,19 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../../shared/theme/colors';
+import { Colors } from '../constants/Colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../../App';
+import { RootStackParamList } from '../navigation/AppNavigator';
 import { getAuth } from '@react-native-firebase/auth';
-import { createUserDocument } from '../../shared/services/firestoreService';
-import { UserDocument } from '../../shared/types/database';
+import { createUserDocument } from '../api/firestoreService';
+import { UserDocument } from '../types/database';
 import { Timestamp, serverTimestamp } from '@react-native-firebase/firestore';
-import { getFullLocationData, forwardGeocode, LocationData } from '../../shared/services/locationService';
-import { getFCMToken } from '../../shared/services/notificationService';
+import { getFullLocationData, forwardGeocode, LocationData } from '../api/locationService';
+import { getFCMToken } from '../api/notificationService';
 import { geohashForLocation } from 'geofire-common';
-import { signOut } from '../services/authService';
-import { useModal } from '../../shared/context/ModalContext';
-import LoadingScreen from '../../shared/components/LoadingScreen';
+import { signOut } from '../api/authService';
+import { useModal } from '../context/ModalContext';
+import LoadingScreen from '../components/common/LoadingScreen';
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["Male", "Female", "Other"];
@@ -214,6 +214,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 email: currentUser.email || '',
                 photoURL: currentUser.photoURL || '',
                 isVerified: false,
+                profileCompleted: true,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
             };
@@ -232,7 +233,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
             setLoading(false);
         }
     }, [validateForm, name, phone, bloodGroup, address, age, gender, isAvailable, lastDonationDate, locationData, navigation, showModal]);
-    
+
     if (loading) {
         return <LoadingScreen title="Creating Profile" tagline="Finalizing your secure setup..." />;
     }
@@ -528,3 +529,6 @@ const styles = StyleSheet.create({
 });
 
 export default UnifiedRegistrationScreen;
+
+
+

@@ -7,9 +7,9 @@ interface LoadingScreenProps {
     tagline?: string;
 }
 
-const LoadingScreen: React.FC<LoadingScreenProps> = ({ 
-    title = "Optimizing Experience", 
-    tagline = "Fetching your data..." 
+const LoadingScreen: React.FC<LoadingScreenProps> = ({
+    title = "Optimizing Experience",
+    tagline = "Fetching your data..."
 }) => {
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const opacityAnim = useRef(new Animated.Value(0.6)).current;
@@ -48,22 +48,22 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({
     }, [pulseAnim, opacityAnim]);
 
     return (
-        <LinearGradient 
-            colors={['#FFFFFF', '#FFFFFF']} 
+        <LinearGradient
+            colors={['#FFFFFF', '#FFFFFF']}
             style={styles.container}
         >
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
             <View style={styles.inner}>
                 <View style={styles.loadingLogoBox}>
                     <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                        <Image 
-                            source={require('../../../assets/logo.png')} 
-                            style={styles.loadingLogo} 
-                            resizeMode="contain" 
+                        <Image
+                            source={require('../../assets/logo.png')}
+                            style={styles.loadingLogo}
+                            resizeMode="contain"
                         />
                     </Animated.View>
                 </View>
-                
+
                 <View style={styles.textContainer}>
                     <Text style={styles.loadingSyncText}>{title}</Text>
                     <Text style={styles.loadingTagline}>{tagline}</Text>

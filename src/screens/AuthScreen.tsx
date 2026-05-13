@@ -12,16 +12,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FAIcon from 'react-native-vector-icons/FontAwesome';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import LoadingScreen from '../../shared/components/LoadingScreen';
+import LoadingScreen from '../components/common/LoadingScreen';
 
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../../App';
-import { signInWithGoogle } from '../services/authService';
-import { getUserDocument, createUserDocument } from '../../shared/services/firestoreService';
-import { getFCMToken } from '../../shared/services/notificationService';
-import { Colors } from '../../shared/theme/colors';
-import { useModal } from '../../shared/context/ModalContext';
-import { log } from '../../shared/utils/errorHandler';
+import { RootStackParamList } from '../navigation/AppNavigator';
+import { signInWithGoogle } from '../api/authService';
+import { getUserDocument, createUserDocument } from '../api/firestoreService';
+import { getFCMToken } from '../api/notificationService';
+import { Colors } from '../constants/Colors';
+import { useModal } from '../context/ModalContext';
+import { log } from '../utility/errorHandler';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 
@@ -57,16 +57,16 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
             if (user) {
                 const profile = await getUserDocument(user.uid);
 
-                if (profile) {
+                if (profile && profile.profileCompleted) {
                     const token = await getFCMToken();
                     if (token) {
                         await createUserDocument({ uid: user.uid, fcmToken: token });
                     }
 
                     if (profile.roles && profile.roles.includes('donor')) {
-                        navigation.replace('DonorDashboard', {});
+                        navigation.replace('DonorDashboard', { tab: 'home' });
                     } else {
-                        navigation.replace('RequesterDashboard', {});
+                        navigation.replace('RequesterDashboard', { tab: 'home' });
                     }
                 } else {
                     navigation.replace('UnifiedRegistration');
@@ -126,7 +126,7 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
                     {/* Logo */}
                     <Animated.View style={[styles.logoWrapper, { transform: [{ scale: pulseAnim }] }]}>
                         <Image
-                            source={require('../../../assets/logo.png')} // ✅ clean path
+                            source={require('../assets/logo.png')} // ✅ clean path
                             style={styles.logo}
                             resizeMode="contain"
                         />
@@ -291,3 +291,6 @@ const styles = StyleSheet.create({
 });
 
 export default AuthScreen;
+
+
+

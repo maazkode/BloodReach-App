@@ -9,7 +9,7 @@ import {
 } from '@react-native-firebase/messaging';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import { createNavigationContainerRef } from '@react-navigation/native';
-import { RootStackParamList } from '../../../../App';
+import { RootStackParamList } from '../navigation/AppNavigator';
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 

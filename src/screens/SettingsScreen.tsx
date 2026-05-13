@@ -15,16 +15,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
-import { signOut } from '../../auth/services/authService';
-import { getUserDocument, getDonorStats, createUserDocument, subscribeToUser } from '../services/firestoreService';
+import { signOut } from '../api/authService';
+import { getUserDocument, getDonorStats, createUserDocument, subscribeToUser } from '../api/firestoreService';
 import { UserDocument } from '../types/database';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../../App';
+import { RootStackParamList } from '../navigation/AppNavigator';
 import LinearGradient from 'react-native-linear-gradient';
-import { safeRun, log } from '../utils/errorHandler';
+import { safeRun, log } from '../utility/errorHandler';
 import { useModal } from '../context/ModalContext';
-import BottomTabBar from '../../shared/components/BottomTabBar';
-import LoadingScreen from '../../shared/components/LoadingScreen';
+import BottomTabBar from '../components/common/BottomTabBar';
+import LoadingScreen from '../components/common/LoadingScreen';
 
 
 const { width } = Dimensions.get('window');
@@ -468,3 +468,5 @@ const styles = StyleSheet.create({
 });
 
 export default SettingsScreen;
+
+

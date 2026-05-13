@@ -29,6 +29,7 @@ export interface UserDocument {
     email: string;
     photoURL: string;
     isVerified: boolean;
+    profileCompleted?: boolean;
     createdAt: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
     updatedAt: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
 }

@@ -16,13 +16,13 @@ import {
     Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import LoadingScreen from '../../shared/components/LoadingScreen';
+import LoadingScreen from '../components/common/LoadingScreen';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Colors } from '../../shared/theme/colors';
+import { Colors } from '../constants/Colors';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../../App';
-import { useAuth } from '../../shared/context/AuthContext';
+import { RootStackParamList } from '../navigation/AppNavigator';
+import { useAuth } from '../context/AuthContext';
 import {
     getUserDocument,
     createUserDocument,
@@ -34,12 +34,12 @@ import {
     subscribeToUser,
     getDonorHistory,
     getCompatibleBloodGroups
-} from '../../shared/services/firestoreService';
-import { UserDocument, DonationRequest } from '../../shared/types/database';
-import { signOut } from '../../auth/services/authService';
-import { triggerLocalNotification } from '../../shared/services/notificationService';
-import BottomTabBar from '../../shared/components/BottomTabBar';
-import { useModal } from '../../shared/context/ModalContext';
+} from '../api/firestoreService';
+import { UserDocument, DonationRequest } from '../types/database';
+import { signOut } from '../api/authService';
+import { triggerLocalNotification } from '../api/notificationService';
+import BottomTabBar from '../components/common/BottomTabBar';
+import { useModal } from '../context/ModalContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DonorDashboard'>;
 const { width } = Dimensions.get('window');
@@ -527,7 +527,7 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
             {/* ── Header ── */}
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
                 <View style={styles.headerBrand}>
-                    <Image source={require('../../../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />
+                    <Image source={require('../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />
                     <Text style={styles.headerBrandName}>BloodReach</Text>
                 </View>
             </View>
@@ -966,3 +966,6 @@ const styles = StyleSheet.create({
 });
 
 export default DonorDashboard;
+
+
+

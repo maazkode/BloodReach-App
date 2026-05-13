@@ -14,16 +14,16 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import LoadingScreen from '../../shared/components/LoadingScreen';
+import LoadingScreen from '../components/common/LoadingScreen';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import { Colors } from '../../shared/theme/colors';
-import { useAuth } from '../../shared/context/AuthContext';
-import { signOut } from '../../auth/services/authService';
-import { getUserDocument, getRequesterRequests, createUserDocument, subscribeToUser } from '../../shared/services/firestoreService';
-import { UserDocument, DonationRequest } from '../../shared/types/database';
-import BottomTabBar from '../../shared/components/BottomTabBar';
+import { Colors } from '../constants/Colors';
+import { useAuth } from '../context/AuthContext';
+import { signOut } from '../api/authService';
+import { getUserDocument, getRequesterRequests, createUserDocument, subscribeToUser } from '../api/firestoreService';
+import { UserDocument, DonationRequest } from '../types/database';
+import BottomTabBar from '../components/common/BottomTabBar';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../../App';
+import { RootStackParamList } from '../navigation/AppNavigator';
 
 const { width } = Dimensions.get('window');
 
@@ -278,7 +278,7 @@ const RequesterDashboard: React.FC<Props> = ({ route, navigation }) => {
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
                 <View style={styles.headerBrand}>
                     <Image
-                        source={require('../../../assets/logo.png')}
+                        source={require('../assets/logo.png')}
                         style={styles.headerLogo}
                         resizeMode="contain"
                     />
@@ -529,3 +529,6 @@ const styles = StyleSheet.create({
 });
 
 export default RequesterDashboard;
+
+
+

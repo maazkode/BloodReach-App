@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import CustomModal from '../components/CustomModal';
+import CustomModal from '../components/common/CustomModal';
 
 interface ModalOptions {
     title: string;

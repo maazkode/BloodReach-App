@@ -13,7 +13,7 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
-import { safeRun, log } from '../../shared/utils/errorHandler';
+import { safeRun, log } from '../utility/errorHandler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -21,12 +21,12 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getAuth } from '@react-native-firebase/auth';
 
-import { RootStackParamList } from '../../../../App';
-import { createDonationRequest } from '../../shared/services/firestoreService';
-import { DonationRequest } from '../../shared/types/database';
-import { getFullLocationData, forwardGeocode } from '../../shared/services/locationService';
+import { RootStackParamList } from '../navigation/AppNavigator';
+import { createDonationRequest } from '../api/firestoreService';
+import { DonationRequest } from '../types/database';
+import { getFullLocationData, forwardGeocode } from '../api/locationService';
 import { geohashForLocation } from 'geofire-common';
-import { useModal } from '../../shared/context/ModalContext';
+import { useModal } from '../context/ModalContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateRequest'>;
 
@@ -554,3 +554,5 @@ const styles = StyleSheet.create({
 });
 
 export default CreateRequestScreen;
+
+

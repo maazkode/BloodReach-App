@@ -15,17 +15,17 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../../App';
+import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument, createUserDocument } from '../services/firestoreService';
+import { getUserDocument, createUserDocument } from '../api/firestoreService';
 import { useModal } from '../context/ModalContext';
-import { safeRun } from '../utils/errorHandler';
-import { Colors } from '../theme/colors';
-import { getFullLocationData, forwardGeocode, LocationData } from '../services/locationService';
+import { safeRun } from '../utility/errorHandler';
+import { Colors } from '../constants/Colors';
+import { getFullLocationData, forwardGeocode, LocationData } from '../api/locationService';
 import { geohashForLocation } from 'geofire-common';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Timestamp } from '@react-native-firebase/firestore';
-import LoadingScreen from '../../shared/components/LoadingScreen';
+import LoadingScreen from '../components/common/LoadingScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
 
@@ -421,3 +421,6 @@ const styles = StyleSheet.create({
 });
 
 export default EditProfileScreen;
+
+
+

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../../App';
+import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../context/AuthContext';
-import { getUserDocument, updateUserLocation, saveUserFCMToken } from '../services/firestoreService';
-import { getFullLocationData } from '../services/locationService';
-import { getFCMToken } from '../services/notificationService';
-import { Colors } from '../theme/colors';
+import { getUserDocument, updateUserLocation, saveUserFCMToken } from '../api/firestoreService';
+import { getFullLocationData } from '../api/locationService';
+import { getFCMToken } from '../api/notificationService';
+import { Colors } from '../constants/Colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -23,7 +23,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
             try {
                 const profile = await getUserDocument(user.uid);
-                
+
                 // Location Refresh Logic (Refresh if older than 6 hours)
                 if (profile) {
                     const now = Date.now();
@@ -62,7 +62,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                     }
                 }
 
-                if (profile && profile.roles) {
+                if (profile && profile.profileCompleted && profile.roles) {
                     if (profile.roles.includes('donor')) {
                         navigation.replace('DonorDashboard', { tab: 'home' });
                     } else {
@@ -112,3 +112,6 @@ const styles = StyleSheet.create({
 });
 
 export default HomeScreen;
+
+
+

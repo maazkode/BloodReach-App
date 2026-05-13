@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../../App';
+import { RootStackParamList } from '../navigation/AppNavigator';
 import { getAuth } from '@react-native-firebase/auth';
 import {
     getDonationRequest,
@@ -25,10 +25,10 @@ import {
     getUserDocument,
     createDonationMatch,
     getMatchForDonor
-} from '../../shared/services/firestoreService';
-import { DonationRequest, DonationMatch, UserDocument } from '../../shared/types/database';
-import { useModal } from '../../shared/context/ModalContext';
-import LoadingScreen from '../../shared/components/LoadingScreen';
+} from '../api/firestoreService';
+import { DonationRequest, DonationMatch, UserDocument } from '../types/database';
+import { useModal } from '../context/ModalContext';
+import LoadingScreen from '../components/common/LoadingScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequestDetail'>;
 
@@ -552,3 +552,5 @@ const styles = StyleSheet.create({
 });
 
 export default RequestDetailScreen;
+
+

@@ -9,7 +9,7 @@ import {
     Dimensions,
 } from 'react-native';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import { Colors } from '../theme/colors';
+import { Colors } from '../../constants/Colors';
 
 const { width } = Dimensions.get('window');
 
@@ -217,3 +217,5 @@ const styles = StyleSheet.create({
 });
 
 export default CustomModal;
+
+
