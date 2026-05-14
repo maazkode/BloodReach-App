@@ -17,55 +17,29 @@ import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIc
 import { useAuth } from '../context/AuthContext';
 import { signOut } from '../api/authService';
 import { getUserDocument, getDonorStats, createUserDocument, subscribeToUser } from '../api/firestoreService';
-import { UserDocument } from '../types/database';
+import { UserDocument, UserRole } from '../types/database';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { safeRun, log } from '../utility/errorHandler';
 import { useModal } from '../context/ModalContext';
 import BottomTabBar from '../components/common/BottomTabBar';
 import LoadingScreen from '../components/common/LoadingScreen';
+import InfoRow from '../components/settings/InfoRow';
+import MenuOption from '../components/settings/MenuOption';
+import ProfileHeaderCard from '../components/settings/ProfileHeaderCard';
 
 
 const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
-const MenuOption = React.memo(({ icon, title, color = "#1E293B", onPress, isLast = false, rightText }: any) => (
-    <TouchableOpacity
-        style={[styles.menuItem, isLast && { borderBottomWidth: 0 }]}
-        onPress={onPress}
-        activeOpacity={0.7}
-    >
-        <View style={[styles.menuIconBox, { backgroundColor: `${color}10` }]}>
-            <MaterialCommunityIcon name={icon} size={22} color={color} />
-        </View>
-        <Text style={[styles.menuTitle, { color }]}>{title}</Text>
-        {rightText && <Text style={styles.rightText}>{rightText}</Text>}
-        <MaterialIcon name="chevron-right" size={20} color="#CBD5E1" />
-    </TouchableOpacity>
-));
-
-const InfoRow = React.memo(({ icon, iconLib = 'community', label, value, iconBg, iconColor, isLast }: any) => (
-    <View style={[styles.infoRow, !isLast && styles.infoRowBorder]}>
-        <View style={[styles.infoIconBox, { backgroundColor: iconBg }]}>
-            {iconLib === 'material' ? (
-                <MaterialIcon name={icon} size={20} color={iconColor} />
-            ) : (
-                <MaterialCommunityIcon name={icon} size={20} color={iconColor} />
-            )}
-        </View>
-        <View style={styles.infoText}>
-            <Text style={styles.infoLabel}>{label}</Text>
-            <Text style={styles.infoValue}>{value}</Text>
-        </View>
-    </View>
-));
 
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     const { showModal } = useModal();
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
+    const [currentRole, setCurrentRole] = React.useState<UserRole | null>(null);
     const [donorStats, setDonorStats] = React.useState({ count: 0, livesSaved: 0, rank: 'Bronze' });
     const [actionLoading, setActionLoading] = React.useState(false);
     const [loadingUser, setLoadingUser] = React.useState(true);
@@ -76,6 +50,10 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         const unsubUser = subscribeToUser(user.uid, (data) => {
             if (data) {
                 setUserData(data);
+                // Only sync from Firestore if not currently performing an action
+                if (!actionLoading) {
+                    setCurrentRole(data.lastActiveRole);
+                }
                 setLoadingUser(false);
             } else {
                 setLoadingUser(false);
@@ -113,11 +91,13 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     }, [actionLoading, showModal]);
 
     const handleSwitchRole = React.useCallback(async () => {
-        if (!user || !userData || actionLoading) return;
-        const newRole = userData.lastActiveRole === 'donor' ? 'requester' : 'donor';
+        if (!user || !userData || !currentRole || actionLoading) return;
+        const newRole = currentRole === 'donor' ? 'requester' : 'donor';
         const targetScreen = newRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard';
 
         setActionLoading(true);
+        setCurrentRole(newRole); // Update locally instantly
+
         await safeRun(
             () => createUserDocument({ uid: user.uid, lastActiveRole: newRole }),
             {
@@ -127,12 +107,19 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 showModal,
                 onSuccess: () => {
                     log('info', 'Settings > handleSwitchRole', `Switched to ${newRole}`);
-                    navigation.replace(targetScreen, { tab: 'home' });
+                    // Ensure the navigation happens after the state is committed
+                    setTimeout(() => {
+                        navigation.replace(targetScreen, { tab: 'home' });
+                    }, 100);
                 },
+                onError: () => {
+                    // Revert if failed
+                    setCurrentRole(currentRole);
+                }
             }
         );
         setActionLoading(false);
-    }, [user, userData, actionLoading, showModal, navigation]);
+    }, [user, userData, currentRole, actionLoading, showModal, navigation]);
 
 
     const tabs = React.useMemo(() => [
@@ -141,19 +128,19 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             label: 'Home',
             icon: 'home',
             activeIcon: 'home',
-            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'home' })
+            onPress: () => navigation.navigate(currentRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'home' })
         },
         {
             key: 'requests',
             label: 'Requests',
-            icon: userData?.lastActiveRole === 'donor' ? 'water-drop' : 'list-alt',
-            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'requests' })
+            icon: currentRole === 'donor' ? 'water-drop' : 'list-alt',
+            onPress: () => navigation.navigate(currentRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'requests' })
         },
         {
             key: 'history',
             label: 'History',
             icon: 'history',
-            onPress: () => navigation.navigate(userData?.lastActiveRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'history' })
+            onPress: () => navigation.navigate(currentRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'history' })
         },
         {
             key: 'settings',
@@ -162,7 +149,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             activeIcon: 'settings',
             onPress: () => { }
         },
-    ], [userData?.lastActiveRole, navigation]);
+    ], [currentRole, navigation]);
 
     if (loadingUser) {
         return <LoadingScreen tagline="Synchronizing your profile data..." />;
@@ -186,32 +173,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-
-                <View style={styles.profileHeaderCard}>
-                    <View style={styles.profileIdentityRow}>
-                        <View style={styles.avatarContainer}>
-                            {userData?.photoURL ? (
-                                <Image source={{ uri: userData.photoURL }} style={styles.mainAvatar} />
-                            ) : (
-                                <View style={styles.avatarPlaceholder}>
-                                    <MaterialIcon name="person" size={40} color="white" />
-                                </View>
-                            )}
-                            <View style={styles.verifiedBadge}>
-                                <MaterialIcon name="verified" size={16} color="white" />
-                            </View>
-                        </View>
-                        <View style={styles.identityTextContainer}>
-                            <Text style={styles.userNameText}>{userData?.name || 'User Name'}</Text>
-                            <Text style={styles.userEmailText}>{user?.email}</Text>
-                            <View style={styles.bloodBadgeSmall}>
-                                <MaterialCommunityIcon name="water" size={14} color="#B62022" />
-                                <Text style={styles.bloodBadgeTextSmall}>{userData?.bloodGroup || '--'}</Text>
-                            </View>
-                        </View>
-                    </View>
-                </View>
-
+                <ProfileHeaderCard userData={userData} userEmail={user?.email} />
 
                 {/* ── Menu Sections ── */}
                 <View style={styles.menuContainer}>
@@ -261,10 +223,11 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                     <View style={styles.menuSectionCard}>
                         <MenuOption
                             icon="swap-horizontal"
-                            title={`Switch to ${userData?.lastActiveRole === 'donor' ? 'Requester' : 'Donor'} Mode`}
+                            title={`Switch to ${currentRole === 'donor' ? 'Requester' : 'Donor'} Mode`}
                             onPress={handleSwitchRole}
                             color="#8B5CF6"
                             isLast
+                            rightText={actionLoading ? <ActivityIndicator size="small" color="#8B5CF6" /> : undefined}
                         />
                     </View>
 
@@ -303,169 +266,39 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     headerTitleText: { fontSize: 18, fontWeight: '800', color: '#1E293B' },
-
-    profileHeaderCard: {
-        backgroundColor: 'white',
-        marginHorizontal: 20,
-        marginTop: 10,
-        borderRadius: 24,
-        padding: 20,
-        shadowColor: '#000',
-        shadowOpacity: 0.08,
-        shadowRadius: 20,
-        elevation: 8,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-    },
-    profileIdentityRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    avatarContainer: {
-        position: 'relative',
-    },
-    mainAvatar: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: '#F8FAFC' },
-    avatarPlaceholder: {
-        width: 80, height: 80, borderRadius: 40,
-        backgroundColor: '#B62022',
-        justifyContent: 'center', alignItems: 'center',
-        borderWidth: 3, borderColor: '#F8FAFC'
-    },
-    verifiedBadge: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        backgroundColor: '#3B82F6',
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 2,
-        borderColor: 'white',
-    },
-    identityTextContainer: {
-        marginLeft: 18,
-        flex: 1,
-    },
-    userNameText: { fontSize: 22, fontWeight: '900', color: '#1E293B' },
-    userEmailText: { fontSize: 13, color: '#64748B', fontWeight: '600', marginTop: 2 },
-    bloodBadgeSmall: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FEF2F2',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-        alignSelf: 'flex-start',
-        marginTop: 8,
-        borderWidth: 1,
-        borderColor: '#FEE2E2',
-    },
-    bloodBadgeTextSmall: { color: '#B62022', fontWeight: '900', fontSize: 12, marginLeft: 4 },
-
-    statsGrid: {
-        flexDirection: 'row',
-        backgroundColor: 'white',
-        marginHorizontal: 20,
-        paddingVertical: 20,
-        borderRadius: 25,
-        marginTop: -50,
-        shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 15,
-        elevation: 5,
-        alignItems: 'center',
-    },
-    statGridItem: { flex: 1, alignItems: 'center' },
-    statGridVal: { fontSize: 20, fontWeight: '900', color: '#1E293B' },
-    statGridLab: { fontSize: 10, fontWeight: '800', color: '#94A3B8', marginTop: 5, textTransform: 'uppercase' },
-    statGridDivider: { width: 1, height: 40, backgroundColor: '#F1F5F9' },
-    rankBadgeSmall: { backgroundColor: '#FEF2F2', paddingHorizontal: 10, borderRadius: 10 },
-
-    menuContainer: { paddingHorizontal: 20, marginTop: 15 },
+    menuContainer: { paddingHorizontal: 20, marginTop: 10 },
     menuHeaderLabel: {
         fontSize: 12,
         fontWeight: '900',
         color: '#94A3B8',
+        marginTop: 5,
         marginBottom: 10,
         marginLeft: 10,
         letterSpacing: 1.5,
     },
     menuSectionCard: {
         backgroundColor: 'white',
-        borderRadius: 25,
+        borderRadius: 10,
         paddingHorizontal: 15,
-        marginBottom: 25,
+        marginBottom: 15,
         shadowColor: '#000',
         shadowOpacity: 0.05,
         shadowRadius: 10,
         elevation: 2,
     },
-    menuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 18,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F8FAFC',
-    },
-    menuIconBox: {
-        width: 44,
-        height: 44,
-        borderRadius: 14,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    menuTitle: { flex: 1, marginLeft: 15, fontSize: 15, fontWeight: '700' },
-    rightText: { fontSize: 12, fontWeight: '800', color: '#B62022', marginRight: 10, backgroundColor: '#FEF2F2', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-
     logoutButtonModern: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#FEF2F2',
-        paddingVertical: 18,
-        borderRadius: 20,
-        marginTop: 10,
+        paddingVertical: 14,
+        borderRadius: 10,
+        marginBottom: 10,
         borderWidth: 1,
         borderColor: '#FEE2E2',
     },
     logoutButtonText: { color: '#EF4444', fontSize: 16, fontWeight: '900', marginLeft: 10 },
     footerVersion: { textAlign: 'center', marginTop: 30, color: '#CBD5E1', fontSize: 12, fontWeight: '700' },
-
-    // Info Row Styles
-    infoRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 14,
-    },
-    infoRowBorder: {
-        borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
-    },
-    infoIconBox: {
-        width: 42,
-        height: 42,
-        borderRadius: 14,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 14,
-    },
-    infoText: { flex: 1 },
-    infoLabel: {
-        fontSize: 11,
-        fontWeight: '700',
-        color: '#94A3B8',
-        letterSpacing: 0.4,
-        marginBottom: 3,
-    },
-    infoValue: {
-        fontSize: 15,
-        fontWeight: '800',
-        color: '#1E293B',
-    },
 });
 
 export default SettingsScreen;
-
-
