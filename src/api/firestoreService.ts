@@ -166,6 +166,21 @@ export const createUserDocument = async (
     }
 };
 
+/**
+ * Updates specific user preferences.
+ */
+export const updateUserPreferences = async (uid: string, preferences: Partial<UserDocument>): Promise<void> => {
+    try {
+        await setDoc(doc(db, 'users', uid), {
+            ...preferences,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+    } catch (error) {
+        console.error('[Firestore] updateUserPreferences error:', error);
+        throw error;
+    }
+};
+
 // ─── REQUEST SERVICE ─────────────────────────────────
 
 /**
@@ -206,14 +221,18 @@ export const saveUserFCMToken = async (uid: string, token: string): Promise<void
  */
 export const updateUserLocation = async (
     uid: string,
-    locationData: { latitude: number; longitude: number; geohash: string; address?: string }
+    locationData: { latitude: number; longitude: number; geohash: string; address?: string },
+    city?: string
 ): Promise<void> => {
     try {
-        await setDoc(doc(db, 'users', uid), {
+        const payload: any = {
             location: locationData,
             locationUpdatedAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
-        }, { merge: true });
+        };
+        if (city) payload.city = city;
+
+        await setDoc(doc(db, 'users', uid), payload, { merge: true });
     } catch (error) {
         console.error('[Firestore] updateUserLocation error:', error);
         throw error;
@@ -280,23 +299,29 @@ export const subscribeToNearbyRequests = (
     const radiusInM = radiusKm * 1000;
     const bounds = geohashQueryBounds([lat, lng], radiusInM);
     const resultsMap = new Map<string, DonationRequest[]>();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const triggerCallback = () => {
-        const allRequests: DonationRequest[] = [];
-        resultsMap.forEach(list => allRequests.push(...list));
+        if (debounceTimer) clearTimeout(debounceTimer);
+        
+        debounceTimer = setTimeout(() => {
+            const allRequests: DonationRequest[] = [];
+            resultsMap.forEach(list => allRequests.push(...list));
 
-        // Remove duplicates (by ID) and sort by proximity or date
-        const uniqueRequests = Array.from(new Map(allRequests.map(r => [r.id, r])).values());
+            // Remove duplicates (by ID) and sort by proximity or date
+            const uniqueRequests = Array.from(new Map(allRequests.map(r => [r.id, r])).values());
 
-        // Sort by distance
-        uniqueRequests.sort((a, b) => {
-            const distA = getDistance(lat, lng, a.location.latitude, a.location.longitude);
-            const distB = getDistance(lat, lng, b.location.latitude, b.location.longitude);
-            return distA - distB;
-        });
+            // Sort by distance
+            uniqueRequests.sort((a, b) => {
+                const distA = getDistance(lat, lng, a.location.latitude, a.location.longitude);
+                const distB = getDistance(lat, lng, b.location.latitude, b.location.longitude);
+                return distA - distB;
+            });
 
-        callback(uniqueRequests);
+            callback(uniqueRequests);
+        }, 100); // 100ms debounce to allow all initial bounds to resolve
     };
+
 
     const unsubs = bounds.map((b, index) => {
         let q = query(

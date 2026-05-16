@@ -24,6 +24,7 @@ export interface UserDocument {
         geohash: string;
     };
     locationUpdatedAt?: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
+    smartLocationPreference?: 'auto' | 'ask' | 'off';
     // address: string;
     fcmToken?: string;
     email: string;

@@ -24,7 +24,7 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 import { getAuth } from '@react-native-firebase/auth';
 import { createUserDocument } from '../api/firestoreService';
 import { UserDocument } from '../types/database';
-import { Timestamp, serverTimestamp } from '@react-native-firebase/firestore';
+import { Timestamp, serverTimestamp, getFirestore, collection, query, where, getDocs } from '@react-native-firebase/firestore';
 import { getFullLocationData, forwardGeocode, LocationData } from '../api/locationService';
 import { getFCMToken } from '../api/notificationService';
 import { geohashForLocation } from 'geofire-common';
@@ -62,6 +62,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     const [locationData, setLocationData] = useState<LocationData | null>(null);
     const [fetchingLocation, setFetchingLocation] = useState(false);
     const [isDetecting, setIsDetecting] = useState(false);
+    const [hasGeocodeFailed, setHasGeocodeFailed] = useState(false);
 
     useEffect(() => {
         const backAction = () => {
@@ -98,25 +99,24 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     const validateForm = React.useCallback(() => {
         let tempErrors: { [key: string]: string } = {};
         if (!name.trim()) tempErrors.name = 'Full name is required';
-        if (!phone.trim()) tempErrors.phone = 'Phone number is required';
+        if (!phone.trim()) {
+            tempErrors.phone = 'Phone number is required';
+        } else if (!/^(?:\+92|03)\d{9}$/.test(phone.trim())) {
+            tempErrors.phone = 'Format: +923001234567 or 03001234567';
+        }
         if (!bloodGroup) tempErrors.bloodGroup = 'Blood group is required';
         if (!address.trim()) tempErrors.address = 'Full address is required';
+        if (!age.trim()) tempErrors.age = 'Age is required';
+        if (!gender) tempErrors.gender = 'Gender is required';
+        if (!locationData) tempErrors.location = 'Location verification is required';
 
         setErrors(tempErrors);
-        if (!locationData) {
-            showModal({
-                title: 'Location Required',
-                description: 'Please detect your location using the Fetch button, or ensure your typed address is fully typed and verified.',
-                type: 'warning',
-                primaryText: 'Got it'
-            });
-            return false;
-        }
         return Object.keys(tempErrors).length === 0;
-    }, [name, phone, bloodGroup, address, locationData, showModal]);
+    }, [name, phone, bloodGroup, address, age, gender, locationData]);
 
     const handleFetchLocation = React.useCallback(async () => {
         setFetchingLocation(true);
+        setHasGeocodeFailed(false);
         try {
             const data = await getFullLocationData();
             setLocationData(data);
@@ -137,32 +137,49 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
 
     // Debounced manual location lookup
     useEffect(() => {
-        if (!address.trim() || locationData?.address === address) return;
+        if (!address.trim()) {
+            setHasGeocodeFailed(false);
+            return;
+        }
+        if (locationData?.address === address) return;
+
+        let isCancelled = false;
+        // Reset failed state while typing/waiting
+        setHasGeocodeFailed(false);
 
         const delayDebounceFn = setTimeout(async () => {
             setIsDetecting(true);
             try {
                 const result = await forwardGeocode(address);
-                if (result) {
-                    const hash = geohashForLocation([result.latitude, result.longitude]);
-                    setLocationData({
-                        latitude: result.latitude,
-                        longitude: result.longitude,
-                        geohash: hash,
-                        address: result.address
-                    });
-                    // We don't overwrite address here so the user can continue typing
-                } else {
-                    setLocationData(null);
+                if (!isCancelled) {
+                    if (result) {
+                        const hash = geohashForLocation([result.latitude, result.longitude]);
+                        setLocationData({
+                            latitude: result.latitude,
+                            longitude: result.longitude,
+                            geohash: hash,
+                            address: result.address
+                        });
+                        // We don't overwrite address here so the user can continue typing
+                    } else {
+                        setLocationData(null);
+                        setHasGeocodeFailed(true);
+                    }
                 }
             } catch (error) {
-                setLocationData(null);
+                if (!isCancelled) {
+                    setLocationData(null);
+                    setHasGeocodeFailed(true);
+                }
             } finally {
-                setIsDetecting(false);
+                if (!isCancelled) setIsDetecting(false);
             }
         }, 1500);
 
-        return () => clearTimeout(delayDebounceFn);
+        return () => {
+            isCancelled = true;
+            clearTimeout(delayDebounceFn);
+        };
     }, [address]);
 
     const handleRegister = React.useCallback(async () => {
@@ -173,6 +190,21 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
             const currentUser = getAuth().currentUser;
             if (!currentUser) throw new Error('No authenticated user found');
             if (!locationData) throw new Error('Location data missing');
+
+            // Duplicate phone check
+            const db = getFirestore();
+            const phoneQuery = query(collection(db, 'users'), where('phone', '==', phone.trim()));
+            const phoneDocs = await getDocs(phoneQuery);
+            if (!phoneDocs.empty && phoneDocs.docs.some((d: any) => d.id !== currentUser.uid)) {
+                showModal({
+                    title: 'Duplicate Phone Number',
+                    description: 'This phone number is already registered to another account. Please use a different number.',
+                    type: 'error',
+                    primaryText: 'OK'
+                });
+                setLoading(false);
+                return;
+            }
 
             const roles = isAvailable ? ['donor', 'requester'] : ['requester'];
             const lastActiveRole = isAvailable ? 'donor' : 'requester';
@@ -326,6 +358,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                                     onChangeText={(text) => {
                                         setAddress(text);
                                         if (locationData) setLocationData(null);
+                                        if (hasGeocodeFailed) setHasGeocodeFailed(false);
                                     }}
                                 />
                                 <TouchableOpacity
@@ -354,24 +387,26 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                                     <MaterialIcon name="check-circle" size={14} color="#10B981" />
                                     <Text style={{ fontSize: 11, color: '#10B981', marginLeft: 4, fontWeight: '600' }}>Location Verified</Text>
                                 </View>
-                            ) : address.length > 3 ? (
+                            ) : hasGeocodeFailed && address.length > 3 ? (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
                                     <MaterialIcon name="error" size={14} color="#F59E0B" />
                                     <Text style={{ fontSize: 11, color: '#F59E0B', marginLeft: 4, fontWeight: '600' }}>Location unverified. Keep typing or use Fetch.</Text>
                                 </View>
                             ) : null}
                             {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
+                            {errors.location && !errors.address && <Text style={styles.errorText}>{errors.location}</Text>}
                         </View>
 
 
 
                         <View style={styles.row}>
                             <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                                <Text style={styles.label}>Age</Text>
+                                <Text style={styles.label}>Age <Text style={styles.required}>*</Text></Text>
                                 <TextInput style={styles.input} placeholder="25" keyboardType="numeric" value={age} onChangeText={setAge} />
+                                {errors.age && <Text style={styles.errorText}>{errors.age}</Text>}
                             </View>
                             <View style={[styles.inputGroup, { flex: 1, marginLeft: 8, zIndex: 90 }]}>
-                                <Text style={styles.label}>Gender</Text>
+                                <Text style={styles.label}>Gender <Text style={styles.required}>*</Text></Text>
                                 <TouchableOpacity
                                     style={styles.inputWrapper}
                                     onPress={() => {
@@ -400,6 +435,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                                         ))}
                                     </View>
                                 )}
+                                {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
                             </View>
                         </View>
 
@@ -466,7 +502,7 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 18, fontWeight: '800', color: Colors.primary },
     scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
     logoContainer: { width: 60, height: 60, backgroundColor: '#FEE2E2', borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-    card: { backgroundColor: 'white', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, marginTop: 20 },
+    card: { backgroundColor: 'white', borderRadius: 10, padding: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, marginTop: 20 },
     sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1E293B', marginBottom: 16 },
     inputGroup: { marginBottom: 16 },
     label: { fontSize: 13, fontWeight: '600', color: '#475569', marginBottom: 6 },

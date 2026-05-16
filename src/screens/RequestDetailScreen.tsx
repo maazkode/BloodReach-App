@@ -29,10 +29,9 @@ import { DonationRequest, DonationMatch, UserDocument } from '../types/database'
 import { useModal } from '../context/ModalContext';
 import LoadingScreen from '../components/common/LoadingScreen';
 import ScreenHeader from '../components/common/ScreenHeader';
-import Timeline from '../components/details/Timeline';
 import DetailInfoCard from '../components/details/DetailInfoCard';
 import ContactBar from '../components/details/ContactBar';
-import PatientHeroCard from '../components/details/PatientHeroCard';
+import RequestSummaryCard from '../components/details/RequestSummaryCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RequestDetail'>;
 
@@ -265,30 +264,17 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             />
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <Timeline status={request.status} />
-
-                <PatientHeroCard 
-                    patientName={request.patientName}
-                    bloodGroup={request.bloodGroup}
-                    unitsRequired={request.unitsRequired}
-                    urgencyLevel={request.urgencyLevel}
-                    statusLabel={request.status.toUpperCase()}
-                />
-
                 <View style={styles.contentBody}>
-                    <DetailInfoCard 
-                        title="Hospital Location"
-                        icon="local-hospital"
-                        mainText={request.hospitalName}
-                        subText={`${request.hospitalAddress}, ${request.city}`}
-                    >
-                        {!isRequester && (
-                            <TouchableOpacity style={styles.mapActionBtn} onPress={handleOpenMaps}>
-                                <MaterialIcon name="directions" size={20} color="#B62022" />
-                                <Text style={styles.mapActionText}>Get Directions</Text>
-                            </TouchableOpacity>
-                        )}
-                    </DetailInfoCard>
+                    <RequestSummaryCard 
+                        patientName={request.patientName}
+                        bloodGroup={request.bloodGroup}
+                        unitsRequired={request.unitsRequired}
+                        urgencyLevel={request.urgencyLevel}
+                        hospitalName={request.hospitalName}
+                        hospitalAddress={request.hospitalAddress}
+                        city={request.city}
+                        onGetDirections={handleOpenMaps}
+                    />
 
                     {isRequester && (
                         <View style={styles.matchesSection}>
@@ -440,20 +426,6 @@ const styles = StyleSheet.create({
     },
     primaryActionText: { color: 'white', fontSize: 16, fontWeight: '800' },
     btnIcon: { marginRight: 8 },
-
-    mapActionBtn: { 
-        height: 44, 
-        borderRadius: 12, 
-        flexDirection: 'row', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        borderWidth: 1, 
-        borderColor: '#FEE2E2', 
-        backgroundColor: '#FEF2F2',
-        marginTop: 12,
-        gap: 8
-    },
-    mapActionText: { color: '#B62022', fontSize: 14, fontWeight: '700' },
 
     // ─── MATCHES SECTION ─────────────────────────────────────────
     matchesSection: { marginTop: 8, marginBottom: 24 },

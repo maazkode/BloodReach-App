@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     StyleSheet,
     View,
@@ -48,10 +48,15 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const [coordinates, setCoordinates] = useState<{ latitude: number, longitude: number, geohash: string } | null>(null);
     const [lastGeocodedAddress, setLastGeocodedAddress] = useState('');
     const [isLocationVerified, setIsLocationVerified] = useState(false);
+    
+    // New states for inline verification
+    const [isDetecting, setIsDetecting] = useState(false);
+    const [hasGeocodeFailed, setHasGeocodeFailed] = useState(false);
 
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showBloodGroupPicker, setShowBloodGroupPicker] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
     const onDateChange = (_: any, selectedDate?: Date) => {
         setShowDatePicker(false);
@@ -63,6 +68,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const handleFetchLocation = async () => {
         if (fetchingLocation) return; // prevent double-tap
         setFetchingLocation(true);
+        setHasGeocodeFailed(false);
         await safeRun(
             async () => {
                 if (address && address.length > 3 && address !== lastGeocodedAddress) {
@@ -85,6 +91,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                         });
                     } else {
                         setIsLocationVerified(false);
+                        setHasGeocodeFailed(true);
                         showModal({
                             title: 'Location Not Found',
                             description: 'Could not find coordinates for this address. Please try a more specific address or use GPS.',
@@ -116,17 +123,78 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
         setFetchingLocation(false);
     };
 
-    const handleSubmit = async () => {
-        // Validation
-        if (!patientName.trim() || !phone.trim() || !bloodGroup || !hospital.trim() || !address.trim()) {
-            showModal({
-                title: 'Missing Information',
-                description: 'Please fill in all required fields before submitting.',
-                type: 'warning',
-                primaryText: 'Fill Form'
-            });
+    // Debounced manual location lookup
+    useEffect(() => {
+        if (!address.trim()) {
+            setHasGeocodeFailed(false);
             return;
         }
+        if (address === lastGeocodedAddress) return;
+
+        let isCancelled = false;
+        setHasGeocodeFailed(false);
+
+        const delayDebounceFn = setTimeout(async () => {
+            setIsDetecting(true);
+            try {
+                const geoResult = await forwardGeocode(address);
+                if (!isCancelled) {
+                    if (geoResult) {
+                        setCoordinates({
+                            latitude: geoResult.latitude,
+                            longitude: geoResult.longitude,
+                            geohash: geohashForLocation([geoResult.latitude, geoResult.longitude]),
+                        });
+                        setLastGeocodedAddress(geoResult.address);
+                        setIsLocationVerified(true);
+                        setHasGeocodeFailed(false);
+                    } else {
+                        setCoordinates(null);
+                        setIsLocationVerified(false);
+                        setHasGeocodeFailed(true);
+                    }
+                }
+            } catch (error) {
+                if (!isCancelled) {
+                    setCoordinates(null);
+                    setIsLocationVerified(false);
+                    setHasGeocodeFailed(true);
+                }
+            } finally {
+                if (!isCancelled) setIsDetecting(false);
+            }
+        }, 1500);
+
+        return () => {
+            isCancelled = true;
+            clearTimeout(delayDebounceFn);
+        };
+    }, [address, lastGeocodedAddress]);
+
+    const validateForm = () => {
+        let tempErrors: { [key: string]: string } = {};
+        if (!bloodGroup) tempErrors.bloodGroup = 'Blood group is required';
+        if (!units.trim()) tempErrors.units = 'Required';
+        if (!patientName.trim()) tempErrors.patientName = 'Patient name is required';
+        if (!phone.trim()) {
+            tempErrors.phone = 'Mobile number is required';
+        } else if (!/^(?:\+92|03)\d{9}$/.test(phone.trim())) {
+            tempErrors.phone = 'Format: +923001234567 or 03001234567';
+        }
+        if (!hospital.trim()) tempErrors.hospital = 'Hospital name is required';
+        if (!address.trim()) tempErrors.address = 'Address is required';
+        
+        if (!isLocationVerified || !coordinates || address !== lastGeocodedAddress) {
+            tempErrors.location = 'Location verification is required (use Locate)';
+        }
+
+        setErrors(tempErrors);
+        return Object.keys(tempErrors).length === 0;
+    };
+
+    const handleSubmit = async () => {
+        // Validation
+        if (!validateForm()) return;
 
         const currentUser = getAuth().currentUser;
         if (!currentUser) {
@@ -136,16 +204,6 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 type: 'error',
                 primaryText: 'Sign In',
                 onPrimaryPress: () => navigation.replace('Auth')
-            });
-            return;
-        }
-
-        if (!isLocationVerified || !coordinates || address !== lastGeocodedAddress) {
-            showModal({
-                title: 'Location Not Verified',
-                description: 'Please click "Locate" to verify your hospital address before submitting.',
-                type: 'warning',
-                primaryText: 'OK'
             });
             return;
         }
@@ -213,7 +271,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                     {/* BLOOD GROUP + DROPDOWN FIX */}
                     <View style={styles.row}>
                         <View style={[styles.inputGroup, { flex: 1.3, marginRight: 8 }]}>
-                            <Text style={styles.label}>Blood Group</Text>
+                            <Text style={styles.label}>Blood Group <Text style={styles.required}>*</Text></Text>
 
                             <TouchableOpacity
                                 style={styles.inputBox}
@@ -247,10 +305,11 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                                     ))}
                                 </View>
                             )}
+                            {errors.bloodGroup && <Text style={styles.errorText}>{errors.bloodGroup}</Text>}
                         </View>
 
                         <View style={[styles.inputGroup, { flex: 1 }]}>
-                            <Text style={styles.label}>Units</Text>
+                            <Text style={styles.label}>Units <Text style={styles.required}>*</Text></Text>
                             <View style={styles.inputBox}>
                                 <TextInput
                                     value={units}
@@ -261,6 +320,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                                     placeholderTextColor="#94A3B8"
                                 />
                             </View>
+                            {errors.units && <Text style={styles.errorText}>{errors.units}</Text>}
                         </View>
                     </View>
 
@@ -276,7 +336,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Patient Name</Text>
+                        <Text style={styles.label}>Patient Name <Text style={styles.required}>*</Text></Text>
                         <View style={styles.inputBox}>
                             <TextInput
                                 value={patientName}
@@ -286,10 +346,11 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                                 placeholderTextColor="#94A3B8"
                             />
                         </View>
+                        {errors.patientName && <Text style={styles.errorText}>{errors.patientName}</Text>}
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Mobile Number</Text>
+                        <Text style={styles.label}>Mobile Number <Text style={styles.required}>*</Text></Text>
                         <View style={styles.inputBox}>
                             <TextInput
                                 value={phone}
@@ -300,10 +361,11 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                                 placeholderTextColor="#94A3B8"
                             />
                         </View>
+                        {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Hospital Name</Text>
+                        <Text style={styles.label}>Hospital Name <Text style={styles.required}>*</Text></Text>
                         <View style={styles.inputBox}>
                             <TextInput
                                 value={hospital}
@@ -313,14 +375,19 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                                 placeholderTextColor="#94A3B8"
                             />
                         </View>
+                        {errors.hospital && <Text style={styles.errorText}>{errors.hospital}</Text>}
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Address</Text>
+                        <Text style={styles.label}>Address <Text style={styles.required}>*</Text></Text>
                         <View style={styles.inputBox}>
                             <TextInput
                                 value={address}
-                                onChangeText={setAddress}
+                                onChangeText={(text) => {
+                                    setAddress(text);
+                                    if (isLocationVerified) setIsLocationVerified(false);
+                                    if (hasGeocodeFailed) setHasGeocodeFailed(false);
+                                }}
                                 placeholder="Enter full address or fetch live"
                                 style={styles.input}
                                 placeholderTextColor="#94A3B8"
@@ -350,10 +417,28 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                                 )}
                             </TouchableOpacity>
                         </View>
+                        {isDetecting ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                                <ActivityIndicator size="small" color="#94A3B8" />
+                                <Text style={{ fontSize: 11, color: '#94A3B8', marginLeft: 4, fontWeight: '500' }}>Verifying address...</Text>
+                            </View>
+                        ) : isLocationVerified && address === lastGeocodedAddress ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                                <MaterialIcon name="check-circle" size={14} color="#10B981" />
+                                <Text style={{ fontSize: 11, color: '#10B981', marginLeft: 4, fontWeight: '600' }}>Location Verified</Text>
+                            </View>
+                        ) : hasGeocodeFailed && address.length > 3 ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                                <MaterialIcon name="error" size={14} color="#F59E0B" />
+                                <Text style={{ fontSize: 11, color: '#F59E0B', marginLeft: 4, fontWeight: '600' }}>Location unverified. Keep typing or use Fetch.</Text>
+                            </View>
+                        ) : null}
+                        {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
+                        {errors.location && !errors.address && <Text style={styles.errorText}>{errors.location}</Text>}
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Required Date</Text>
+                        <Text style={styles.label}>Required Date <Text style={styles.required}>*</Text></Text>
                         <TouchableOpacity
                             style={styles.inputBox}
                             onPress={() => setShowDatePicker(true)}
@@ -432,6 +517,16 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginBottom: 6,
         color: '#475569',
+    },
+
+    required: {
+        color: '#B62022',
+    },
+
+    errorText: {
+        color: '#B62022',
+        fontSize: 11,
+        marginTop: 4,
     },
 
     inputBox: {

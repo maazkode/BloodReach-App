@@ -16,7 +16,7 @@ import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
 import { signOut } from '../api/authService';
-import { getUserDocument, getDonorStats, createUserDocument, subscribeToUser } from '../api/firestoreService';
+import { getUserDocument, getDonorStats, createUserDocument, subscribeToUser, updateUserPreferences } from '../api/firestoreService';
 import { UserDocument, UserRole } from '../types/database';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -120,6 +120,27 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         );
         setActionLoading(false);
     }, [user, userData, currentRole, actionLoading, showModal, navigation]);
+
+    const handleToggleLocationPreference = React.useCallback(async () => {
+        if (!user || !userData || actionLoading) return;
+        const currentPref = userData.smartLocationPreference || 'ask';
+        let nextPref: 'auto' | 'ask' | 'off' = 'ask';
+        if (currentPref === 'ask') nextPref = 'auto';
+        else if (currentPref === 'auto') nextPref = 'off';
+        else nextPref = 'ask';
+
+        setActionLoading(true);
+        await safeRun(
+            () => updateUserPreferences(user.uid, { smartLocationPreference: nextPref }),
+            {
+                context: 'Settings > toggleLocationPreference',
+                errorTitle: 'Failed to update setting',
+                allowRetry: true,
+                showModal,
+            }
+        );
+        setActionLoading(false);
+    }, [user, userData, actionLoading, showModal]);
 
 
     const tabs = React.useMemo(() => [
@@ -226,8 +247,21 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                             title={`Switch to ${currentRole === 'donor' ? 'Requester' : 'Donor'} Mode`}
                             onPress={handleSwitchRole}
                             color="#8B5CF6"
-                            isLast
                             rightText={actionLoading ? <ActivityIndicator size="small" color="#8B5CF6" /> : undefined}
+                        />
+                        <MenuOption
+                            icon="crosshairs-gps"
+                            title="Smart Location Updates"
+                            onPress={handleToggleLocationPreference}
+                            color="#0EA5E9"
+                            isLast
+                            rightText={
+                                actionLoading ? <ActivityIndicator size="small" color="#0EA5E9" /> :
+                                <Text style={{ color: '#64748B', fontWeight: 'bold' }}>
+                                    {userData?.smartLocationPreference === 'auto' ? 'Auto' : 
+                                     userData?.smartLocationPreference === 'off' ? 'Off' : 'Ask'}
+                                </Text>
+                            }
                         />
                     </View>
 

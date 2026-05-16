@@ -10,7 +10,6 @@ import {
     StatusBar
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import LinearGradient from 'react-native-linear-gradient';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -31,7 +30,7 @@ import LoadingScreen from '../components/common/LoadingScreen';
 import ScreenHeader from '../components/common/ScreenHeader';
 import DetailInfoCard from '../components/details/DetailInfoCard';
 import ContactBar from '../components/details/ContactBar';
-import PatientHeroCard from '../components/details/PatientHeroCard';
+import RequestSummaryCard from '../components/details/RequestSummaryCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DonorHelpDetail'>;
 
@@ -57,12 +56,12 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             try {
                 log('info', 'DonorHelpDetail', 'Loading details', { requestId });
                 const reqData = await getDonationRequest(requestId);
-                
+
                 if (reqData) {
                     setRequest(reqData);
                     const userData = await getUserDocument(reqData.requesterId);
                     setRequester(userData);
-                    
+
                     unsubMatch = getMatchForDonor(requestId, currentUser?.uid || '', (match) => {
                         setMyMatch(match);
                     });
@@ -101,7 +100,7 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         if (!request) return;
         const message = `Hi, I am reaching out regarding your urgent blood request for ${request.patientName} (${request.bloodGroup}) on BloodReach. I'm interested in helping.`;
         const url = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(message)}`;
-        
+
         Linking.openURL(url).catch(() =>
             showModal({ title: 'Cannot Open WhatsApp', description: 'WhatsApp is not installed.', type: 'error', primaryText: 'OK' })
         );
@@ -126,7 +125,7 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
     const handleComplete = useCallback(async () => {
         if (!currentUser || actionLoading) return;
-        
+
         showModal({
             title: 'Confirm Donation',
             description: 'Have you successfully donated blood? This will start your 90-day recovery period.',
@@ -180,57 +179,26 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
-            <ScreenHeader 
-                title="Request Details" 
-                onBack={() => navigation.goBack()} 
-                topInset={insets.top} 
+            <ScreenHeader
+                title="Request Details"
+                onBack={() => navigation.goBack()}
+                topInset={insets.top}
             />
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollPadding}>
-                <View style={styles.heroBackground}>
-                    <LinearGradient
-                        colors={['#B62022', '#8b191a']}
-                        style={StyleSheet.absoluteFill}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                    />
-                </View>
-
-                <PatientHeroCard 
-                    patientName={request.patientName}
-                    bloodGroup={request.bloodGroup}
-                    unitsRequired={request.unitsRequired}
-                    urgencyLevel={request.urgencyLevel}
-                    statusLabel={request.status.toUpperCase()}
-                />
-
                 <View style={styles.contentBody}>
-                    {request.urgencyLevel === 'urgent' && (
-                        <View style={styles.emergencyAlertCard}>
-                            <MaterialIcon name="report-problem" size={24} color="#B62022" />
-                            <View style={styles.emergencyTextContainer}>
-                                <Text style={styles.emergencyAlertTitle}>High Priority Request</Text>
-                                <Text style={styles.emergencyAlertSub}>This patient requires immediate assistance.</Text>
-                            </View>
-                        </View>
-                    )}
+                    <RequestSummaryCard
+                        patientName={request.patientName}
+                        bloodGroup={request.bloodGroup}
+                        unitsRequired={request.unitsRequired}
+                        urgencyLevel={request.urgencyLevel}
+                        hospitalName={request.hospitalName}
+                        hospitalAddress={request.hospitalAddress}
+                        city={request.city}
+                        onGetDirections={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(request.hospitalName + " " + request.city)}`)}
+                    />
 
-                    <DetailInfoCard 
-                        title="Hospital Information"
-                        icon="local-hospital"
-                        mainText={request.hospitalName}
-                        subText={`${request.hospitalAddress}, ${request.city}`}
-                    >
-                        <TouchableOpacity
-                            style={styles.mapActionBtn}
-                            onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(request.hospitalName + " " + request.city)}`)}
-                        >
-                            <MaterialIcon name="directions" size={20} color="#B62022" />
-                            <Text style={styles.mapActionText}>Get Directions</Text>
-                        </TouchableOpacity>
-                    </DetailInfoCard>
-
-                    <DetailInfoCard 
+                    <DetailInfoCard
                         title="Requested By"
                         imageUri={requester?.photoURL}
                         mainText={requester?.name || 'BloodReach User'}
@@ -239,9 +207,9 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     >
                         {myMatch?.status === 'accepted' && (
                             <View style={styles.approvedContactArea}>
-                                <ContactBar 
-                                    phone={request.phone} 
-                                    onWhatsApp={() => handleWhatsApp(request.phone)} 
+                                <ContactBar
+                                    phone={request.phone}
+                                    onWhatsApp={() => handleWhatsApp(request.phone)}
                                 />
                                 <TouchableOpacity
                                     style={styles.cancelActionBtn}
@@ -322,19 +290,9 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAFC' },
     scrollPadding: { paddingBottom: 60 },
-    heroBackground: { height: 120, width: '100%', borderBottomLeftRadius: 30, borderBottomRightRadius: 30, overflow: 'hidden' },
-    contentBody: { paddingHorizontal: 20, paddingTop: 0 },
-    
-    // ─── EMERGENCY ALERT ─────────────────────────────────────────
-    emergencyAlertCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#FEE2E2' },
-    emergencyTextContainer: { flex: 1, marginLeft: 12 },
-    emergencyAlertTitle: { fontSize: 15, fontWeight: '800', color: '#B62022' },
-    emergencyAlertSub: { fontSize: 12, color: '#991B1B', marginTop: 2, fontWeight: '500' },
+    contentBody: { paddingHorizontal: 20, paddingTop: 20 },
 
     // ─── INFO CARDS & BUTTONS ────────────────────────────────────
-    mapActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#F1F5F9', gap: 8 },
-    mapActionText: { color: '#B62022', fontSize: 14, fontWeight: '700' },
-    
     approvedContactArea: { marginTop: 12 },
     cancelActionBtn: { height: 50, borderRadius: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC', gap: 8, marginTop: 12 },
     cancelActionText: { color: '#64748B', fontSize: 14, fontWeight: '700' },

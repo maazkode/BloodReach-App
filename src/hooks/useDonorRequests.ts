@@ -10,13 +10,14 @@ import { triggerLocalNotification } from '../api/notificationService';
 import { DonationRequest, UserDocument } from '../types/database';
 import { getDistance } from '../api/firestoreService';
 
-export const useDonorRequests = (userData: UserDocument | null, activeHelps: any[]) => {
+export const useDonorRequests = (userData: UserDocument | null, loadingUser: boolean, activeHelps: any[]) => {
     const { user } = useAuth();
     const [nearbyRequests, setNearbyRequests] = React.useState<DonationRequest[]>([]);
     const [loadingRequests, setLoadingRequests] = React.useState(true);
 
+
     React.useEffect(() => {
-        if (!user) return;
+        if (!user || loadingUser) return;
 
         let unsubscribe: () => void = () => { };
 
@@ -40,6 +41,10 @@ export const useDonorRequests = (userData: UserDocument | null, activeHelps: any
                         r.location.longitude
                     );
                     (r as any).distance = Math.round(dist * 10) / 10;
+                    
+                    if (isGlobal && dist > 50) {
+                        return false; // Filter out global requests that are too far if we have location
+                    }
                 }
 
                 return isNotMe && isNotActive && isCompatible;
@@ -53,19 +58,21 @@ export const useDonorRequests = (userData: UserDocument | null, activeHelps: any
                 10,
                 userData.bloodGroup || null,
                 (requests) => {
-                    setNearbyRequests(filterAndEnrichRequests(requests).slice(0, 10));
+                    const filtered = filterAndEnrichRequests(requests);
+                    setNearbyRequests(filtered.slice(0, 10));
                     setLoadingRequests(false);
                 }
             );
         } else {
             unsubscribe = subscribeToRequests((requests) => {
-                setNearbyRequests(filterAndEnrichRequests(requests, true).slice(0, 5));
+                const filtered = filterAndEnrichRequests(requests, true);
+                setNearbyRequests(filtered.slice(0, 5));
                 setLoadingRequests(false);
             });
         }
 
         return () => unsubscribe();
-    }, [user, userData, activeHelps]);
+    }, [user, userData, loadingUser, activeHelps]);
 
     // Matching listener for notifications
     React.useEffect(() => {

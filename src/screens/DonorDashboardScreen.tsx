@@ -28,6 +28,7 @@ import { useDonorEligibility } from '../hooks/useDonorEligibility';
 import { useDonorRequests } from '../hooks/useDonorRequests';
 import { useDonorMatches } from '../hooks/useDonorMatches';
 import { useDonorHistory } from '../hooks/useDonorHistory';
+import { useSmartLocation } from '../hooks/useSmartLocation';
 
 // Components
 import { RestrictedHero, CooldownHero, ActiveHero } from '../components/donor/HeroSection';
@@ -215,8 +216,11 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
     // Custom Hooks
     const { userData, loadingUser, isAgeRestricted, isCooldownActive, formatCooldownDate } = useDonorEligibility();
     const { activeHelps, loadingMatches } = useDonorMatches();
-    const { nearbyRequests, loadingRequests } = useDonorRequests(userData, activeHelps);
+    const { nearbyRequests, loadingRequests } = useDonorRequests(userData, loadingUser, activeHelps);
     const { donationHistory, loadingHistory } = useDonorHistory(activeTab);
+    
+    // Initialize Smart Location
+    useSmartLocation();
 
     useEffect(() => {
         if (route.params?.tab) setActiveTab(route.params.tab);
