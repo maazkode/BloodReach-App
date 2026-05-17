@@ -51,10 +51,10 @@ export const requestUserPermission = async (): Promise<boolean> => {
             return false;
         }
     }
-    
+
     // Notifee permission request (Android 13+)
     await notifee.requestPermission();
-    
+
     const messaging = getMessaging();
     const authStatus = await requestPermission(messaging);
     const enabled =
@@ -93,7 +93,7 @@ export const subscribeToForegroundMessages = () => {
     const messaging = getMessaging();
     return onMessage(messaging, async remoteMessage => {
         console.log('[FCM] Foreground Message Received:', JSON.stringify(remoteMessage, null, 2));
-        
+
         // Display a real notification using Notifee
         await notifee.displayNotification({
             title: remoteMessage.notification?.title || 'Urgent Update',

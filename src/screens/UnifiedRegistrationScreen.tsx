@@ -35,6 +35,10 @@ import LoadingScreen from '../components/common/LoadingScreen';
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["Male", "Female", "Other"];
 
+const removeEmojis = (text: string) => {
+    return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F02B}\u{1F004}\u{1F0CF}\u{1F018}-\u{1F02B}\u{1F004}\u{1F0CF}]/gu, '');
+};
+
 type Props = NativeStackScreenProps<RootStackParamList, 'UnifiedRegistration'>;
 
 const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
@@ -43,7 +47,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [bloodGroup, setBloodGroup] = useState('');
-    const [address, setAddress] = useState('');
+
 
 
     // Optional Fields
@@ -61,8 +65,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
 
     const [locationData, setLocationData] = useState<LocationData | null>(null);
     const [fetchingLocation, setFetchingLocation] = useState(false);
-    const [isDetecting, setIsDetecting] = useState(false);
-    const [hasGeocodeFailed, setHasGeocodeFailed] = useState(false);
+
 
     useEffect(() => {
         const backAction = () => {
@@ -105,28 +108,21 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
             tempErrors.phone = 'Format: +923001234567 or 03001234567';
         }
         if (!bloodGroup) tempErrors.bloodGroup = 'Blood group is required';
-        if (!address.trim()) tempErrors.address = 'Full address is required';
-        if (!age.trim()) tempErrors.age = 'Age is required';
-        if (!gender) tempErrors.gender = 'Gender is required';
         if (!locationData) tempErrors.location = 'Location verification is required';
 
         setErrors(tempErrors);
         return Object.keys(tempErrors).length === 0;
-    }, [name, phone, bloodGroup, address, age, gender, locationData]);
+    }, [name, phone, bloodGroup, age, gender, locationData]);
 
     const handleFetchLocation = React.useCallback(async () => {
         setFetchingLocation(true);
-        setHasGeocodeFailed(false);
         try {
             const data = await getFullLocationData();
             setLocationData(data);
-            if (data.address) {
-                setAddress(data.address);
-            }
         } catch (error: any) {
             showModal({
                 title: 'Detection Failed',
-                description: error.message || 'Could not detect location. Please type your address manually.',
+                description: error.message || 'Could not detect location. Please ensure location services are enabled.',
                 type: 'error',
                 primaryText: 'OK'
             });
@@ -135,52 +131,9 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
         }
     }, [showModal]);
 
-    // Debounced manual location lookup
     useEffect(() => {
-        if (!address.trim()) {
-            setHasGeocodeFailed(false);
-            return;
-        }
-        if (locationData?.address === address) return;
-
-        let isCancelled = false;
-        // Reset failed state while typing/waiting
-        setHasGeocodeFailed(false);
-
-        const delayDebounceFn = setTimeout(async () => {
-            setIsDetecting(true);
-            try {
-                const result = await forwardGeocode(address);
-                if (!isCancelled) {
-                    if (result) {
-                        const hash = geohashForLocation([result.latitude, result.longitude]);
-                        setLocationData({
-                            latitude: result.latitude,
-                            longitude: result.longitude,
-                            geohash: hash,
-                            address: result.address
-                        });
-                        // We don't overwrite address here so the user can continue typing
-                    } else {
-                        setLocationData(null);
-                        setHasGeocodeFailed(true);
-                    }
-                }
-            } catch (error) {
-                if (!isCancelled) {
-                    setLocationData(null);
-                    setHasGeocodeFailed(true);
-                }
-            } finally {
-                if (!isCancelled) setIsDetecting(false);
-            }
-        }, 1500);
-
-        return () => {
-            isCancelled = true;
-            clearTimeout(delayDebounceFn);
-        };
-    }, [address]);
+        handleFetchLocation();
+    }, [handleFetchLocation]);
 
     const handleRegister = React.useCallback(async () => {
         if (!validateForm()) return;
@@ -227,8 +180,8 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                 name,
                 phone,
                 bloodGroup,
-                city: address.split(',')[0].trim(),
-                address: address,
+                city: locationData.address?.split(',')[0].trim() || 'Unknown',
+                address: locationData.address || '',
                 age: age ? Number(age) : undefined,
                 gender: gender || undefined,
                 isAvailable: isEligible ? isAvailable : false,
@@ -264,7 +217,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
         } finally {
             setLoading(false);
         }
-    }, [validateForm, name, phone, bloodGroup, address, age, gender, isAvailable, lastDonationDate, locationData, navigation, showModal]);
+    }, [validateForm, name, phone, bloodGroup, age, gender, isAvailable, lastDonationDate, locationData, navigation, showModal]);
 
     if (loading) {
         return <LoadingScreen title="Creating Profile" tagline="Finalizing your secure setup..." />;
@@ -305,13 +258,13 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
 
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Full Name <Text style={styles.required}>*</Text></Text>
-                            <TextInput style={styles.input} placeholder="John Doe" value={name} onChangeText={setName} />
+                            <TextInput style={styles.input} placeholder="John Doe" value={name} onChangeText={(text) => setName(removeEmojis(text))} />
                             {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
                         </View>
 
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Phone Number <Text style={styles.required}>*</Text></Text>
-                            <TextInput style={styles.input} placeholder="+92XXXXXXXXXX" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+                            <TextInput style={styles.input} placeholder="+92XXXXXXXXXX" keyboardType="phone-pad" value={phone} onChangeText={(text) => setPhone(text.replace(/[^0-9+]/g, ''))} />
                             {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
                         </View>
 
@@ -349,18 +302,11 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Full Address <Text style={styles.required}>*</Text></Text>
+                            <Text style={styles.label}>Location Detection <Text style={styles.required}>*</Text></Text>
                             <View style={styles.inputWrapper}>
-                                <TextInput
-                                    style={[styles.input, { flex: 1, backgroundColor: 'transparent', paddingHorizontal: 0 }]}
-                                    placeholder="House, Street, City"
-                                    value={address}
-                                    onChangeText={(text) => {
-                                        setAddress(text);
-                                        if (locationData) setLocationData(null);
-                                        if (hasGeocodeFailed) setHasGeocodeFailed(false);
-                                    }}
-                                />
+                                <Text style={[{ flex: 1, backgroundColor: 'transparent', paddingHorizontal: 0, color: locationData?.address ? '#1E293B' : '#94A3B8' }]} numberOfLines={1}>
+                                    {locationData?.address || "Detecting your location..."}
+                                </Text>
                                 <TouchableOpacity
                                     onPress={handleFetchLocation}
                                     disabled={fetchingLocation}
@@ -377,24 +323,13 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                                     )}
                                 </TouchableOpacity>
                             </View>
-                            {isDetecting ? (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
-                                    <ActivityIndicator size="small" color="#94A3B8" />
-                                    <Text style={{ fontSize: 11, color: '#94A3B8', marginLeft: 4, fontWeight: '500' }}>Verifying address...</Text>
-                                </View>
-                            ) : locationData ? (
+                            {locationData ? (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
                                     <MaterialIcon name="check-circle" size={14} color="#10B981" />
                                     <Text style={{ fontSize: 11, color: '#10B981', marginLeft: 4, fontWeight: '600' }}>Location Verified</Text>
                                 </View>
-                            ) : hasGeocodeFailed && address.length > 3 ? (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
-                                    <MaterialIcon name="error" size={14} color="#F59E0B" />
-                                    <Text style={{ fontSize: 11, color: '#F59E0B', marginLeft: 4, fontWeight: '600' }}>Location unverified. Keep typing or use Fetch.</Text>
-                                </View>
                             ) : null}
-                            {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
-                            {errors.location && !errors.address && <Text style={styles.errorText}>{errors.location}</Text>}
+                            {errors.location && <Text style={styles.errorText}>{errors.location}</Text>}
                         </View>
 
 
@@ -402,7 +337,7 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
                         <View style={styles.row}>
                             <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
                                 <Text style={styles.label}>Age <Text style={styles.required}>*</Text></Text>
-                                <TextInput style={styles.input} placeholder="25" keyboardType="numeric" value={age} onChangeText={setAge} />
+                                <TextInput style={styles.input} placeholder="25" keyboardType="numeric" value={age} onChangeText={(text) => setAge(text.replace(/[^0-9]/g, ''))} />
                                 {errors.age && <Text style={styles.errorText}>{errors.age}</Text>}
                             </View>
                             <View style={[styles.inputGroup, { flex: 1, marginLeft: 8, zIndex: 90 }]}>

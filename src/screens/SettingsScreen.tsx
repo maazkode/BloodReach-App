@@ -10,6 +10,7 @@ import {
     Alert,
     Dimensions,
     ActivityIndicator,
+    Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
@@ -41,7 +42,9 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     const [userData, setUserData] = React.useState<UserDocument | null>(null);
     const [currentRole, setCurrentRole] = React.useState<UserRole | null>(null);
     const [donorStats, setDonorStats] = React.useState({ count: 0, livesSaved: 0, rank: 'Bronze' });
-    const [actionLoading, setActionLoading] = React.useState(false);
+    const [roleLoading, setRoleLoading] = React.useState(false);
+    const [locationLoading, setLocationLoading] = React.useState(false);
+    const [logoutLoading, setLogoutLoading] = React.useState(false);
     const [loadingUser, setLoadingUser] = React.useState(true);
     const [activeTab, setActiveTab] = React.useState('settings');
 
@@ -50,8 +53,8 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         const unsubUser = subscribeToUser(user.uid, (data) => {
             if (data) {
                 setUserData(data);
-                // Only sync from Firestore if not currently performing an action
-                if (!actionLoading) {
+                // Only sync from Firestore if not currently performing a role switch
+                if (!roleLoading) {
                     setCurrentRole(data.lastActiveRole);
                 }
                 setLoadingUser(false);
@@ -67,14 +70,14 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     }, [user]);
 
     const handleLogout = React.useCallback(() => {
-        if (actionLoading) return;
+        if (roleLoading || locationLoading || logoutLoading) return;
         showModal({
             title: 'Logout',
             description: 'Are you sure you want to sign out?',
             type: 'danger',
             primaryText: 'Logout',
             onPrimaryPress: async () => {
-                setActionLoading(true);
+                setLogoutLoading(true);
                 await safeRun(
                     () => signOut(),
                     {
@@ -84,18 +87,18 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                         showModal,
                     }
                 );
-                setActionLoading(false);
+                setLogoutLoading(false);
             },
             secondaryText: 'Cancel',
         });
-    }, [actionLoading, showModal]);
+    }, [roleLoading, locationLoading, logoutLoading, showModal]);
 
     const handleSwitchRole = React.useCallback(async () => {
-        if (!user || !userData || !currentRole || actionLoading) return;
+        if (!user || !userData || !currentRole || roleLoading) return;
         const newRole = currentRole === 'donor' ? 'requester' : 'donor';
         const targetScreen = newRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard';
 
-        setActionLoading(true);
+        setRoleLoading(true);
         setCurrentRole(newRole); // Update locally instantly
 
         await safeRun(
@@ -107,29 +110,23 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 showModal,
                 onSuccess: () => {
                     log('info', 'Settings > handleSwitchRole', `Switched to ${newRole}`);
-                    // Ensure the navigation happens after the state is committed
                     setTimeout(() => {
                         navigation.replace(targetScreen, { tab: 'home' });
                     }, 100);
                 },
                 onError: () => {
-                    // Revert if failed
                     setCurrentRole(currentRole);
                 }
             }
         );
-        setActionLoading(false);
-    }, [user, userData, currentRole, actionLoading, showModal, navigation]);
+        setRoleLoading(false);
+    }, [user, userData, currentRole, roleLoading, showModal, navigation]);
 
-    const handleToggleLocationPreference = React.useCallback(async () => {
-        if (!user || !userData || actionLoading) return;
-        const currentPref = userData.smartLocationPreference || 'ask';
-        let nextPref: 'auto' | 'ask' | 'off' = 'ask';
-        if (currentPref === 'ask') nextPref = 'auto';
-        else if (currentPref === 'auto') nextPref = 'off';
-        else nextPref = 'ask';
+    const handleToggleLocationPreference = React.useCallback(async (value: boolean) => {
+        if (!user || !userData || locationLoading) return;
+        const nextPref = value ? 'auto' : 'off';
 
-        setActionLoading(true);
+        setLocationLoading(true);
         await safeRun(
             () => updateUserPreferences(user.uid, { smartLocationPreference: nextPref }),
             {
@@ -139,8 +136,8 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 showModal,
             }
         );
-        setActionLoading(false);
-    }, [user, userData, actionLoading, showModal]);
+        setLocationLoading(false);
+    }, [user, userData, locationLoading, showModal]);
 
 
     const tabs = React.useMemo(() => [
@@ -247,27 +244,40 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                             title={`Switch to ${currentRole === 'donor' ? 'Requester' : 'Donor'} Mode`}
                             onPress={handleSwitchRole}
                             color="#8B5CF6"
-                            rightText={actionLoading ? <ActivityIndicator size="small" color="#8B5CF6" /> : undefined}
+                            rightText={roleLoading ? <ActivityIndicator size="small" color="#8B5CF6" /> : undefined}
                         />
-                        <MenuOption
-                            icon="crosshairs-gps"
-                            title="Smart Location Updates"
-                            onPress={handleToggleLocationPreference}
-                            color="#0EA5E9"
-                            isLast
-                            rightText={
-                                actionLoading ? <ActivityIndicator size="small" color="#0EA5E9" /> :
-                                <Text style={{ color: '#64748B', fontWeight: 'bold' }}>
-                                    {userData?.smartLocationPreference === 'auto' ? 'Auto' : 
-                                     userData?.smartLocationPreference === 'off' ? 'Off' : 'Ask'}
-                                </Text>
-                            }
-                        />
+                        <View style={styles.toggleItem}>
+                            <View style={styles.toggleIconBox}>
+                                <MaterialCommunityIcon name="crosshairs-gps" size={22} color="#0EA5E9" />
+                            </View>
+                            <Text style={styles.toggleTitle}>Smart Location Updates</Text>
+                            {locationLoading ? (
+                                <ActivityIndicator size="small" color="#0EA5E9" style={{ marginRight: 5 }} />
+                            ) : (
+                                <Switch
+                                    trackColor={{ false: '#E2E8F0', true: '#BAE6FD' }}
+                                    thumbColor={userData?.smartLocationPreference === 'off' ? '#F8FAFC' : '#0EA5E9'}
+                                    ios_backgroundColor="#E2E8F0"
+                                    onValueChange={handleToggleLocationPreference}
+                                    value={userData?.smartLocationPreference !== 'off'}
+                                />
+                            )}
+                        </View>
                     </View>
 
-                    <TouchableOpacity style={styles.logoutButtonModern} onPress={handleLogout}>
-                        <MaterialCommunityIcon name="logout-variant" size={22} color="#EF4444" />
-                        <Text style={styles.logoutButtonText}> Log Out</Text>
+                    <TouchableOpacity
+                        style={[styles.logoutButtonModern, logoutLoading && { opacity: 0.7 }]}
+                        onPress={handleLogout}
+                        disabled={logoutLoading}
+                    >
+                        {logoutLoading ? (
+                            <ActivityIndicator size="small" color="#EF4444" />
+                        ) : (
+                            <MaterialCommunityIcon name="logout-variant" size={22} color="#EF4444" />
+                        )}
+                        <Text style={styles.logoutButtonText}>
+                            {logoutLoading ? 'Signing Out...' : 'Log Out'}
+                        </Text>
                     </TouchableOpacity>
 
                     <Text style={styles.footerVersion}>BloodReach v1.0.0 • Build 24</Text>
@@ -320,6 +330,20 @@ const styles = StyleSheet.create({
         shadowRadius: 10,
         elevation: 2,
     },
+    toggleItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+    },
+    toggleIconBox: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#0EA5E910',
+    },
+    toggleTitle: { flex: 1, marginLeft: 15, fontSize: 15, fontWeight: '700', color: '#0EA5E9' },
     logoutButtonModern: {
         flexDirection: 'row',
         alignItems: 'center',

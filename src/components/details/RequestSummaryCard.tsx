@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+import LinearGradient from 'react-native-linear-gradient';
 
 interface RequestSummaryCardProps {
     patientName: string;
@@ -10,7 +12,10 @@ interface RequestSummaryCardProps {
     hospitalName: string;
     hospitalAddress: string;
     city: string;
-    onGetDirections: () => void;
+    distance?: number;
+    matchedDonorsCount?: number;
+    postedAt?: string;
+    onGetDirections?: () => void;
 }
 
 const RequestSummaryCard: React.FC<RequestSummaryCardProps> = ({
@@ -21,51 +26,111 @@ const RequestSummaryCard: React.FC<RequestSummaryCardProps> = ({
     hospitalName,
     hospitalAddress,
     city,
+    distance,
+    matchedDonorsCount,
+    postedAt,
     onGetDirections,
 }) => {
     const isUrgent = urgencyLevel === 'urgent';
 
     return (
         <View style={styles.card}>
-            {/* Top: patient name + status badge */}
-            <View style={styles.header}>
-                <Text style={styles.patientName} numberOfLines={1}>{patientName}</Text>
-                <View style={[styles.badge, isUrgent ? styles.badgeUrgent : styles.badgeNormal]}>
-                    <Text style={[styles.badgeText, isUrgent ? styles.badgeTextUrgent : styles.badgeTextNormal]}>
-                        {isUrgent ? 'EMERGENCY' : 'NORMAL'}
+            {/* Top Header: Patient & Urgency */}
+            <LinearGradient
+                colors={isUrgent ? ['#B62022', '#991B1B'] : ['#64748B', '#475569']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.headerGradient}
+            >
+                <View style={styles.headerInfo}>
+                    <Text style={styles.patientNameLabel}>PATIENT NAME</Text>
+                    <Text style={styles.patientName} numberOfLines={1}>{patientName}</Text>
+                </View>
+                <View style={styles.urgencyPill}>
+                    <MaterialCommunityIcon 
+                        name={isUrgent ? "fire" : "clock-outline"} 
+                        size={12} 
+                        color={isUrgent ? '#B62022' : '#475569'} 
+                    />
+                    <Text style={[styles.urgencyText, { color: isUrgent ? '#B62022' : '#475569' }]}>
+                        {urgencyLevel.toUpperCase()}
                     </Text>
                 </View>
-            </View>
+            </LinearGradient>
 
-            {/* Middle: Blood Group & Units stat boxes */}
-            <View style={styles.statsContainer}>
-                <View style={styles.statBox}>
-                    <Text style={styles.statLabel}>Blood Group</Text>
-                    <Text style={styles.bloodGroupText}>{bloodGroup}</Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.statBox}>
-                    <Text style={styles.statLabel}>Units Required</Text>
-                    <Text style={styles.unitsText}>{unitsRequired}</Text>
-                </View>
-            </View>
-
-            {/* Bottom: hospital info + directions button */}
-            <View style={styles.hospitalContainer}>
-                <View style={styles.hospitalInfo}>
-                    <MaterialIcon name="local-hospital" size={20} color="#64748B" style={styles.hospitalIcon} />
-                    <View style={styles.hospitalTextContainer}>
-                        <Text style={styles.hospitalName} numberOfLines={1}>{hospitalName}</Text>
-                        <Text style={styles.hospitalAddress} numberOfLines={2}>
-                            {hospitalAddress}, {city}
-                        </Text>
+            <View style={styles.mainContent}>
+                {/* Stats Section */}
+                <View style={styles.statsGrid}>
+                    <View style={styles.statItem}>
+                        <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
+                            <MaterialCommunityIcon name="water" size={20} color="#B62022" />
+                        </View>
+                        <View>
+                            <Text style={styles.statLabel}>Blood Group</Text>
+                            <Text style={styles.statValue}>{bloodGroup}</Text>
+                        </View>
+                    </View>
+                    <View style={styles.statItem}>
+                        <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
+                            <MaterialCommunityIcon name="flask-outline" size={20} color="#B62022" />
+                        </View>
+                        <View>
+                            <Text style={styles.statLabel}>Units Needed</Text>
+                            <Text style={styles.statValue}>{unitsRequired}</Text>
+                        </View>
                     </View>
                 </View>
-                
-                <TouchableOpacity style={styles.directionsBtn} onPress={onGetDirections}>
-                    <MaterialIcon name="directions" size={18} color="#B62022" />
-                    <Text style={styles.directionsBtnText}>Get Directions</Text>
-                </TouchableOpacity>
+
+                {/* Meta Info Row */}
+                <View style={styles.metaRow}>
+                    {postedAt && (
+                        <View style={styles.metaItem}>
+                            <MaterialIcon name="access-time" size={14} color="#94A3B8" />
+                            <Text style={styles.metaText}>{postedAt}</Text>
+                        </View>
+                    )}
+                    {matchedDonorsCount !== undefined && (
+                        <View style={styles.metaItem}>
+                            <MaterialIcon name="group" size={14} color="#94A3B8" />
+                            <Text style={styles.metaText}>{matchedDonorsCount} responses</Text>
+                        </View>
+                    )}
+                    {distance !== undefined && (
+                        <View style={styles.metaItem}>
+                            <MaterialIcon name="near-me" size={14} color="#94A3B8" />
+                            <Text style={styles.metaText}>{distance} km</Text>
+                        </View>
+                    )}
+                </View>
+
+                {/* Hospital Information */}
+                <View style={styles.hospitalCard}>
+                    <View style={styles.hospitalMain}>
+                        <View style={styles.hospitalIconBg}>
+                            <MaterialIcon name="local-hospital" size={22} color="#B62022" />
+                        </View>
+                        <View style={styles.hospitalTextContent}>
+                            <Text style={styles.hospitalName} numberOfLines={1}>{hospitalName}</Text>
+                            <Text style={styles.hospitalAddress} numberOfLines={2}>
+                                {hospitalAddress}, {city}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {onGetDirections && (
+                        <TouchableOpacity style={styles.directionsAction} onPress={onGetDirections}>
+                            <LinearGradient
+                                colors={['#B62022', '#E11D48']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.directionsBtnGradient}
+                            >
+                                <MaterialIcon name="directions" size={18} color="#FFFFFF" />
+                                <Text style={styles.directionsBtnText}>Get Directions</Text>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
         </View>
     );
@@ -75,125 +140,155 @@ const styles = StyleSheet.create({
     card: {
         backgroundColor: '#FFFFFF',
         borderRadius: 24,
-        padding: 20,
+        overflow: 'hidden',
         marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 12,
-        elevation: 3,
+        shadowColor: '#B62022',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.08,
+        shadowRadius: 20,
+        elevation: 5,
     },
-    header: {
+    headerGradient: {
+        padding: 20,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+    },
+    headerInfo: {
+        flex: 1,
+    },
+    patientNameLabel: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: 'rgba(255,255,255,0.7)',
+        letterSpacing: 1,
+        marginBottom: 2,
     },
     patientName: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#1E293B',
-        flex: 1,
-        marginRight: 12,
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#FFFFFF',
     },
-    badge: {
-        paddingHorizontal: 12,
+    urgencyPill: {
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 10,
         paddingVertical: 6,
-        borderRadius: 12,
+        borderRadius: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
     },
-    badgeUrgent: {
-        backgroundColor: '#FEE2E2',
-    },
-    badgeNormal: {
-        backgroundColor: '#DCFCE7',
-    },
-    badgeText: {
-        fontSize: 12,
+    urgencyText: {
+        fontSize: 11,
         fontWeight: '800',
         letterSpacing: 0.5,
     },
-    badgeTextUrgent: {
-        color: '#B62022',
+    mainContent: {
+        padding: 20,
     },
-    badgeTextNormal: {
-        color: '#166534',
-    },
-    statsContainer: {
+    statsGrid: {
         flexDirection: 'row',
-        backgroundColor: '#FEF2F2',
-        borderRadius: 16,
-        padding: 16,
+        justifyContent: 'space-between',
         marginBottom: 20,
     },
-    statBox: {
-        flex: 1,
+    statItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    iconCircle: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    divider: {
-        width: 1,
-        backgroundColor: '#FCA5A5',
-        marginHorizontal: 16,
-    },
     statLabel: {
-        fontSize: 12,
-        color: '#991B1B',
+        fontSize: 11,
+        color: '#64748B',
         fontWeight: '600',
-        marginBottom: 4,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
-    bloodGroupText: {
-        fontSize: 24,
-        fontWeight: '900',
-        color: '#B62022',
+    statValue: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#1E293B',
     },
-    unitsText: {
-        fontSize: 24,
-        fontWeight: '900',
-        color: '#B62022',
-    },
-    hospitalContainer: {
+    metaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+        marginBottom: 20,
+        paddingTop: 16,
         borderTopWidth: 1,
         borderTopColor: '#F1F5F9',
-        paddingTop: 16,
     },
-    hospitalInfo: {
+    metaItem: {
         flexDirection: 'row',
-        alignItems: 'flex-start',
+        alignItems: 'center',
+        gap: 4,
+    },
+    metaText: {
+        fontSize: 12,
+        color: '#64748B',
+        fontWeight: '500',
+    },
+    hospitalCard: {
+        backgroundColor: '#F8FAFC',
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+    },
+    hospitalMain: {
+        flexDirection: 'row',
+        gap: 12,
         marginBottom: 16,
     },
-    hospitalIcon: {
-        marginTop: 2,
-        marginRight: 12,
+    hospitalIconBg: {
+        width: 44,
+        height: 44,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 5,
+        elevation: 2,
     },
-    hospitalTextContainer: {
+    hospitalTextContent: {
         flex: 1,
     },
     hospitalName: {
         fontSize: 15,
         fontWeight: '700',
-        color: '#334155',
-        marginBottom: 4,
+        color: '#1E293B',
+        marginBottom: 2,
     },
     hospitalAddress: {
         fontSize: 13,
         color: '#64748B',
         lineHeight: 18,
     },
-    directionsBtn: {
+    directionsAction: {
+        width: '100%',
+    },
+    directionsBtnGradient: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FFF1F2',
-        paddingVertical: 12,
+        paddingVertical: 14,
         borderRadius: 12,
-        gap: 6,
+        gap: 8,
     },
     directionsBtnText: {
-        color: '#B62022',
+        color: '#FFFFFF',
         fontSize: 14,
         fontWeight: '700',
+        letterSpacing: 0.5,
     },
 });
 

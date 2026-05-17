@@ -17,6 +17,8 @@ import {
     Unsubscribe,
     Timestamp,
     FirebaseFirestoreTypes,
+    updateDoc,
+    arrayUnion,
 } from '@react-native-firebase/firestore';
 
 import { geohashQueryBounds, distanceBetween } from 'geofire-common';
@@ -222,7 +224,8 @@ export const saveUserFCMToken = async (uid: string, token: string): Promise<void
 export const updateUserLocation = async (
     uid: string,
     locationData: { latitude: number; longitude: number; geohash: string; address?: string },
-    city?: string
+    city?: string,
+    address?: string
 ): Promise<void> => {
     try {
         const payload: any = {
@@ -231,6 +234,7 @@ export const updateUserLocation = async (
             updatedAt: serverTimestamp(),
         };
         if (city) payload.city = city;
+        if (address) payload.address = address;
 
         await setDoc(doc(db, 'users', uid), payload, { merge: true });
     } catch (error) {
@@ -265,7 +269,6 @@ export const subscribeToRequests = (
 ): Unsubscribe => {
     const q = query(
         collection(db, 'requests'),
-        where('status', '==', 'open'),
         orderBy('createdAt', 'desc'),
         limit(50)
     );
@@ -277,11 +280,12 @@ export const subscribeToRequests = (
             const requests = snapshot.docs.map(
                 (d: FirebaseFirestoreTypes.QueryDocumentSnapshot) =>
                     ({ id: d.id, ...d.data() } as DonationRequest)
-            );
+            ).filter(r => r.status === 'open');
             callback(requests);
         },
         (error) => {
             console.error('[Firestore] subscribeToRequests error:', error);
+            callback([]);
         }
     );
 };
@@ -303,7 +307,7 @@ export const subscribeToNearbyRequests = (
 
     const triggerCallback = () => {
         if (debounceTimer) clearTimeout(debounceTimer);
-        
+
         debounceTimer = setTimeout(() => {
             const allRequests: DonationRequest[] = [];
             resultsMap.forEach(list => allRequests.push(...list));
@@ -326,43 +330,45 @@ export const subscribeToNearbyRequests = (
     const unsubs = bounds.map((b, index) => {
         let q = query(
             collection(db, 'requests'),
-            where('status', '==', 'open'),
             orderBy('location.geohash'),
             startAt(b[0]),
             endAt(b[1])
         );
 
-        if (bloodGroup) {
-            // Note: This requires a composite index: status + bloodGroup + location.geohash
-            // However, we can also filter client-side if the index isn't ready.
-            // Let's stick to client-side filtering for compatibility unless the user wants an index.
-        }
+        return onSnapshot(
+            q,
+            (snapshot) => {
+                if (!snapshot) return;
+                const requests = snapshot.docs.map((doc: any) => ({
+                    id: doc.id,
+                    ...doc.data()
+                } as DonationRequest));
 
-        return onSnapshot(q, (snapshot) => {
-            if (!snapshot) return;
-            const requests = snapshot.docs.map((doc: any) => ({
-                id: doc.id,
-                ...doc.data()
-            } as DonationRequest));
+                // Status & Blood Group Compatibility Match
+                const filtered = requests.filter((r: DonationRequest) => {
+                    if (r.status !== 'open') return false;
+                    if (!r.location?.latitude || !r.location?.longitude) return false;
 
-            // Blood Group Compatibility Match
-            const filtered = requests.filter((r: DonationRequest) => {
-                if (!r.location?.latitude || !r.location?.longitude) return false;
+                    if (bloodGroup) {
+                        const compatibleGroups = getCompatibleBloodGroups(bloodGroup);
+                        if (!compatibleGroups.includes(r.bloodGroup)) return false;
+                    }
 
-                if (bloodGroup) {
-                    const compatibleGroups = getCompatibleBloodGroups(bloodGroup);
-                    if (!compatibleGroups.includes(r.bloodGroup)) return false;
-                }
+                    const distance = getDistance(lat, lng, r.location.latitude, r.location.longitude);
+                    // Attach distance to the request object for UI display
+                    (r as any).distance = Math.round(distance * 10) / 10;
+                    return distance <= radiusKm;
+                });
 
-                const distance = getDistance(lat, lng, r.location.latitude, r.location.longitude);
-                // Attach distance to the request object for UI display
-                (r as any).distance = Math.round(distance * 10) / 10;
-                return distance <= radiusKm;
-            });
-
-            resultsMap.set(`bound_${index}`, filtered);
-            triggerCallback();
-        });
+                resultsMap.set(`bound_${index}`, filtered);
+                triggerCallback();
+            },
+            (error) => {
+                console.error('[Firestore] subscribeToNearbyRequests error:', error);
+                resultsMap.set(`bound_${index}`, []);
+                triggerCallback();
+            }
+        );
     });
 
     return () => unsubs.forEach(u => u());
@@ -714,6 +720,10 @@ export const createDonationMatch = async (
             }
         }
 
+        if (donorId === requesterId) {
+            throw new Error('You cannot donate to your own blood request.');
+        }
+
         const existingQuery = query(
             collection(db, 'donation_matches'),
             where('requestId', '==', requestId),
@@ -734,6 +744,13 @@ export const createDonationMatch = async (
             updatedAt: serverTimestamp(),
         };
         await setDoc(matchRef, matchData);
+
+        // Atomically update the request with the new donor ID to trigger real-time UI updates for requester
+        const requestRef = doc(db, 'requests', requestId);
+        await updateDoc(requestRef, {
+            matchedDonorIds: arrayUnion(donorId),
+            updatedAt: serverTimestamp()
+        });
 
         // Queue notification for requester
         await queueNotification(
@@ -775,6 +792,13 @@ export const updateMatchStatus = async (
             const patientName = request?.patientName || 'the patient';
 
             if (status === 'accepted') {
+                // Update request status to matched when a donor is accepted
+                const requestRef = doc(db, 'requests', matchData.requestId);
+                await updateDoc(requestRef, {
+                    status: 'matched',
+                    updatedAt: serverTimestamp()
+                });
+
                 await queueNotification(
                     matchData.donorId,
                     'Match Accepted!',
@@ -865,14 +889,31 @@ export const getMatchForDonor = (
 /**
  * Fetches a single donation request by ID.
  */
-export const getDonationRequest = async (requestId: string): Promise<DonationRequest | null> => {
+export const getDonationRequest = async (id: string): Promise<DonationRequest | null> => {
     try {
-        const snap = await getDoc(doc(db, 'requests', requestId));
-        return snap.exists() ? { id: snap.id, ...snap.data() } as DonationRequest : null;
+        const docRef = doc(db, 'requests', id);
+        const snap = await getDoc(docRef);
+        return snap.exists() ? ({ id: snap.id, ...snap.data() } as DonationRequest) : null;
     } catch (error) {
         console.error('[Firestore] getDonationRequest error:', error);
         throw error;
     }
+};
+
+/**
+ * Subscribes to a single donation request for real-time updates.
+ */
+export const subscribeToRequest = (
+    requestId: string,
+    callback: (request: DonationRequest | null) => void
+): Unsubscribe => {
+    return onSnapshot(doc(db, 'requests', requestId), (snap) => {
+        if (snap.exists()) {
+            callback({ id: snap.id, ...snap.data() } as DonationRequest);
+        } else {
+            callback(null);
+        }
+    });
 };
 
 /**

@@ -21,8 +21,10 @@ import {
     getMatchForDonor,
     completeDonation,
     getUserDocument,
-    updateMatchStatus
+    updateMatchStatus,
+    getDistance
 } from '../api/firestoreService';
+import { useAuth } from '../context/AuthContext';
 import { DonationRequest, DonationMatch, UserDocument } from '../types/database';
 import { useModal } from '../context/ModalContext';
 import { safeRun, log, translateError } from '../utility/errorHandler';
@@ -47,6 +49,35 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     const [requester, setRequester] = useState<UserDocument | null>(null);
 
     const currentUser = useMemo(() => getAuth().currentUser, []);
+    const { userData: currentUserData } = useAuth();
+
+    const distance = useMemo(() => {
+        if (currentUserData?.location && request?.location) {
+            const d = getDistance(
+                currentUserData.location.latitude,
+                currentUserData.location.longitude,
+                request.location.latitude,
+                request.location.longitude
+            );
+            return Math.round(d * 10) / 10;
+        }
+        return undefined;
+    }, [currentUserData, request]);
+
+    const getTimeAgo = (timestamp: any) => {
+        if (!timestamp) return 'Just now';
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        const now = new Date();
+        const diff = Math.max(0, now.getTime() - date.getTime());
+        const mins = Math.floor(diff / 60000);
+        const hours = Math.floor(mins / 60);
+        const days = Math.floor(hours / 24);
+
+        if (days > 0) return `${days}d ago`;
+        if (hours > 0) return `${hours}h ago`;
+        if (mins > 0) return `${mins}m ago`;
+        return 'Just now';
+    };
 
     // ─── EFFECTS ───────────────────────────────────────────────
     useEffect(() => {
@@ -195,6 +226,9 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         hospitalName={request.hospitalName}
                         hospitalAddress={request.hospitalAddress}
                         city={request.city}
+                        distance={distance}
+                        matchedDonorsCount={request.matchedDonorIds?.length || 0}
+                        postedAt={getTimeAgo(request.createdAt)}
                         onGetDirections={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(request.hospitalName + " " + request.city)}`)}
                     />
 

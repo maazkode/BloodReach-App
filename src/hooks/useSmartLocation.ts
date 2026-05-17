@@ -3,7 +3,6 @@ import { AppState, AppStateStatus } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { getFullLocationData } from '../api/locationService';
 import { getDistance, updateUserLocation } from '../api/firestoreService';
-import { useModal } from '../context/ModalContext';
 
 let lastCheckedTime = 0;
 const CHECK_INTERVAL_MS = 1000 * 60 * 30; // 30 minutes
@@ -11,7 +10,6 @@ const DISTANCE_THRESHOLD_KM = 15;
 
 export const useSmartLocation = () => {
     const { userData } = useAuth();
-    const { showModal } = useModal();
     const appState = useRef(AppState.currentState);
 
     useEffect(() => {
@@ -20,7 +18,7 @@ export const useSmartLocation = () => {
             return;
         }
 
-        const pref = userData.smartLocationPreference || 'ask';
+        const pref = userData.smartLocationPreference || 'auto';
         if (pref === 'off') return;
 
         const checkLocation = async () => {
@@ -43,6 +41,7 @@ export const useSmartLocation = () => {
 
                 if (distance > DISTANCE_THRESHOLD_KM) {
                     const city = newLoc.address?.split(',')[0].trim() || userData.city;
+                    const address = newLoc.address || userData.address;
 
                     const updateLocation = async () => {
                         await updateUserLocation(
@@ -52,45 +51,13 @@ export const useSmartLocation = () => {
                                 longitude: newLoc.longitude,
                                 geohash: newLoc.geohash,
                             },
-                            city
+                            city,
+                            address
                         );
                     };
 
-                    if (pref === 'auto') {
-                        await updateLocation();
-                        showModal({
-                            title: 'Location Updated',
-                            description: `We noticed you've travelled. Your location has been automatically updated to show nearby requests.`,
-                            type: 'success',
-                            primaryText: 'OK'
-                        });
-                    } else if (pref === 'ask') {
-                        showModal({
-                            title: 'New Location Detected',
-                            description: `You seem to be ${Math.round(distance)}km away from your registered location. Would you like to update your location to see nearby requests?`,
-                            type: 'warning',
-                            primaryText: 'Update Location',
-                            secondaryText: 'Not Now',
-                            onPrimaryPress: async () => {
-                                try {
-                                    await updateLocation();
-                                    showModal({
-                                        title: 'Updated',
-                                        description: 'Location updated successfully. Your request list will refresh automatically.',
-                                        type: 'success',
-                                        primaryText: 'OK'
-                                    });
-                                } catch (error) {
-                                    showModal({
-                                        title: 'Error',
-                                        description: 'Failed to update location.',
-                                        type: 'error',
-                                        primaryText: 'OK'
-                                    });
-                                }
-                            }
-                        });
-                    }
+                    // Silently update location without showing any modals
+                    await updateLocation();
                 }
             } catch (error) {
                 console.error('[SmartLocation] Check failed:', error);
@@ -114,5 +81,5 @@ export const useSmartLocation = () => {
         return () => {
             subscription.remove();
         };
-    }, [userData, showModal]);
+    }, [userData]);
 };

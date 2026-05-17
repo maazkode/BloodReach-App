@@ -16,6 +16,7 @@ import LoadingScreen from '../components/common/LoadingScreen';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../context/AuthContext';
 import { DonationRequest } from '../types/database';
@@ -28,7 +29,6 @@ import { useDonorEligibility } from '../hooks/useDonorEligibility';
 import { useDonorRequests } from '../hooks/useDonorRequests';
 import { useDonorMatches } from '../hooks/useDonorMatches';
 import { useDonorHistory } from '../hooks/useDonorHistory';
-import { useSmartLocation } from '../hooks/useSmartLocation';
 
 // Components
 import { RestrictedHero, CooldownHero, ActiveHero } from '../components/donor/HeroSection';
@@ -212,15 +212,40 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
     const { showModal } = useModal();
     const insets = useSafeAreaInsets();
     const [activeTab, setActiveTab] = useState(route.params?.tab || 'home');
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const isFirstMount = React.useRef(true);
+
+    // Re-fetch matches every time the screen comes into focus (skip initial mount)
+    useFocusEffect(
+        useCallback(() => {
+            if (isFirstMount.current) {
+                isFirstMount.current = false;
+                return;
+            }
+            setRefreshKey(k => k + 1);
+        }, [])
+    );
 
     // Custom Hooks
     const { userData, loadingUser, isAgeRestricted, isCooldownActive, formatCooldownDate } = useDonorEligibility();
-    const { activeHelps, loadingMatches } = useDonorMatches();
+    const { activeHelps, loadingMatches } = useDonorMatches(refreshKey, userData);
     const { nearbyRequests, loadingRequests } = useDonorRequests(userData, loadingUser, activeHelps);
     const { donationHistory, loadingHistory } = useDonorHistory(activeTab);
-    
-    // Initialize Smart Location
-    useSmartLocation();
+
+    // Single combined loading gate — both sections render together to avoid flicker
+    const isHomeLoading = loadingMatches || loadingRequests;
+
+    // Always filter nearbyRequests against live activeHelps at render time to prevent
+    // race-condition flicker where a matched request briefly shows in both sections
+    const activeHelpRequestIds = React.useMemo(
+        () => new Set(activeHelps.map(m => m.requestId)),
+        [activeHelps]
+    );
+    const filteredNearbyRequests = React.useMemo(
+        () => nearbyRequests.filter(r => !activeHelpRequestIds.has(r.id!)),
+        [nearbyRequests, activeHelpRequestIds]
+    );
 
     useEffect(() => {
         if (route.params?.tab) setActiveTab(route.params.tab);
@@ -259,7 +284,7 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
         if (activeTab === 'requests') {
             return (
                 <FlatList
-                    data={nearbyRequests}
+                    data={filteredNearbyRequests}
                     keyExtractor={(item) => item.id!}
                     renderItem={({ item }) => (
                         <RequestItem
@@ -303,7 +328,7 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                     <>
                         {renderHero()}
 
-                        {activeHelps.length > 0 && (
+                        {!isHomeLoading && activeHelps.length > 0 && (
                             <View style={{ marginBottom: 20 }}>
                                 <View style={styles.sectionHeader}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -335,13 +360,13 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                                     <Text style={styles.sectionTitle}>Nearby Requests</Text>
                                     <TouchableOpacity onPress={() => setActiveTab('requests')}><Text style={styles.seeAllText}>See All</Text></TouchableOpacity>
                                 </View>
-                                {loadingRequests ? (
+                                {isHomeLoading ? (
                                     <View style={styles.loadingBox}><ActivityIndicator size="small" color="#B62022" /><Text style={styles.loadingText}>Finding requests near you...</Text></View>
-                                ) : nearbyRequests.length > 0 ? (
+                                ) : filteredNearbyRequests.length > 0 ? (
                                     <FlatList
                                         horizontal
                                         showsHorizontalScrollIndicator={false}
-                                        data={nearbyRequests.slice(0, 5)}
+                                        data={filteredNearbyRequests.slice(0, 5)}
                                         keyExtractor={(item) => item.id!}
                                         renderItem={({ item }) => (
                                             <RequestItem

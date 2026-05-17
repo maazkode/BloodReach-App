@@ -32,6 +32,11 @@ type Props = NativeStackScreenProps<RootStackParamList, 'CreateRequest'>;
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
+const removeEmojis = (text: string) => {
+    // Basic regex to filter out common emoji ranges and special symbols
+    return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F02B}\u{1F004}\u{1F0CF}\u{1F018}-\u{1F02B}\u{1F004}\u{1F0CF}]/gu, '');
+};
+
 const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
     const { showModal } = useModal();
     const insets = useSafeAreaInsets();
@@ -313,7 +318,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                             <View style={styles.inputBox}>
                                 <TextInput
                                     value={units}
-                                    onChangeText={setUnits}
+                                    onChangeText={(text) => setUnits(text.replace(/[^0-9]/g, ''))}
                                     keyboardType="numeric"
                                     placeholder="1"
                                     style={styles.input}
@@ -340,7 +345,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                         <View style={styles.inputBox}>
                             <TextInput
                                 value={patientName}
-                                onChangeText={setPatientName}
+                                onChangeText={(text) => setPatientName(removeEmojis(text))}
                                 placeholder="Enter patient name"
                                 style={styles.input}
                                 placeholderTextColor="#94A3B8"
@@ -354,7 +359,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                         <View style={styles.inputBox}>
                             <TextInput
                                 value={phone}
-                                onChangeText={setPhone}
+                                onChangeText={(text) => setPhone(text.replace(/[^0-9+]/g, ''))}
                                 placeholder="03xx xxxxxxx"
                                 keyboardType="phone-pad"
                                 style={styles.input}
@@ -369,7 +374,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                         <View style={styles.inputBox}>
                             <TextInput
                                 value={hospital}
-                                onChangeText={setHospital}
+                                onChangeText={(text) => setHospital(removeEmojis(text))}
                                 placeholder="Enter hospital name"
                                 style={styles.input}
                                 placeholderTextColor="#94A3B8"
@@ -384,7 +389,8 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                             <TextInput
                                 value={address}
                                 onChangeText={(text) => {
-                                    setAddress(text);
+                                    const cleaned = removeEmojis(text);
+                                    setAddress(cleaned);
                                     if (isLocationVerified) setIsLocationVerified(false);
                                     if (hasGeocodeFailed) setHasGeocodeFailed(false);
                                 }}

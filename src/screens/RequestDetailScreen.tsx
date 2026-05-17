@@ -16,15 +16,17 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { getAuth } from '@react-native-firebase/auth';
 import {
-    getDonationRequest,
     updateDonationRequest,
     completeDonation,
     getMatchesForRequest,
     updateMatchStatus,
     getUserDocument,
     createDonationMatch,
-    getMatchForDonor
+    getMatchForDonor,
+    subscribeToRequest,
+    getDistance
 } from '../api/firestoreService';
+import { useAuth } from '../context/AuthContext';
 import { DonationRequest, DonationMatch, UserDocument } from '../types/database';
 import { useModal } from '../context/ModalContext';
 import LoadingScreen from '../components/common/LoadingScreen';
@@ -45,58 +47,104 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     const [matches, setMatches] = useState<(DonationMatch & { donor?: UserDocument })[]>([]);
+    const [loadingMatches, setLoadingMatches] = useState(false);
     const [myMatch, setMyMatch] = useState<DonationMatch | null>(null);
+    const donorCache = React.useRef<Record<string, UserDocument>>({});
 
     const currentUser = useMemo(() => getAuth().currentUser, []);
+    const { userData: currentUserData } = useAuth();
+
+    const distance = useMemo(() => {
+        if (currentUserData?.location && request?.location) {
+            const d = getDistance(
+                currentUserData.location.latitude,
+                currentUserData.location.longitude,
+                request.location.latitude,
+                request.location.longitude
+            );
+            return Math.round(d * 10) / 10;
+        }
+        return undefined;
+    }, [currentUserData, request]);
+
+    const getTimeAgo = (timestamp: any) => {
+        if (!timestamp) return 'Just now';
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        const now = new Date();
+        const diff = Math.max(0, now.getTime() - date.getTime());
+        const mins = Math.floor(diff / 60000);
+        const hours = Math.floor(mins / 60);
+        const days = Math.floor(hours / 24);
+
+        if (days > 0) return `${days}d ago`;
+        if (hours > 0) return `${hours}h ago`;
+        if (mins > 0) return `${mins}m ago`;
+        return 'Just now';
+    };
+
     const isRequester = useMemo(() => request?.requesterId === currentUser?.uid, [request, currentUser]);
-    const isMatched = useMemo(() => 
-        currentUser?.uid && request?.matchedDonorIds 
-            ? request.matchedDonorIds.includes(currentUser.uid) 
-            : false, 
-    [request, currentUser]);
+    const isMatched = useMemo(() =>
+        currentUser?.uid && request?.matchedDonorIds
+            ? request.matchedDonorIds.includes(currentUser.uid)
+            : false,
+        [request, currentUser]);
 
     // ─── EFFECTS ───────────────────────────────────────────────
     useEffect(() => {
+        let unsubRequest: (() => void) | undefined;
         let unsubMatches: (() => void) | undefined;
         let unsubMyMatch: (() => void) | undefined;
 
         const initScreen = async () => {
             try {
-                const data = await getDonationRequest(requestId);
-                if (data) {
-                    setRequest(data);
+                // Real-time subscription to the request document
+                unsubRequest = subscribeToRequest(requestId, (data) => {
+                    if (data) {
+                        setRequest(data);
 
-                    if (data.requesterId === currentUser?.uid) {
-                        unsubMatches = getMatchesForRequest(requestId, async (matchList) => {
-                            const enhanced = await Promise.all(matchList.map(async (m) => {
-                                const donorProfile = await getUserDocument(m.donorId);
-                                return { ...m, donor: donorProfile || undefined };
-                            }));
-                            setMatches(enhanced);
-                        });
-                    } else {
-                        unsubMyMatch = getMatchForDonor(requestId, currentUser?.uid || '', (match) => {
-                            setMyMatch(match);
+                        // If requester, listen for all matches
+                        if (data.requesterId === currentUser?.uid && !unsubMatches) {
+                            setLoadingMatches(true);
+                            unsubMatches = getMatchesForRequest(requestId, async (matchList) => {
+                                try {
+                                    const enhanced = await Promise.all(matchList.map(async (m) => {
+                                        // Check cache first
+                                        if (donorCache.current[m.donorId]) {
+                                            return { ...m, donor: donorCache.current[m.donorId] };
+                                        }
+
+                                        const donorProfile = await getUserDocument(m.donorId);
+                                        if (donorProfile) {
+                                            donorCache.current[m.donorId] = donorProfile;
+                                        }
+                                        return { ...m, donor: donorProfile || undefined };
+                                    }));
+                                    setMatches(enhanced);
+                                } finally {
+                                    setLoadingMatches(false);
+                                }
+                            });
+                        }
+                    } else if (!data && !loading) {
+                        showModal({
+                            title: 'Error',
+                            description: 'Request not found.',
+                            type: 'error',
+                            primaryText: 'Back',
+                            onPrimaryPress: () => navigation.goBack()
                         });
                     }
-                } else {
-                    showModal({
-                        title: 'Error',
-                        description: 'Request not found.',
-                        type: 'error',
-                        primaryText: 'Back',
-                        onPrimaryPress: () => navigation.goBack()
+                    setLoading(false);
+                });
+
+                // For donor side, listen to their specific match status
+                if (currentUser?.uid) {
+                    unsubMyMatch = getMatchForDonor(requestId, currentUser.uid, (match) => {
+                        setMyMatch(match);
                     });
                 }
             } catch (error) {
-                console.error('[RequestDetail] Fetch error:', error);
-                showModal({
-                    title: 'Error',
-                    description: 'Could not load request details.',
-                    type: 'error',
-                    primaryText: 'OK'
-                });
-            } finally {
+                console.error('[RequestDetail] Init error:', error);
                 setLoading(false);
             }
         };
@@ -104,6 +152,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         initScreen();
 
         return () => {
+            unsubRequest?.();
             unsubMatches?.();
             unsubMyMatch?.();
         };
@@ -134,12 +183,6 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         setActionLoading(true);
         try {
             await updateMatchStatus(match.id!, 'accepted', match);
-            const updatedMatchedIds = [...(request.matchedDonorIds || []), match.donorId];
-            await updateDonationRequest(requestId, {
-                matchedDonorIds: updatedMatchedIds,
-                status: 'matched'
-            });
-
             showModal({ title: 'Match Accepted', description: `You can now contact ${donorName}.`, type: 'success', primaryText: 'Great' });
         } catch (error) {
             showModal({ title: 'Error', description: 'Could not accept donor.', type: 'error', primaryText: 'OK' });
@@ -237,10 +280,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
         });
     }, [requestId, currentUser, navigation, showModal]);
 
-    const handleMarkFulfilled = useCallback(() => {
-        Alert.alert('Success', 'Request marked as fulfilled!');
-        navigation.goBack();
-    }, [navigation]);
+
 
     const handleOpenMaps = useCallback(() => {
         if (!request) return;
@@ -257,15 +297,15 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
     return (
         <View style={styles.container}>
-            <ScreenHeader 
-                title={isRequester ? 'Request Control' : 'Donation Details'} 
-                onBack={() => navigation.goBack()} 
-                topInset={insets.top} 
+            <ScreenHeader
+                title={isRequester ? 'Request Control' : 'Donation Details'}
+                onBack={() => navigation.goBack()}
+                topInset={insets.top}
             />
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.contentBody}>
-                    <RequestSummaryCard 
+                    <RequestSummaryCard
                         patientName={request.patientName}
                         bloodGroup={request.bloodGroup}
                         unitsRequired={request.unitsRequired}
@@ -273,14 +313,26 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         hospitalName={request.hospitalName}
                         hospitalAddress={request.hospitalAddress}
                         city={request.city}
-                        onGetDirections={handleOpenMaps}
+                        distance={distance}
+                        matchedDonorsCount={request.matchedDonorIds?.length || 0}
+                        postedAt={getTimeAgo(request.createdAt)}
+                        onGetDirections={!isRequester ? handleOpenMaps : undefined}
                     />
 
                     {isRequester && (
                         <View style={styles.matchesSection}>
-                            <Text style={styles.sectionTitleSmall}>Interested Donors ({matches.length})</Text>
-                            {matches.length === 0 ? (
-                                <DetailInfoCard 
+                            <View style={styles.sectionHeaderSmall}>
+                                <Text style={styles.sectionTitleSmall}>Interested Donors ({matches.length})</Text>
+                                {loadingMatches && <ActivityIndicator size="small" color="#B62022" />}
+                            </View>
+
+                            {loadingMatches && matches.length === 0 ? (
+                                <View style={styles.loadingMatchesContainer}>
+                                    <ActivityIndicator size="large" color="#B62022" />
+                                    <Text style={styles.loadingMatchesText}>Fetching donor profiles...</Text>
+                                </View>
+                            ) : matches.length === 0 ? (
+                                <DetailInfoCard
                                     mainText="Searching for Donors..."
                                     subText="We've notified nearby heroes."
                                     icon="account-search-outline"
@@ -314,11 +366,11 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                                             </View>
                                         ) : m.status === 'accepted' ? (
                                             <View>
-                                                <ContactBar 
-                                                    phone={m.donor?.phone || ''} 
+                                                <ContactBar
+                                                    phone={m.donor?.phone || ''}
                                                     onWhatsApp={() => handleWhatsApp(m.donor?.phone || '', m.donor?.name || 'Donor')}
                                                 />
-                                                <TouchableOpacity 
+                                                <TouchableOpacity
                                                     style={styles.cancelMatchBtn}
                                                     onPress={() => handleCancelMatch(m)}
                                                 >
@@ -336,15 +388,15 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                     )}
 
                     {!isRequester && myMatch?.status === 'accepted' && (
-                        <DetailInfoCard 
+                        <DetailInfoCard
                             title="Direct Contact"
                             mainText="Connection established"
                             subText="You can now coordinate with the requester"
                             icon="person"
                         >
-                            <ContactBar 
-                                phone={request.phone} 
-                                onWhatsApp={() => handleWhatsApp(request.phone, 'Requester')} 
+                            <ContactBar
+                                phone={request.phone}
+                                onWhatsApp={() => handleWhatsApp(request.phone, 'Requester')}
                             />
                         </DetailInfoCard>
                     )}
@@ -371,12 +423,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         </TouchableOpacity>
                     )}
 
-                    {isRequester && request.status === 'open' && !myMatch && (
-                        <View style={styles.selfRequestNote}>
-                            <MaterialIcon name="info" size={20} color="#64748B" style={styles.statusIcon} />
-                            <Text style={styles.selfRequestNoteText}>This is your own request.</Text>
-                        </View>
-                    )}
+
 
                     {isMatched && request.status !== 'completed' && (
                         <TouchableOpacity
@@ -393,12 +440,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         </TouchableOpacity>
                     )}
 
-                    {isRequester && request.status !== 'completed' && request.status !== 'cancelled' && (
-                        <TouchableOpacity style={styles.primaryActionBtn} onPress={handleMarkFulfilled}>
-                            <MaterialIcon name="check-circle" size={22} color="#fff" style={styles.btnIcon} />
-                            <Text style={styles.primaryActionText}>Mark as Fulfilled</Text>
-                        </TouchableOpacity>
-                    )}
+
                 </View>
             </ScrollView>
         </View>
@@ -409,20 +451,20 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAFC' },
     scrollContent: { paddingBottom: 60 },
     contentBody: { paddingHorizontal: 20, paddingTop: 20 },
-    
+
     // ─── ACTION BUTTONS ──────────────────────────────────────────
-    primaryActionBtn: { 
-        backgroundColor: '#B62022', 
-        height: 56, 
-        borderRadius: 16, 
-        flexDirection: 'row', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        marginBottom: 16, 
-        shadowColor: '#B62022', 
-        shadowOpacity: 0.3, 
-        shadowRadius: 8, 
-        elevation: 4 
+    primaryActionBtn: {
+        backgroundColor: '#B62022',
+        height: 56,
+        borderRadius: 16,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+        shadowColor: '#B62022',
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4
     },
     primaryActionText: { color: 'white', fontSize: 16, fontWeight: '800' },
     btnIcon: { marginRight: 8 },
@@ -430,25 +472,46 @@ const styles = StyleSheet.create({
     // ─── MATCHES SECTION ─────────────────────────────────────────
     matchesSection: { marginTop: 8, marginBottom: 24 },
     sectionTitleSmall: { fontSize: 12, fontWeight: '900', color: '#94A3B8', marginBottom: 10, marginLeft: 4, letterSpacing: 1, textTransform: 'uppercase' },
-    donorCard: { marginBottom: 12 },
+    donorCard: {
+        marginBottom: 12,
+    },
+    sectionHeaderSmall: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    loadingMatchesContainer: {
+        padding: 30,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#F8FAFC',
+        borderRadius: 16,
+        gap: 12,
+    },
+    loadingMatchesText: {
+        fontSize: 13,
+        color: '#64748B',
+        fontWeight: '500',
+    },
     matchActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
     smallBtn: { flex: 1, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
     rejectBtn: { backgroundColor: '#F1F5F9' },
     rejectBtnText: { color: '#64748B', fontWeight: '700', fontSize: 14 },
     acceptBtn: { backgroundColor: '#B62022' },
     acceptBtnText: { color: 'white', fontWeight: '800', fontSize: 14 },
-    
-    cancelMatchBtn: { 
-        height: 48, 
-        borderRadius: 12, 
-        flexDirection: 'row', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        borderWidth: 1, 
-        borderColor: '#F1F5F9', 
-        backgroundColor: '#F8FAFC', 
-        marginTop: 12, 
-        gap: 6 
+
+    cancelMatchBtn: {
+        height: 48,
+        borderRadius: 12,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+        backgroundColor: '#F8FAFC',
+        marginTop: 12,
+        gap: 6
     },
     cancelMatchBtnText: { color: '#64748B', fontSize: 13, fontWeight: '700' },
     rejectedText: { fontSize: 13, color: '#94A3B8', fontStyle: 'italic', textAlign: 'center', paddingVertical: 8, marginTop: 8 },
@@ -457,7 +520,7 @@ const styles = StyleSheet.create({
     statusBox: { backgroundColor: '#FEF2F2', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: '#FEE2E2' },
     statusBoxText: { color: '#B62022', fontWeight: '700', fontSize: 14 },
     statusIcon: { marginRight: 10 },
-    
+
     selfRequestNote: { backgroundColor: '#F1F5F9', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
     selfRequestNoteText: { color: '#64748B', fontWeight: '700', fontSize: 14 },
 });

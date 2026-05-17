@@ -13,6 +13,7 @@ import RequestDetailScreen from '../screens/RequestDetailScreen';
 import DonorHelpDetailScreen from '../screens/DonorHelpDetailScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
+import { useSmartLocation } from '../hooks/useSmartLocation';
 import {
   navigationRef,
   subscribeToForegroundMessages,
@@ -37,6 +38,8 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppNavigator = () => {
   const { user, loading } = useAuth();
+  
+  useSmartLocation();
 
   useEffect(() => {
     // Initialize Notification Channels (Notifee)
