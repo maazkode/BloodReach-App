@@ -146,19 +146,34 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             label: 'Home',
             icon: 'home',
             activeIcon: 'home',
-            onPress: () => navigation.navigate(currentRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'home' })
+            onPress: () => {
+                const routes = navigation.getState().routes;
+                const dashboard = [...routes].reverse().find(r => r.name === 'DonorDashboard' || r.name === 'RequesterDashboard')?.name
+                    || (currentRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard');
+                navigation.navigate(dashboard as any, { tab: 'home' });
+            }
         },
         {
             key: 'requests',
             label: 'Requests',
             icon: currentRole === 'donor' ? 'water-drop' : 'list-alt',
-            onPress: () => navigation.navigate(currentRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'requests' })
+            onPress: () => {
+                const routes = navigation.getState().routes;
+                const dashboard = [...routes].reverse().find(r => r.name === 'DonorDashboard' || r.name === 'RequesterDashboard')?.name
+                    || (currentRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard');
+                navigation.navigate(dashboard as any, { tab: 'requests' });
+            }
         },
         {
             key: 'history',
             label: 'History',
             icon: 'history',
-            onPress: () => navigation.navigate(currentRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard', { tab: 'history' })
+            onPress: () => {
+                const routes = navigation.getState().routes;
+                const dashboard = [...routes].reverse().find(r => r.name === 'DonorDashboard' || r.name === 'RequesterDashboard')?.name
+                    || (currentRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard');
+                navigation.navigate(dashboard as any, { tab: 'history' });
+            }
         },
         {
             key: 'settings',

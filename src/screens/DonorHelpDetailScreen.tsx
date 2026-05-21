@@ -28,6 +28,7 @@ import { useAuth } from '../context/AuthContext';
 import { DonationRequest, DonationMatch, UserDocument } from '../types/database';
 import { useModal } from '../context/ModalContext';
 import { safeRun, log, translateError } from '../utility/errorHandler';
+import { isUserAvailableNow } from '../utility/availability';
 import LoadingScreen from '../components/common/LoadingScreen';
 import ScreenHeader from '../components/common/ScreenHeader';
 import DetailInfoCard from '../components/details/DetailInfoCard';
@@ -140,6 +141,19 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     const handleInterest = useCallback(async () => {
         if (!currentUser || !request || actionLoading) return;
 
+        if (currentUserData?.schedule) {
+            const available = isUserAvailableNow(currentUserData.schedule, new Date());
+            if (!available) {
+                showModal({
+                    title: 'Outside Availability Hours',
+                    description: 'You are currently outside your scheduled availability hours. You cannot express interest in donations at this time.',
+                    type: 'warning',
+                    primaryText: 'OK'
+                });
+                return;
+            }
+        }
+
         setActionLoading(true);
         await safeRun(
             () => createDonationMatch(requestId, currentUser.uid, request.requesterId),
@@ -152,7 +166,7 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             }
         );
         setActionLoading(false);
-    }, [requestId, currentUser, request, actionLoading, showModal]);
+    }, [requestId, currentUser, request, actionLoading, showModal, currentUserData]);
 
     const handleComplete = useCallback(async () => {
         if (!currentUser || actionLoading) return;

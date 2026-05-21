@@ -7,9 +7,11 @@ import {
     FlatList,
     StatusBar,
     Image,
+    ScrollView,
     Dimensions,
     Animated,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LoadingScreen from '../components/common/LoadingScreen';
@@ -23,6 +25,11 @@ import { DonationRequest } from '../types/database';
 import { signOut } from '../api/authService';
 import BottomTabBar from '../components/common/BottomTabBar';
 import { useModal } from '../context/ModalContext';
+import { updateUserPreferences } from '../api/firestoreService';
+import { isUserAvailableNow } from '../utility/availability';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Portal, Modal as PaperModal, Button as PaperButton, Checkbox as PaperCheckbox, Snackbar } from 'react-native-paper';
+
 
 // Hooks
 import { useDonorEligibility } from '../hooks/useDonorEligibility';
@@ -126,18 +133,16 @@ const RequestItem = React.memo(({ item, isFullWidth, isEligible, onHelpPress, el
                 </View>
 
                 <View style={styles.cardBody}>
-                    <Text style={styles.patientName} numberOfLines={1}>For {item.patientName}</Text>
+                    <Text style={styles.patientName} numberOfLines={1}>{item.patientName}</Text>
                     <View style={styles.infoRow}>
                         <MaterialIcon name="local-hospital" size={14} color="#64748B" />
-                        <Text style={styles.infoText} numberOfLines={1}>{item.hospitalName}</Text>
+                        <Text style={styles.infoText} numberOfLines={2}>{item.hospitalName}</Text>
                     </View>
                     <View style={styles.infoRow}>
                         <MaterialIcon name="near-me" size={14} color="#64748B" />
                         <Text style={styles.infoText}>
                             {(item as any).distance !== undefined ? `${(item as any).distance} km` : '...'}
                         </Text>
-                        <View style={styles.dotSeparator} />
-                        <Text style={styles.urgencyDetail}>{getUrgencyText(item.urgencyLevel)}</Text>
                     </View>
                     <View style={styles.metricsRow}>
                         <View style={styles.metric}>
@@ -192,7 +197,7 @@ const HistoryItem = React.memo(({ match, onPress }: { match: any, onPress: () =>
             <Text style={styles.patientName} numberOfLines={1}>Donated for {match.request?.patientName || 'Patient'}</Text>
             <View style={styles.infoRow}>
                 <MaterialIcon name="local-hospital" size={16} color="#64748B" />
-                <Text style={styles.infoText} numberOfLines={1}>{match.request?.hospitalName || 'Hospital Info'}</Text>
+                <Text style={styles.infoText} numberOfLines={2}>{match.request?.hospitalName || 'Hospital Info'}</Text>
             </View>
             <View style={styles.metricsRow}>
                 <View style={styles.metric}>
@@ -216,6 +221,108 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
 
     const isFirstMount = React.useRef(true);
 
+    // Scheduled Donation Availability State
+    const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+    const [selectedDays, setSelectedDays] = useState<string[]>([]);
+    const [startTime, setStartTime] = useState('09:00');
+    const [endTime, setEndTime] = useState('17:00');
+    const [pickingType, setPickingType] = useState<'start' | 'end' | null>(null);
+    const [scheduleLoading, setScheduleLoading] = useState(false);
+
+    // Toast Snackbar State
+    const [snackbarVisible, setSnackbarVisible] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+
+
+
+    const toggleDay = (day: string) => {
+        if (selectedDays.includes(day)) {
+            setSelectedDays(selectedDays.filter(d => d !== day));
+        } else {
+            setSelectedDays([...selectedDays, day]);
+        }
+    };
+
+    const validateSchedule = () => {
+        if (selectedDays.length === 0) {
+            showModal({
+                title: 'Validation Error',
+                description: 'At least 1 day must be selected.',
+                type: 'warning',
+                primaryText: 'OK'
+            });
+            return false;
+        }
+        if (!startTime || !endTime) {
+            showModal({
+                title: 'Validation Error',
+                description: 'Please specify both start and end times.',
+                type: 'warning',
+                primaryText: 'OK'
+            });
+            return false;
+        }
+        if (startTime >= endTime) {
+            showModal({
+                title: 'Validation Error',
+                description: 'Start time must be before end time.',
+                type: 'warning',
+                primaryText: 'OK'
+            });
+            return false;
+        }
+        return true;
+    };
+
+    const handleSaveSchedule = async () => {
+        if (!validateSchedule()) return;
+        if (!userData?.uid) return;
+
+        setScheduleLoading(true);
+        try {
+            const scheduleObj: Record<string, { start: string, end: string }> = {};
+            selectedDays.forEach(day => {
+                scheduleObj[day] = { start: startTime, end: endTime };
+            });
+
+            await updateUserPreferences(userData.uid, {
+                schedule: scheduleObj
+            } as any);
+
+            setScheduleModalVisible(false);
+            setSnackbarMessage('Schedule saved successfully!');
+            setSnackbarVisible(true);
+        } catch (error) {
+            console.error('Error saving schedule:', error);
+            showModal({
+                title: 'Save Failed',
+                description: 'Failed to save availability schedule. Please try again.',
+                type: 'error',
+                primaryText: 'OK'
+            });
+        } finally {
+            setScheduleLoading(false);
+        }
+    };
+
+    const onTimeChange = (_: any, selectedDate?: Date) => {
+        const type = pickingType;
+        setPickingType(null);
+
+        if (selectedDate && type) {
+            const hours = String(selectedDate.getHours()).padStart(2, '0');
+            const minutes = String(selectedDate.getMinutes()).padStart(2, '0');
+            const timeStr = `${hours}:${minutes}`;
+
+            if (type === 'start') {
+                setStartTime(timeStr);
+            } else {
+                setEndTime(timeStr);
+            }
+        }
+    };
+
+
     // Re-fetch matches every time the screen comes into focus (skip initial mount)
     useFocusEffect(
         useCallback(() => {
@@ -227,8 +334,26 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
         }, [])
     );
 
-    // Custom Hooks
     const { userData, loadingUser, isAgeRestricted, isCooldownActive, formatCooldownDate } = useDonorEligibility();
+
+    useEffect(() => {
+        if (userData?.schedule) {
+            const days = Object.keys(userData.schedule);
+            setSelectedDays(days);
+            if (days.length > 0) {
+                const firstDay = days[0];
+                setStartTime(userData.schedule[firstDay]?.start || '09:00');
+                setEndTime(userData.schedule[firstDay]?.end || '17:00');
+            } else {
+                setStartTime('09:00');
+                setEndTime('17:00');
+            }
+        } else {
+            setSelectedDays([]);
+            setStartTime('09:00');
+            setEndTime('17:00');
+        }
+    }, [userData]);
     const { activeHelps, loadingMatches } = useDonorMatches(refreshKey, userData);
     const { nearbyRequests, loadingRequests } = useDonorRequests(userData, loadingUser, activeHelps);
     const { donationHistory, loadingHistory } = useDonorHistory(activeTab);
@@ -277,7 +402,8 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
     const renderHero = () => {
         if (isAgeRestricted) return <RestrictedHero userData={userData} styles={styles} />;
         if (isCooldownActive) return <CooldownHero userData={userData} styles={styles} />;
-        return <ActiveHero userData={userData} styles={styles} />;
+        const isAvailableNow = userData?.schedule ? isUserAvailableNow(userData.schedule) : true;
+        return <ActiveHero userData={userData} styles={styles} isAvailableNow={isAvailableNow} onSchedulePress={() => setScheduleModalVisible(true)} />;
     };
 
     const renderContent = () => {
@@ -321,72 +447,68 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
 
         // Home Tab
         return (
-            <FlatList
-                data={[]} // Using FlatList as a container for Home sections
-                renderItem={null}
-                ListHeaderComponent={
-                    <>
-                        {renderHero()}
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+            >
+                {renderHero()}
 
-                        {!isHomeLoading && activeHelps.length > 0 && (
-                            <View style={{ marginBottom: 20 }}>
-                                <View style={styles.sectionHeader}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <Text style={styles.sectionTitle}>Active Helps</Text>
-                                        <View style={styles.countBadge}><Text style={styles.countBadgeText}>{activeHelps.length}</Text></View>
-                                    </View>
-                                </View>
-                                <FlatList
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    data={activeHelps.filter(m => !!m.request)}
-                                    keyExtractor={(item) => item.id}
-                                    renderItem={({ item }) => (
-                                        <RequestItem
-                                            item={item.request}
-                                            isEligible={!!userData?.isEligibleToDonate}
-                                            onHelpPress={() => navigation.navigate('DonorHelpDetail', { requestId: item.requestId })}
-                                            eligibilityDate={userData?.donationCooldownUntil ? formatCooldownDate(userData.donationCooldownUntil) : undefined}
-                                        />
-                                    )}
-                                    contentContainerStyle={styles.horizontalScrollContent}
-                                />
+                {!isHomeLoading && activeHelps.length > 0 && (
+                    <View style={{ marginBottom: 20 }}>
+                        <View style={styles.sectionHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={styles.sectionTitle}>Active Helps</Text>
+                                <View style={styles.countBadge}><Text style={styles.countBadgeText}>{activeHelps.length}</Text></View>
                             </View>
-                        )}
+                        </View>
+                        <FlatList
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            data={activeHelps.filter(m => !!m.request)}
+                            keyExtractor={(item) => item.id}
+                            renderItem={({ item }) => (
+                                <RequestItem
+                                    item={item.request}
+                                    isEligible={!!userData?.isEligibleToDonate}
+                                    onHelpPress={() => navigation.navigate('DonorHelpDetail', { requestId: item.requestId })}
+                                    eligibilityDate={userData?.donationCooldownUntil ? formatCooldownDate(userData.donationCooldownUntil) : undefined}
+                                />
+                            )}
+                            contentContainerStyle={styles.horizontalScrollContent}
+                        />
+                    </View>
+                )}
 
-                        {(!isCooldownActive && !isAgeRestricted) && (
-                            <>
-                                <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>Nearby Requests</Text>
-                                    <TouchableOpacity onPress={() => setActiveTab('requests')}><Text style={styles.seeAllText}>See All</Text></TouchableOpacity>
-                                </View>
-                                {isHomeLoading ? (
-                                    <View style={styles.loadingBox}><ActivityIndicator size="small" color="#B62022" /><Text style={styles.loadingText}>Finding requests near you...</Text></View>
-                                ) : filteredNearbyRequests.length > 0 ? (
-                                    <FlatList
-                                        horizontal
-                                        showsHorizontalScrollIndicator={false}
-                                        data={filteredNearbyRequests.slice(0, 5)}
-                                        keyExtractor={(item) => item.id!}
-                                        renderItem={({ item }) => (
-                                            <RequestItem
-                                                item={item}
-                                                isEligible={!!userData?.isEligibleToDonate}
-                                                onHelpPress={handleHelpPress}
-                                                eligibilityDate={userData?.donationCooldownUntil ? formatCooldownDate(userData.donationCooldownUntil) : undefined}
-                                            />
-                                        )}
-                                        contentContainerStyle={styles.horizontalScrollContent}
+                {(!isCooldownActive && !isAgeRestricted) && (
+                    <>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Nearby Requests</Text>
+                            <TouchableOpacity onPress={() => setActiveTab('requests')}><Text style={styles.seeAllText}>See All</Text></TouchableOpacity>
+                        </View>
+                        {isHomeLoading ? (
+                            <View style={styles.loadingBox}><ActivityIndicator size="small" color="#B62022" /><Text style={styles.loadingText}>Finding requests near you...</Text></View>
+                        ) : filteredNearbyRequests.length > 0 ? (
+                            <FlatList
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                data={filteredNearbyRequests.slice(0, 5)}
+                                keyExtractor={(item) => item.id!}
+                                renderItem={({ item }) => (
+                                    <RequestItem
+                                        item={item}
+                                        isEligible={!!userData?.isEligibleToDonate}
+                                        onHelpPress={handleHelpPress}
+                                        eligibilityDate={userData?.donationCooldownUntil ? formatCooldownDate(userData.donationCooldownUntil) : undefined}
                                     />
-                                ) : (
-                                    <View style={styles.emptyBox}><MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" /><Text style={styles.emptyText}>No active requests nearby</Text></View>
                                 )}
-                            </>
+                                contentContainerStyle={styles.horizontalScrollContent}
+                            />
+                        ) : (
+                            <View style={styles.emptyBox}><MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" /><Text style={styles.emptyText}>No active requests nearby</Text></View>
                         )}
                     </>
-                }
-                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-            />
+                )}
+            </ScrollView>
         );
     };
 
@@ -411,6 +533,134 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                     { key: 'settings', label: 'Settings', icon: 'settings', activeIcon: 'settings', onPress: () => { navigation.navigate('Settings'); } },
                 ]}
             />
+
+            <Portal>
+                <PaperModal
+                    visible={scheduleModalVisible}
+                    onDismiss={() => !scheduleLoading && setScheduleModalVisible(false)}
+                    contentContainerStyle={styles.modalContainer}
+                >
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Schedule Donor Availability</Text>
+                            <TouchableOpacity
+                                disabled={scheduleLoading}
+                                onPress={() => setScheduleModalVisible(false)}
+                                style={styles.modalCloseBtn}
+                            >
+                                <MaterialIcon name="close" size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
+                            <Text style={styles.modalSubtitle}>Select Availability Days</Text>
+                            <View style={styles.daysContainer}>
+                                {['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].map(day => {
+                                    const isSelected = selectedDays.includes(day);
+                                    const shortName = day.substring(0, 3).toUpperCase();
+                                    return (
+                                        <TouchableOpacity
+                                            key={day}
+                                            onPress={() => toggleDay(day)}
+                                            style={[
+                                                styles.daySelectorBtn,
+                                                isSelected && styles.daySelectorBtnActive
+                                            ]}
+                                        >
+                                            <Text style={[
+                                                styles.daySelectorText,
+                                                isSelected && styles.daySelectorTextActive
+                                            ]}>
+                                                {shortName}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+
+                            <Text style={styles.modalSubtitle}>Configure Time Slot</Text>
+                            <View style={styles.dayTimeCard}>
+                                <Text style={styles.dayTimeTitle}>
+                                    Default Hours (Applies to all selected days)
+                                </Text>
+                                <View style={styles.timeButtonsRow}>
+                                    <TouchableOpacity
+                                        style={styles.timePickBtn}
+                                        onPress={() => {
+                                            setPickingType('start');
+                                        }}
+                                    >
+                                        <Text style={styles.timePickLabel}>START TIME</Text>
+                                        <Text style={styles.timePickValue}>{startTime}</Text>
+                                    </TouchableOpacity>
+
+                                    <View style={styles.timeDivider}>
+                                        <Text style={styles.timeDividerText}>to</Text>
+                                    </View>
+
+                                    <TouchableOpacity
+                                        style={styles.timePickBtn}
+                                        onPress={() => {
+                                            setPickingType('end');
+                                        }}
+                                    >
+                                        <Text style={styles.timePickLabel}>END TIME</Text>
+                                        <Text style={styles.timePickValue}>{endTime}</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </ScrollView>
+
+                        {/* Date Time Picker triggering */}
+                        {pickingType && (
+                            <DateTimePicker
+                                value={(() => {
+                                    const timeStr = pickingType === 'start' ? startTime : endTime;
+                                    const [h, m] = timeStr.split(':').map(Number);
+                                    const d = new Date();
+                                    d.setHours(h, m, 0, 0);
+                                    return d;
+                                })()}
+                                mode="time"
+                                is24Hour={true}
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={onTimeChange}
+                            />
+                        )}
+
+                        <View style={styles.modalFooter}>
+                            <PaperButton
+                                mode="outlined"
+                                onPress={() => setScheduleModalVisible(false)}
+                                disabled={scheduleLoading}
+                                style={styles.modalCancelBtn}
+                                labelStyle={{ color: '#64748B', fontWeight: '700' }}
+                            >
+                                Cancel
+                            </PaperButton>
+                            <PaperButton
+                                mode="contained"
+                                onPress={handleSaveSchedule}
+                                loading={scheduleLoading}
+                                disabled={scheduleLoading}
+                                style={styles.modalSaveBtn}
+                                labelStyle={{ color: '#FFFFFF', fontWeight: '800' }}
+                            >
+                                Save Schedule
+                            </PaperButton>
+                        </View>
+                    </View>
+                </PaperModal>
+            </Portal>
+
+            <Snackbar
+                visible={snackbarVisible}
+                onDismiss={() => setSnackbarVisible(false)}
+                duration={3000}
+                style={styles.toastSnackbar}
+            >
+                {snackbarMessage}
+            </Snackbar>
         </View>
     );
 };
@@ -433,17 +683,17 @@ const styles = StyleSheet.create({
     headerBrandName: { fontSize: 20, fontWeight: '900', color: '#000000', letterSpacing: 0.5 },
     scrollContent: { paddingTop: 20 },
     newCardHorizontal: {
-        width: 300,
+        width: 260,
         backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 10,
-        marginRight: 16,
+        borderRadius: 16,
+        padding: 12,
+        marginRight: 12,
         marginBottom: 8,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
+        shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.1,
-        shadowRadius: 15,
-        elevation: 8,
+        shadowRadius: 10,
+        elevation: 6,
         position: 'relative',
         overflow: 'hidden',
     },
@@ -504,10 +754,10 @@ const styles = StyleSheet.create({
         minWidth: 50,
     },
     bloodGroupText: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '900',
         color: '#E11D48',
-        lineHeight: 24,
+        lineHeight: 22,
     },
     bloodGroupLabel: {
         fontSize: 10,
@@ -544,12 +794,12 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '800',
         color: '#0F172A',
-        marginBottom: 0,
+        marginBottom: 4,
     },
     infoRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 2,
+        marginBottom: 6,
         gap: 6,
     },
     infoText: {
@@ -559,10 +809,11 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     dotSeparator: {
-        width: 3,
-        height: 3,
-        borderRadius: 1.5,
+        width: 4,
+        height: 4,
+        borderRadius: 2,
         backgroundColor: '#CBD5E1',
+        marginHorizontal: 4,
     },
     urgencyDetail: {
         fontSize: 12,
@@ -571,8 +822,8 @@ const styles = StyleSheet.create({
     },
     metricsRow: {
         flexDirection: 'row',
-        marginTop: 4,
-        gap: 16,
+        marginTop: 6,
+        gap: 12,
     },
     metric: {
         flexDirection: 'row',
@@ -581,7 +832,7 @@ const styles = StyleSheet.create({
     },
     metricText: {
         fontSize: 13,
-        fontWeight: '700',
+        fontWeight: '600',
         color: '#1E293B',
     },
     cardFooter: {
@@ -681,6 +932,15 @@ const styles = StyleSheet.create({
     },
     heroCardCooldown: {
         backgroundColor: '#64748B',
+    },
+    heroCardResting: {
+        backgroundColor: '#334155',
+    },
+    restingPill: {
+        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    },
+    amberDot: {
+        backgroundColor: '#F59E0B',
     },
     heroActionBtn: {
         backgroundColor: '#FFFFFF',
@@ -796,6 +1056,167 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginTop: 12,
         textAlign: 'center',
+    },
+    // Scheduling Modal Styles
+    modalContainer: {
+        backgroundColor: 'transparent',
+        padding: 20,
+        justifyContent: 'center',
+    },
+    modalContent: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 24,
+        padding: 24,
+        maxHeight: '90%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: '900',
+        color: '#0F172A',
+        flex: 1,
+    },
+    modalCloseBtn: {
+        padding: 4,
+    },
+    modalScroll: {
+        marginBottom: 20,
+    },
+    modalSubtitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#64748B',
+        marginTop: 16,
+        marginBottom: 12,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    daysContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 16,
+    },
+    daySelectorBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1.5,
+        borderColor: '#E2E8F0',
+        backgroundColor: '#F8FAFC',
+        minWidth: 50,
+        alignItems: 'center',
+    },
+    daySelectorBtnActive: {
+        borderColor: '#B62022',
+        backgroundColor: '#FEE2E2',
+    },
+    daySelectorText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#64748B',
+    },
+    daySelectorTextActive: {
+        color: '#B62022',
+        fontWeight: '800',
+    },
+    noDaysBox: {
+        padding: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1.5,
+        borderColor: '#F1F5F9',
+        borderStyle: 'dashed',
+        borderRadius: 16,
+        backgroundColor: '#F8FAFC',
+        marginTop: 4,
+    },
+    noDaysText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#94A3B8',
+        marginTop: 8,
+        textAlign: 'center',
+    },
+    dayTimeCard: {
+        backgroundColor: '#F8FAFC',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+    },
+    dayTimeTitle: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#334155',
+        marginBottom: 12,
+    },
+    timeButtonsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    timePickBtn: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        alignItems: 'center',
+    },
+    timePickLabel: {
+        fontSize: 9,
+        fontWeight: '700',
+        color: '#94A3B8',
+        marginBottom: 2,
+    },
+    timePickValue: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#0F172A',
+    },
+    timeDivider: {
+        paddingHorizontal: 12,
+    },
+    timeDividerText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#64748B',
+    },
+    modalFooter: {
+        flexDirection: 'row',
+        gap: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#F1F5F9',
+        paddingTop: 16,
+    },
+    modalCancelBtn: {
+        flex: 1,
+        borderRadius: 12,
+        borderColor: '#E2E8F0',
+    },
+    modalSaveBtn: {
+        flex: 1.5,
+        borderRadius: 12,
+        backgroundColor: '#B62022',
+    },
+    toastSnackbar: {
+        backgroundColor: '#1E293B',
+        borderRadius: 12,
+        marginBottom: 80,
     },
 });
 

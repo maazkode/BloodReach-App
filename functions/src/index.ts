@@ -1,9 +1,14 @@
 import { setGlobalOptions } from "firebase-functions";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { geohashQueryBounds, distanceBetween } from "geofire-common";
+import express from "express";
+import cors from "cors";
+import { isUserAvailableNow } from "./availability";
+
 
 admin.initializeApp();
 
@@ -24,13 +29,7 @@ const COMPATIBILITY_MAP: Record<string, string[]> = {
   "O-": ["O-"],
 };
 
-/**
- * Triggered when a new document is created in the "requests" collection.
- * Finds matching eligible donors within 10KM with compatible blood groups and sends push notifications.
- */
-export const onNewBloodRequest = onDocumentCreated(
-  "requests/{requestId}",
-  async (event) => {
+async function processBloodRequest(event: any) {
     const snapshot = event.data;
     if (!snapshot) {
       logger.error("No data associated with the event");
@@ -106,12 +105,22 @@ export const onNewBloodRequest = onDocumentCreated(
             logger.info(`Skipping ${donorId}: user is not a donor.`);
             continue;
           }
-          
+
           if (donorData.isAvailable !== true || donorData.isEligibleToDonate !== true) {
             logger.info(`Skipping ${donorId}: user is unavailable or ineligible.`);
             continue;
           }
-          
+
+          // Schedule Availability Check
+          if (donorData.schedule) {
+            const isAvailable = isUserAvailableNow(donorData.schedule, new Date());
+            if (!isAvailable) {
+              logger.info(`Skipping ${donorId}: user is currently outside scheduled availability hours.`);
+              continue;
+            }
+          }
+
+
           // Compatibility Check
           if (!compatibleGroups.includes(donorData.bloodGroup)) {
             logger.info(`Skipping ${donorId}: incompatible blood group (${donorData.bloodGroup} vs ${requestedGroup}).`);
@@ -126,7 +135,7 @@ export const onNewBloodRequest = onDocumentCreated(
 
           // Verify distance (Bypass for test requests to ensure test delivery)
           const donorLocation = donorData.location;
-          
+
           if (isTestRequest) {
             logger.info(`Test Mode: adding token for user ${donorId} regardless of distance.`);
             tokens.push(donorData.fcmToken);
@@ -202,11 +211,11 @@ export const onNewBloodRequest = onDocumentCreated(
 
       logger.info(`[DEBUG] Final Multicast Message:`, JSON.stringify(message, null, 2));
       logger.info(`[DEBUG] Targeting Tokens:`, tokens);
-      
+
       const response = await admin.messaging().sendEachForMulticast(message);
-      
+
       logger.info(`[DEBUG] FCM Results: success=${response.successCount}, failure=${response.failureCount}`);
-      
+
       if (response.failureCount > 0) {
         response.responses.forEach((res, idx) => {
           if (!res.success) {
@@ -247,6 +256,16 @@ export const onNewBloodRequest = onDocumentCreated(
     } catch (error) {
       logger.error(`Error in onNewBloodRequest for ${requestId}:`, error);
     }
+}
+
+/**
+ * Triggered when a new document is created in the "requests" collection.
+ * Finds matching eligible donors within 10KM with compatible blood groups and sends push notifications.
+ */
+export const onNewBloodRequest = onDocumentCreated(
+  "requests/{requestId}",
+  async (event) => {
+    return processBloodRequest(event);
   }
 );
 
@@ -256,10 +275,7 @@ export const onNewBloodRequest = onDocumentCreated(
 export const onNewBloodRequestV2 = onDocumentCreated(
   "bloodRequests/{requestId}",
   async (event) => {
-    // Reusing the same logic as the legacy trigger
-    // In a real app, I would extract the core logic to a shared helper function,
-    // but here I'll keep it simple for visibility.
-    return onNewBloodRequest(event);
+    return processBloodRequest(event);
   }
 );
 
@@ -281,9 +297,9 @@ export const expireOldRequests = onSchedule("every 1 hours", async (event) => {
 
   const batch = db.batch();
   snapshot.docs.forEach((doc) => {
-    batch.update(doc.ref, { 
-      status: "expired", 
-      updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+    batch.update(doc.ref, {
+      status: "expired",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
   });
 
@@ -310,11 +326,11 @@ export const revertStaleMatches = onSchedule("every 10 minutes", async (event) =
   const batch = db.batch();
   for (const requestDoc of snapshot.docs) {
     const requestData = requestDoc.data();
-    batch.update(requestDoc.ref, { 
+    batch.update(requestDoc.ref, {
       status: "active",
       donorId: null,
       acceptedAt: null,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
     // Also cancel the specific match record if it exists
@@ -325,11 +341,11 @@ export const revertStaleMatches = onSchedule("every 10 minutes", async (event) =
         .where("status", "==", "accepted")
         .limit(1)
         .get();
-      
+
       matchQuery.forEach(m => {
-        batch.update(m.ref, { 
-          status: "failed", 
-          updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+        batch.update(m.ref, {
+          status: "failed",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
       });
     }
@@ -338,3 +354,66 @@ export const revertStaleMatches = onSchedule("every 10 minutes", async (event) =
   await batch.commit();
   logger.info(`Reverted ${snapshot.size} stale matches and updated match records.`);
 });
+
+// Express App for Scheduled Donation Availability System
+const app = express();
+app.use(cors({ origin: true }));
+app.use(express.json());
+
+// Expose POST endpoint to save schedule
+app.post("/save-schedule", async (req: any, res: any) => {
+  const { uid, schedule } = req.body;
+  if (!uid || !schedule) {
+    return res.status(400).json({ error: "Missing uid or schedule" });
+  }
+
+  const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const selectedDays = Object.keys(schedule).filter(d => days.includes(d));
+
+  if (selectedDays.length === 0) {
+    return res.status(400).json({ error: "At least 1 day must be selected" });
+  }
+
+  for (const day of selectedDays) {
+    const { start, end } = schedule[day];
+    if (!start || !end) {
+      return res.status(400).json({ error: "No empty schedules allowed" });
+    }
+    if (start >= end) {
+      return res.status(400).json({ error: "Start time must be before end time" });
+    }
+  }
+
+  try {
+    await admin.firestore().collection("users").doc(uid).set({ schedule }, { merge: true });
+    return res.status(200).json({ message: "Schedule saved successfully" });
+  } catch (error) {
+    logger.error("Error in /save-schedule:", error);
+    return res.status(500).json({ error: "Failed to save schedule" });
+  }
+});
+
+// Expose GET endpoint to check availability
+app.get("/check-availability", async (req: any, res: any) => {
+  const { uid } = req.query;
+  if (!uid) {
+    return res.status(400).json({ error: "Missing uid query parameter" });
+  }
+
+  try {
+    const userDoc = await admin.firestore().collection("users").doc(uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const userData = userDoc.data();
+    const available = isUserAvailableNow(userData?.schedule, new Date());
+    return res.status(200).json({ uid, available });
+  } catch (error) {
+    logger.error("Error in /check-availability:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+export const api = onRequest(app);
+

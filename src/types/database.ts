@@ -25,6 +25,7 @@ export interface UserDocument {
     };
     locationUpdatedAt?: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
     smartLocationPreference?: 'auto' | 'ask' | 'off';
+    schedule?: Record<string, { start: string; end: string }>;
     // address: string;
     fcmToken?: string;
     email: string;
