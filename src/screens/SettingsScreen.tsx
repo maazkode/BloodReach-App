@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
     headerBackBtn: {
         width: 40,
         height: 40,
-        borderRadius: 20,
+        borderRadius: 10,
         backgroundColor: '#F1F5F9',
         justifyContent: 'center',
         alignItems: 'center',
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     toggleIconBox: {
         width: 40,
         height: 40,
-        borderRadius: 12,
+        borderRadius: 10,
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: '#0EA5E910',

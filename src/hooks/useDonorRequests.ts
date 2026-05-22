@@ -40,7 +40,7 @@ export const useDonorRequests = (userData: UserDocument | null, loadingUser: boo
             const latestUserData = userDataRef.current;
             const activeRequestIds = activeHelpsRef.current.map(m => m.requestId);
 
-            return requests.filter(r => {
+            const filtered = requests.filter(r => {
                 const isNotMe = r.requesterId !== user?.uid;
                 const isNotActive = !activeRequestIds.includes(r.id!);
                 let isCompatible = true;
@@ -63,6 +63,32 @@ export const useDonorRequests = (userData: UserDocument | null, loadingUser: boo
 
                 return isNotMe && isNotActive && isCompatible;
             });
+
+            // Sort by combined score: 60% proximity + 40% recency
+            // Urgency (critical/urgent) gets a priority boost on top
+            const MAX_DIST_KM = 50;
+            const MAX_AGE_MS = 72 * 60 * 60 * 1000; // 72 hours
+            const urgencyBoost: Record<string, number> = { critical: 0.3, urgent: 0.15, standard: 0 };
+            const now = Date.now();
+
+            filtered.sort((a, b) => {
+                const scoreOf = (r: DonationRequest) => {
+                    const dist = (r as any).distance ?? MAX_DIST_KM;
+                    const distScore = 1 - Math.min(dist / MAX_DIST_KM, 1); // closer = higher
+
+                    const createdAt = (r.createdAt as any)?.toDate
+                        ? (r.createdAt as any).toDate().getTime()
+                        : (r.createdAt as any) ?? now;
+                    const ageMs = Math.max(0, now - createdAt);
+                    const ageScore = 1 - Math.min(ageMs / MAX_AGE_MS, 1); // newer = higher
+
+                    const boost = urgencyBoost[r.urgencyLevel] ?? 0;
+                    return distScore * 0.6 + ageScore * 0.4 + boost;
+                };
+                return scoreOf(b) - scoreOf(a); // descending
+            });
+
+            return filtered;
         };
 
         if (lat && lng && isAvailable && isEligible) {

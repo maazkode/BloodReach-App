@@ -314,7 +314,9 @@ const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
                     maximumDate={new Date()}
                     onChange={(event: any, date?: Date) => {
                         setShowDatePicker(false);
-                        if (date) setLastDonationDate(date);
+                        if (event.type === 'set' && date) {
+                            setLastDonationDate(date);
+                        }
                     }}
                 />
             )}
@@ -408,7 +410,7 @@ const styles = StyleSheet.create({
     saveText: { fontSize: 16, fontWeight: '700', color: '#B62022' },
     scrollContent: { padding: 20 },
     sectionLabel: { fontSize: 13, fontWeight: '800', color: '#94A3B8', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12, marginLeft: 4 },
-    card: { backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 25, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+    card: { backgroundColor: '#fff', borderRadius: 10, padding: 16, marginBottom: 25, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
     inputGroup: { marginBottom: 18 },
     label: { fontSize: 12, fontWeight: '700', color: '#64748B', marginBottom: 8, marginLeft: 4 },
     inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: 12, paddingHorizontal: 12 },
