@@ -84,15 +84,15 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     loadingLogoBox: {
-        width: 200,
-        height: 200,
+        width: 120,
+        height: 120,
         justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
     },
     loadingLogo: {
-        width: 140,
-        height: 140,
+        width: 90,
+        height: 90,
         zIndex: 2,
     },
     textContainer: {

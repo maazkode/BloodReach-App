@@ -65,6 +65,13 @@ const getUrgencyText = (level: string) => {
     }
 };
 
+const to12hr = (time: string): string => {
+    const [h, m] = time.split(':').map(Number);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    return `${hour}:${String(m).padStart(2, '0')} ${period}`;
+};
+
 const PulseIndicator = React.memo(() => {
     const scale = React.useRef(new Animated.Value(1)).current;
     const opacity = React.useRef(new Animated.Value(0.7)).current;
@@ -224,8 +231,8 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
     // Scheduled Donation Availability State
     const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
     const [selectedDays, setSelectedDays] = useState<string[]>([]);
-    const [startTime, setStartTime] = useState('09:00');
-    const [endTime, setEndTime] = useState('17:00');
+    const [startTime, setStartTime] = useState('17:00');
+    const [endTime, setEndTime] = useState('23:00');
     const [pickingType, setPickingType] = useState<'start' | 'end' | null>(null);
     const [scheduleLoading, setScheduleLoading] = useState(false);
 
@@ -236,11 +243,9 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
 
 
     const toggleDay = (day: string) => {
-        if (selectedDays.includes(day)) {
-            setSelectedDays(selectedDays.filter(d => d !== day));
-        } else {
-            setSelectedDays([...selectedDays, day]);
-        }
+        setSelectedDays(prev =>
+            prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+        );
     };
 
     const validateSchedule = () => {
@@ -285,9 +290,15 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                 scheduleObj[day] = { start: startTime, end: endTime };
             });
 
-            await updateUserPreferences(userData.uid, {
-                schedule: scheduleObj
-            } as any);
+            // Use updateDoc with a direct field set to REPLACE the whole schedule object.
+            // setDoc({ merge: true }) does a deep merge and never removes keys,
+            // which causes removed days to reappear after saving.
+            const { getFirestore, doc, updateDoc, serverTimestamp } = require('@react-native-firebase/firestore');
+            const db = getFirestore();
+            await updateDoc(doc(db, 'users', userData.uid), {
+                schedule: scheduleObj,
+                updatedAt: serverTimestamp(),
+            });
 
             setScheduleModalVisible(false);
             setSnackbarMessage('Schedule saved successfully!');
@@ -342,16 +353,16 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
             setSelectedDays(days);
             if (days.length > 0) {
                 const firstDay = days[0];
-                setStartTime(userData.schedule[firstDay]?.start || '09:00');
-                setEndTime(userData.schedule[firstDay]?.end || '17:00');
+                setStartTime(userData.schedule[firstDay]?.start || '17:00');
+                setEndTime(userData.schedule[firstDay]?.end || '23:00');
             } else {
-                setStartTime('09:00');
-                setEndTime('17:00');
+                setStartTime('17:00');
+                setEndTime('23:00');
             }
         } else {
             setSelectedDays([]);
-            setStartTime('09:00');
-            setEndTime('17:00');
+            setStartTime('17:00');
+            setEndTime('23:00');
         }
     }, [userData]);
     const { activeHelps, loadingMatches } = useDonorMatches(refreshKey, userData);
@@ -542,7 +553,7 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                 >
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Schedule Donor Availability</Text>
+                            <Text style={styles.modalTitle}>My Donation Availability</Text>
                             <TouchableOpacity
                                 disabled={scheduleLoading}
                                 onPress={() => setScheduleModalVisible(false)}
@@ -553,7 +564,7 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                         </View>
 
                         <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
-                            <Text style={styles.modalSubtitle}>Select Availability Days</Text>
+                            <Text style={styles.modalSubtitle}>Which days can you donate?</Text>
                             <View style={styles.daysContainer}>
                                 {['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].map(day => {
                                     const isSelected = selectedDays.includes(day);
@@ -578,11 +589,9 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                                 })}
                             </View>
 
-                            <Text style={styles.modalSubtitle}>Configure Time Slot</Text>
+                            <Text style={styles.modalSubtitle}>What time are you free to donate?</Text>
                             <View style={styles.dayTimeCard}>
-                                <Text style={styles.dayTimeTitle}>
-                                    Default Hours (Applies to all selected days)
-                                </Text>
+
                                 <View style={styles.timeButtonsRow}>
                                     <TouchableOpacity
                                         style={styles.timePickBtn}
@@ -590,8 +599,8 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                                             setPickingType('start');
                                         }}
                                     >
-                                        <Text style={styles.timePickLabel}>START TIME</Text>
-                                        <Text style={styles.timePickValue}>{startTime}</Text>
+                                        <Text style={styles.timePickLabel}>AVAILABLE FROM</Text>
+                                        <Text style={styles.timePickValue}>{to12hr(startTime)}</Text>
                                     </TouchableOpacity>
 
                                     <View style={styles.timeDivider}>
@@ -604,8 +613,8 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                                             setPickingType('end');
                                         }}
                                     >
-                                        <Text style={styles.timePickLabel}>END TIME</Text>
-                                        <Text style={styles.timePickValue}>{endTime}</Text>
+                                        <Text style={styles.timePickLabel}>AVAILABLE UNTIL</Text>
+                                        <Text style={styles.timePickValue}>{to12hr(endTime)}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -622,7 +631,7 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                                     return d;
                                 })()}
                                 mode="time"
-                                is24Hour={true}
+                                is24Hour={false}
                                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                                 onChange={onTimeChange}
                             />
@@ -1067,7 +1076,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         borderRadius: 24,
         padding: 24,
-        maxHeight: '90%',
+        maxHeight: '100%',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.15,

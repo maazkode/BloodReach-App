@@ -96,7 +96,11 @@ const UnifiedRegistrationScreen: React.FC<Props> = ({ navigation }) => {
 
     const handleDateChange = React.useCallback((event: any, selectedDate?: Date) => {
         setShowDatePicker(false);
-        if (selectedDate) setLastDonationDate(selectedDate);
+        // Only update the date when the user explicitly confirms (taps OK/Set)
+        // On Android, 'dismissed' means the user pressed Cancel — do not update
+        if (event.type === 'set' && selectedDate) {
+            setLastDonationDate(selectedDate);
+        }
     }, []);
 
     const validateForm = React.useCallback(() => {

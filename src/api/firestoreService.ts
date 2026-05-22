@@ -57,6 +57,38 @@ export const getCompatibleBloodGroups = (donorGroup: string): string[] => {
     return compatibilityMap[donorGroup] || [donorGroup];
 };
 
+/**
+ * Checks requests for expiry and updates Firestore lazily.
+ * Returns the updated array with accurate statuses.
+ */
+const checkAndUpdateExpiry = (requests: DonationRequest[]): DonationRequest[] => {
+    const now = new Date();
+    return requests.map(r => {
+        if (r.status === 'open' && r.requiredDate) {
+            let requiredTime: Date | null = null;
+            if (typeof (r.requiredDate as any).toDate === 'function') {
+                requiredTime = (r.requiredDate as any).toDate();
+            } else if ((r.requiredDate as any).seconds) {
+                requiredTime = new Date((r.requiredDate as any).seconds * 1000);
+            }
+
+            if (requiredTime) {
+                requiredTime.setHours(23, 59, 59, 999);
+                if (now > requiredTime) {
+                    if (r.id) {
+                        updateDoc(doc(db, 'requests', r.id), { 
+                            status: 'expired', 
+                            updatedAt: serverTimestamp() 
+                        }).catch(console.error);
+                    }
+                    return { ...r, status: 'expired' };
+                }
+            }
+        }
+        return r;
+    });
+};
+
 // ─── USER SERVICE ─────────────────────────────────────
 
 /**
@@ -192,11 +224,42 @@ export const createDonationRequest = async (
     requestData: Omit<DonationRequest, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<string> => {
     try {
+        const dataToSave = { ...requestData };
+        if (dataToSave.requiredDate && (dataToSave.requiredDate as any) instanceof Date) {
+            dataToSave.requiredDate = Timestamp.fromDate(dataToSave.requiredDate as any);
+        }
+
         const ref = await addDoc(collection(db, 'requests'), {
-            ...requestData,
+            ...dataToSave,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
         });
+
+        // Notify nearby eligible donors
+        if (requestData.location?.latitude && requestData.location?.longitude) {
+            // Do this asynchronously without blocking the return
+            getNearbyDonors({
+                latitude: requestData.location.latitude,
+                longitude: requestData.location.longitude,
+                radiusInKm: 15,
+                bloodGroup: requestData.bloodGroup,
+            })
+            .then(donors => {
+                donors.forEach(donor => {
+                    // Don't notify the requester if they are also a donor
+                    if (donor.uid === requestData.requesterId) return;
+                    
+                    queueNotification(
+                        donor.uid,
+                        '🩸 Urgent Blood Request',
+                        `A patient nearby needs ${requestData.bloodGroup} blood. Please consider donating!`,
+                        { type: 'new_request', requestId: ref.id }
+                    ).catch(err => console.error('Failed to queue notification for donor', err));
+                });
+            })
+            .catch(err => console.error('Failed to get nearby donors for notification', err));
+        }
+
         return ref.id;
     } catch (error) {
         console.error('[Firestore] createDonationRequest error:', error);
@@ -339,10 +402,12 @@ export const subscribeToNearbyRequests = (
             q,
             (snapshot) => {
                 if (!snapshot) return;
-                const requests = snapshot.docs.map((doc: any) => ({
+                const rawRequests = snapshot.docs.map((doc: any) => ({
                     id: doc.id,
                     ...doc.data()
                 } as DonationRequest));
+
+                const requests = checkAndUpdateExpiry(rawRequests);
 
                 // Status & Blood Group Compatibility Match
                 const filtered = requests.filter((r: DonationRequest) => {
@@ -393,10 +458,12 @@ export const getRequesterRequests = (
                     callback([]);
                     return;
                 }
-                const requests = snapshot.docs.map((doc: any) => ({
+                const rawRequests = snapshot.docs.map((doc: any) => ({
                     id: doc.id,
                     ...doc.data()
                 } as DonationRequest));
+
+                const requests = checkAndUpdateExpiry(rawRequests);
 
                 // Sort client-side to avoid index requirements
                 const sorted = requests.sort((a: DonationRequest, b: DonationRequest) => {
@@ -508,10 +575,6 @@ export const getNearbyDonors = async ({
             getDocs(
                 query(
                     collection(db, 'users'),
-                    where('roles', 'array-contains', 'donor'),
-                    where('isAvailable', '==', true),
-                    where('isEligibleToDonate', '==', true),
-                    where('bloodGroup', '==', bloodGroup),
                     orderBy('location.geohash'),
                     startAt(b[0]),
                     endAt(b[1])
@@ -525,6 +588,12 @@ export const getNearbyDonors = async ({
         snapshots.forEach((snap: FirebaseFirestoreTypes.QuerySnapshot) => {
             snap.docs.forEach((d: FirebaseFirestoreTypes.QueryDocumentSnapshot) => {
                 const data = d.data() as UserDocument;
+
+                // Local filtering to avoid Firestore composite index errors
+                const isDonor = data.roles?.includes('donor');
+                if (!isDonor || !data.isAvailable || !data.isEligibleToDonate || data.bloodGroup !== bloodGroup) {
+                    return;
+                }
 
                 if (!data.location?.latitude || !data.location?.longitude) return;
 

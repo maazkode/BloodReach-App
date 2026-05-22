@@ -231,6 +231,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                     urgencyLevel: isEmergency ? 'urgent' : 'normal',
                     status: 'open',
                     matchedDonorIds: [],
+                    requiredDate: date as any, // Will be converted to Timestamp in firestoreService
                 };
                 log('info', 'CreateRequest > handleSubmit', 'Submitting blood request', { bloodGroup, urgency: requestData.urgencyLevel });
                 await createDonationRequest(requestData);

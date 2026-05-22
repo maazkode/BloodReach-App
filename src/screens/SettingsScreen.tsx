@@ -38,35 +38,19 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     const { showModal } = useModal();
     const insets = useSafeAreaInsets();
-    const { user } = useAuth();
-    const [userData, setUserData] = React.useState<UserDocument | null>(null);
-    const [currentRole, setCurrentRole] = React.useState<UserRole | null>(null);
+    const { user, userData } = useAuth();
+    const currentRole = userData?.lastActiveRole;
+
     const [donorStats, setDonorStats] = React.useState({ count: 0, livesSaved: 0, rank: 'Bronze' });
     const [roleLoading, setRoleLoading] = React.useState(false);
     const [locationLoading, setLocationLoading] = React.useState(false);
     const [logoutLoading, setLogoutLoading] = React.useState(false);
-    const [loadingUser, setLoadingUser] = React.useState(true);
     const [activeTab, setActiveTab] = React.useState('settings');
 
     React.useEffect(() => {
         if (!user) return;
-        const unsubUser = subscribeToUser(user.uid, (data) => {
-            if (data) {
-                setUserData(data);
-                // Only sync from Firestore if not currently performing a role switch
-                if (!roleLoading) {
-                    setCurrentRole(data.lastActiveRole);
-                }
-                setLoadingUser(false);
-            } else {
-                setLoadingUser(false);
-            }
-        });
         const unsubStats = getDonorStats(user.uid, setDonorStats);
-        return () => {
-            unsubUser();
-            unsubStats();
-        };
+        return () => unsubStats();
     }, [user]);
 
     const handleLogout = React.useCallback(() => {
@@ -99,7 +83,6 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         const targetScreen = newRole === 'donor' ? 'DonorDashboard' : 'RequesterDashboard';
 
         setRoleLoading(true);
-        setCurrentRole(newRole); // Update locally instantly
 
         await safeRun(
             () => createUserDocument({ uid: user.uid, lastActiveRole: newRole }),
@@ -111,11 +94,14 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 onSuccess: () => {
                     log('info', 'Settings > handleSwitchRole', `Switched to ${newRole}`);
                     setTimeout(() => {
-                        navigation.replace(targetScreen, { tab: 'home' });
+                        navigation.reset({
+                            index: 0,
+                            routes: [{ name: targetScreen as any, params: { tab: 'home' } }],
+                        });
                     }, 100);
                 },
                 onError: () => {
-                    setCurrentRole(currentRole);
+                    // Role switch failed, state remains unchanged via global provider
                 }
             }
         );
@@ -184,7 +170,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         },
     ], [currentRole, navigation]);
 
-    if (loadingUser) {
+    if (!userData) {
         return <LoadingScreen tagline="Synchronizing your profile data..." />;
     }
 

@@ -63,7 +63,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 }
 
                 if (profile && profile.profileCompleted && profile.roles) {
-                    if (profile.roles.includes('donor')) {
+                    if (profile.lastActiveRole === 'donor') {
                         navigation.replace('DonorDashboard', { tab: 'home' });
                     } else {
                         navigation.replace('RequesterDashboard', { tab: 'home' });

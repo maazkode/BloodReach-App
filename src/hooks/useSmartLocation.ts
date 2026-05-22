@@ -10,58 +10,64 @@ const DISTANCE_THRESHOLD_KM = 15;
 
 export const useSmartLocation = () => {
     const { userData } = useAuth();
-    const appState = useRef(AppState.currentState);
+
+    // Store userData in a ref so the AppState listener always has the latest
+    // values without being re-registered on every Firestore snapshot.
+    const userDataRef = useRef(userData);
+    useEffect(() => {
+        userDataRef.current = userData;
+    }, [userData]);
 
     useEffect(() => {
-        // Only run when donor mode is enabled
-        if (!userData || !userData.isAvailable || userData.lastActiveRole !== 'donor') {
-            return;
-        }
-
-        const pref = userData.smartLocationPreference || 'auto';
-        if (pref === 'off') return;
-
         const checkLocation = async () => {
+            const current = userDataRef.current;
+
+            // Guard: only run for active, available donors
+            if (!current || !current.isAvailable || current.lastActiveRole !== 'donor') return;
+
+            const pref = current.smartLocationPreference || 'auto';
+            if (pref === 'off') return;
+
+            // Throttle — skip if checked recently
             const now = Date.now();
             if (now - lastCheckedTime < CHECK_INTERVAL_MS) return;
 
-            try {
-                // Temporarily mark as checked to prevent overlapping calls
-                lastCheckedTime = now;
+            // Mark attempted before the async call to prevent overlapping runs
+            lastCheckedTime = now;
 
+            try {
                 const newLoc = await getFullLocationData();
-                if (!userData.location?.latitude || !userData.location?.longitude) return;
+
+                if (!current.location?.latitude || !current.location?.longitude) return;
 
                 const distance = getDistance(
-                    userData.location.latitude,
-                    userData.location.longitude,
+                    current.location.latitude,
+                    current.location.longitude,
                     newLoc.latitude,
                     newLoc.longitude
                 );
 
                 if (distance > DISTANCE_THRESHOLD_KM) {
-                    const city = newLoc.address?.split(',')[0].trim() || userData.city;
-                    const address = newLoc.address || userData.address;
+                    const city = newLoc.address?.split(',')[0].trim() || current.city;
+                    const address = newLoc.address || current.address;
 
-                    const updateLocation = async () => {
-                        await updateUserLocation(
-                            userData.uid,
-                            {
-                                latitude: newLoc.latitude,
-                                longitude: newLoc.longitude,
-                                geohash: newLoc.geohash,
-                            },
-                            city,
-                            address
-                        );
-                    };
-
-                    // Silently update location without showing any modals
-                    await updateLocation();
+                    await updateUserLocation(
+                        current.uid,
+                        {
+                            latitude: newLoc.latitude,
+                            longitude: newLoc.longitude,
+                            geohash: newLoc.geohash,
+                        },
+                        city,
+                        address
+                    );
+                    console.log('[SmartLocation] Location updated — moved', distance.toFixed(1), 'km');
                 }
-            } catch (error) {
-                console.error('[SmartLocation] Check failed:', error);
-                // Revert checked time on error so it can retry sooner
+            } catch (error: any) {
+                // Log a meaningful message based on the error type
+                const reason = error?.message || error?.code || 'Unknown error';
+                console.warn('[SmartLocation] Check skipped:', reason);
+                // Revert so it retries sooner on the next app resume
                 lastCheckedTime = 0;
             }
         };
@@ -73,13 +79,17 @@ export const useSmartLocation = () => {
             appState.current = nextAppState;
         };
 
+        const appState = { current: AppState.currentState };
         const subscription = AppState.addEventListener('change', handleAppStateChange);
 
-        // Also run once on mount
+        // Run once on mount
         checkLocation();
 
         return () => {
             subscription.remove();
         };
-    }, [userData]);
+
+        // Empty deps: the effect is set up ONCE. The AppState listener always
+        // reads the latest userData via userDataRef — no re-registration needed.
+    }, []);
 };

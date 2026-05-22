@@ -14,6 +14,7 @@ import DonorHelpDetailScreen from '../screens/DonorHelpDetailScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import { useSmartLocation } from '../hooks/useSmartLocation';
+import { useAppNotificationListener } from '../hooks/useAppNotificationListener';
 import {
   navigationRef,
   subscribeToForegroundMessages,
@@ -40,6 +41,7 @@ const AppNavigator = () => {
   const { user, loading } = useAuth();
   
   useSmartLocation();
+  useAppNotificationListener();
 
   useEffect(() => {
     // Initialize Notification Channels (Notifee)
@@ -83,12 +85,12 @@ const AppNavigator = () => {
           <>
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="UnifiedRegistration" component={UnifiedRegistrationScreen} />
-            <Stack.Screen name="DonorDashboard" component={DonorDashboard} />
-            <Stack.Screen name="RequesterDashboard" component={RequesterDashboard} />
+            <Stack.Screen name="DonorDashboard" component={DonorDashboard} options={{ animation: 'none' }} />
+            <Stack.Screen name="RequesterDashboard" component={RequesterDashboard} options={{ animation: 'none' }} />
             <Stack.Screen name="CreateRequest" component={CreateRequestScreen} />
             <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
             <Stack.Screen name="DonorHelpDetail" component={DonorHelpDetailScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation: 'none' }} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
             <Stack.Screen name="Auth" component={AuthScreen} options={{ animation: 'fade' }} />
           </>

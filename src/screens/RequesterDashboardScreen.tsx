@@ -63,6 +63,10 @@ const StatusBadge = React.memo(({ status }: { status: string }) => {
     } else if (status === 'CLOSED') {
         bgColor = '#E2E8F0';
         textColor = '#64748B';
+    } else if (status === 'EXPIRED') {
+        bgColor = '#F3F4F6';
+        textColor = '#6B7280';
+        icon = <MaterialIcon name="timer-off" size={12} color="#6B7280" style={{ marginRight: 4 }} />;
     }
 
     return (
@@ -77,16 +81,17 @@ const RequestCard = React.memo(({ item, onPress }: { item: DonationRequest, onPr
     // Explicitly filter out requesterId to prevent self-counting bugs
     const donorCount = (item.matchedDonorIds || []).filter(id => id !== item.requesterId).length;
     const isCompleted = item.status === 'completed';
+    const isExpired = item.status === 'expired';
 
     return (
         <TouchableOpacity
             activeOpacity={0.8}
-            style={[styles.requestCard, isCompleted && styles.completedCard]}
+            style={[styles.requestCard, (isCompleted || isExpired) && styles.completedCard]}
             onPress={() => onPress(item)}
         >
             <View style={styles.cardMain}>
-                <View style={[styles.bloodBadge, isCompleted && styles.bloodBadgeClosed]}>
-                    <Text style={[styles.bloodBadgeText, isCompleted && styles.bloodBadgeTextClosed]}>
+                <View style={[styles.bloodBadge, (isCompleted || isExpired) && styles.bloodBadgeClosed]}>
+                    <Text style={[styles.bloodBadgeText, (isCompleted || isExpired) && styles.bloodBadgeTextClosed]}>
                         {item.bloodGroup}
                     </Text>
                 </View>
@@ -113,6 +118,7 @@ const RequestCard = React.memo(({ item, onPress }: { item: DonationRequest, onPr
                         {item.status === 'open' && <StatusBadge status="WAITING" />}
                         {item.status === 'matched' && <StatusBadge status="MATCHED" />}
                         {isCompleted && <StatusBadge status="CLOSED" />}
+                        {isExpired && <StatusBadge status="EXPIRED" />}
                     </View>
                 </View>
             </View>
@@ -133,6 +139,11 @@ const RequestCard = React.memo(({ item, onPress }: { item: DonationRequest, onPr
                             <MaterialIcon name="check-circle" size={18} color="#94A3B8" />
                             <Text style={[styles.matchLabel, { color: '#94A3B8' }]}>Request Fulfilled</Text>
                         </View>
+                    ) : isExpired ? (
+                        <View style={styles.matchesRow}>
+                            <MaterialIcon name="timer-off" size={18} color="#94A3B8" />
+                            <Text style={[styles.matchLabel, { color: '#94A3B8' }]}>Request Expired</Text>
+                        </View>
                     ) : (
                         <View style={styles.infoRow}>
                             <View style={styles.pulseDot} />
@@ -144,12 +155,12 @@ const RequestCard = React.memo(({ item, onPress }: { item: DonationRequest, onPr
                 <View style={styles.footerRight}>
                     <Text style={[
                         styles.viewDetailsText,
-                        isCompleted && styles.viewDetailsTextOutline
+                        (isCompleted || isExpired) && styles.viewDetailsTextOutline
                     ]}>Manage</Text>
                     <MaterialIcon
                         name="chevron-right"
                         size={20}
-                        color={isCompleted ? '#94A3B8' : '#B62022'}
+                        color={(isCompleted || isExpired) ? '#94A3B8' : '#B62022'}
                     />
                 </View>
             </View>
@@ -337,7 +348,7 @@ const RequesterDashboard: React.FC<Props> = ({ route, navigation }) => {
                     { key: 'home', label: 'Home', icon: 'home', activeIcon: 'home', onPress: () => setActiveTab('home') },
                     { key: 'requests', label: 'Requests', icon: 'list-alt', onPress: () => setActiveTab('requests') },
                     { key: 'history', label: 'History', icon: 'history', onPress: () => setActiveTab('history') },
-                    { key: 'settings', label: 'Settings', icon: 'settings', activeIcon: 'settings', onPress: () => { setActiveTab('settings'); navigation.navigate('Settings'); } },
+                    { key: 'settings', label: 'Settings', icon: 'settings', activeIcon: 'settings', onPress: () => { navigation.navigate('Settings'); } },
                 ]}
             />
         </View>

@@ -8,23 +8,30 @@ export const useDonorMatches = (refreshKey?: number, userData?: UserDocument | n
     const [activeHelps, setActiveHelps] = React.useState<any[]>([]);
     const [loadingMatches, setLoadingMatches] = React.useState(true);
 
+    // Store userData in a ref so the callback always has the latest value
+    // without the effect needing to re-run (and resubscribe) when it changes.
+    const userDataRef = React.useRef(userData);
+    React.useEffect(() => {
+        userDataRef.current = userData;
+    }, [userData]);
+
     React.useEffect(() => {
         if (!user) {
             setLoadingMatches(false);
             return;
         }
-        
+
         setLoadingMatches(true);
         const unsubMatches = getActiveDonorMatches(user.uid, (matches) => {
-            // Attach distance to each match's embedded request (same as nearbyRequests)
+            const latestUserData = userDataRef.current;
             const enriched = matches.map(match => {
                 if (
                     match.request?.location?.latitude &&
-                    userData?.location?.latitude
+                    latestUserData?.location?.latitude
                 ) {
                     const dist = getDistance(
-                        userData.location.latitude,
-                        userData.location.longitude,
+                        latestUserData.location.latitude,
+                        latestUserData.location.longitude,
                         match.request.location.latitude,
                         match.request.location.longitude
                     );
@@ -35,9 +42,11 @@ export const useDonorMatches = (refreshKey?: number, userData?: UserDocument | n
             setActiveHelps(enriched);
             setLoadingMatches(false);
         });
-        
+
         return () => unsubMatches();
-    }, [user, refreshKey, userData]);
+        // Only resubscribe when user identity or manual refreshKey changes.
+        // userData changes are handled via ref above.
+    }, [user, refreshKey]);
 
     return { activeHelps, loadingMatches };
 };
