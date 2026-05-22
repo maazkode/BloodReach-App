@@ -126,7 +126,7 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
                     {/* Logo */}
                     <Animated.View style={[styles.logoWrapper, { transform: [{ scale: pulseAnim }] }]}>
                         <Image
-                            source={require('../assets/logo.png')} // ✅ clean path
+                            source={require('../assets/logo.webp')} // ✅ clean path
                             style={styles.logo}
                             resizeMode="contain"
                         />

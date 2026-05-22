@@ -57,7 +57,7 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({
                 <View style={styles.loadingLogoBox}>
                     <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
                         <Image
-                            source={require('../../assets/logo.png')}
+                            source={require('../../assets/logo.webp')}
                             style={styles.loadingLogo}
                             resizeMode="contain"
                         />

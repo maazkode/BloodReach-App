@@ -434,7 +434,7 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                     )}
                     ListHeaderComponent={<View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Matching Requests</Text></View>}
                     ListEmptyComponent={<View style={styles.emptyBox}><MaterialCommunityIcon name="water-off-outline" size={36} color="#CBD5E1" /><Text style={styles.emptyText}>No active matching requests nearby</Text></View>}
-                    contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+                    contentContainerStyle={{ paddingTop: 20, paddingBottom: insets.bottom + 100 }}
                 />
             );
         }
@@ -451,7 +451,7 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
                     )}
                     ListHeaderComponent={<View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Donation History</Text></View>}
                     ListEmptyComponent={<View style={styles.emptyBox}><MaterialCommunityIcon name="history" size={36} color="#CBD5E1" /><Text style={styles.emptyText}>You haven't completed any donations yet.</Text></View>}
-                    contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+                    contentContainerStyle={{ paddingTop: 20, paddingBottom: insets.bottom + 100 }}
                 />
             );
         }
@@ -460,12 +460,12 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
         return (
             <ScrollView
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
             >
                 {renderHero()}
 
-                {!isHomeLoading && activeHelps.length > 0 && (
-                    <View style={{ marginBottom: 20 }}>
+                {!isHomeLoading && activeHelps.filter(m => !!m.request).length > 0 && (
+                    <View>
                         <View style={styles.sectionHeader}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Text style={styles.sectionTitle}>Active Helps</Text>
@@ -530,7 +530,7 @@ const DonorDashboard: React.FC<Props> = ({ route, navigation }) => {
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
                 <View style={styles.headerBrand}>
-                    <Image source={require('../assets/logo.png')} style={styles.headerLogo} resizeMode="contain" />
+                    <Image source={require('../assets/logo.webp')} style={styles.headerLogo} resizeMode="contain" />
                     <Text style={styles.headerBrandName}>BloodReach</Text>
                 </View>
             </View>
@@ -1011,7 +1011,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         marginBottom: 12,
-        marginTop: 20,
     },
     sectionTitle: {
         fontSize: 18,

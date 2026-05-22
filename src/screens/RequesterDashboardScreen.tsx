@@ -327,7 +327,7 @@ const RequesterDashboard: React.FC<Props> = ({ route, navigation }) => {
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
                 <View style={styles.headerBrand}>
                     <Image
-                        source={require('../assets/logo.png')}
+                        source={require('../assets/logo.webp')}
                         style={styles.headerLogo}
                         resizeMode="contain"
                     />

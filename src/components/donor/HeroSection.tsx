@@ -13,12 +13,12 @@ interface HeroProps {
 export const RestrictedHero: React.FC<HeroProps> = ({ userData, styles }) => (
     <View style={[styles.heroCard, styles.heroCardRestricted]}>
         <View style={styles.unifiedCardTop}>
+            <View style={styles.bloodBadge}>
+                <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || '--'}</Text>
+            </View>
             <View style={styles.eligiblePillRestricted}>
                 <MaterialIcon name="error-outline" size={14} color="#fff" style={{ marginRight: 4 }} />
                 <Text style={styles.eligiblePillText}>RESTRICTED</Text>
-            </View>
-            <View style={styles.bloodBadge}>
-                <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || '--'}</Text>
             </View>
         </View>
         <Text style={styles.unifiedTitleLarge}>Medical Restriction</Text>
@@ -33,12 +33,12 @@ export const RestrictedHero: React.FC<HeroProps> = ({ userData, styles }) => (
 export const CooldownHero: React.FC<HeroProps> = ({ userData, styles }) => (
     <View style={[styles.heroCard, styles.heroCardCooldown]}>
         <View style={styles.unifiedCardTop}>
+            <View style={styles.bloodBadge}>
+                <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || 'A+'}</Text>
+            </View>
             <View style={[styles.eligiblePill, styles.cooldownPill]}>
                 <View style={[styles.dot, styles.redDot]} />
                 <Text style={styles.eligiblePillText}>RECOVERY MODE</Text>
-            </View>
-            <View style={styles.bloodBadge}>
-                <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || 'A+'}</Text>
             </View>
         </View>
         <Text style={styles.unifiedTitleLarge}>Take Rest & Recover</Text>
@@ -53,12 +53,12 @@ export const ActiveHero: React.FC<HeroProps> = ({ userData, styles, onSchedulePr
         return (
             <View style={[styles.heroCard, styles.heroCardResting]}>
                 <View style={styles.unifiedCardTop}>
+                    <View style={styles.bloodBadge}>
+                        <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || 'A+'}</Text>
+                    </View>
                     <View style={[styles.eligiblePill, styles.restingPill]}>
                         <View style={[styles.dot, styles.amberDot]} />
                         <Text style={styles.eligiblePillText}>RESTING MODE</Text>
-                    </View>
-                    <View style={styles.bloodBadge}>
-                        <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || 'A+'}</Text>
                     </View>
                 </View>
                 <Text style={styles.unifiedTitleLarge}>Off-Duty / Resting</Text>
@@ -76,14 +76,14 @@ export const ActiveHero: React.FC<HeroProps> = ({ userData, styles, onSchedulePr
     return (
         <View style={styles.heroCard}>
             <View style={styles.unifiedCardTop}>
+                <View style={styles.bloodBadge}>
+                    <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || 'A+'}</Text>
+                </View>
                 <View style={styles.eligiblePill}>
                     <View style={[styles.dot, styles.greenDot]} />
                     <Text style={styles.eligiblePillText}>
                         {userData?.isAvailable ? 'ACTIVE' : 'OFFLINE'}
                     </Text>
-                </View>
-                <View style={styles.bloodBadge}>
-                    <Text style={styles.bloodBadgeText}>{userData?.bloodGroup || 'A+'}</Text>
                 </View>
             </View>
             <Text style={styles.unifiedTitleLarge}>Ready to Save Lives</Text>
