@@ -289,10 +289,18 @@ const DonorHelpDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                                 </TouchableOpacity>
                             )
                         ) : myMatch.status === 'pending' ? (
-                            <View style={styles.pendingStatusBox}>
-                                <ActivityIndicator size="small" color="#B62022" />
-                                <Text style={styles.pendingStatusText}>Request Sent. Waiting for approval...</Text>
-                            </View>
+                            <TouchableOpacity
+                                style={[styles.cancelActionBtn, { marginTop: 0 }]}
+                                onPress={() => handleUpdateStatus('cancelled')}
+                                disabled={actionLoading}
+                            >
+                                {actionLoading ? <ActivityIndicator color="#94A3B8" /> : (
+                                    <>
+                                        <MaterialCommunityIcon name="close-circle-outline" size={20} color="#94A3B8" />
+                                        <Text style={styles.cancelActionText}>Cancel Request</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
                         ) : myMatch.status === 'accepted' ? null : myMatch.status === 'in_progress' ? (
                             <View style={styles.activeMatchCard}>
                                 <View style={styles.matchStatusBanner}>

@@ -9,11 +9,14 @@ import {
 } from '../api/firestoreService';
 import { triggerLocalNotification } from '../api/notificationService';
 import { DonationRequest, UserDocument } from '../types/database';
+import notifee, { AndroidImportance } from '@notifee/react-native';
 
 export const useDonorRequests = (userData: UserDocument | null, loadingUser: boolean, activeHelps: any[]) => {
     const { user } = useAuth();
     const [nearbyRequests, setNearbyRequests] = React.useState<DonationRequest[]>([]);
     const [loadingRequests, setLoadingRequests] = React.useState(true);
+    const notifiedRequestIds = React.useRef<Set<string>>(new Set());
+    const listenerStartTime = React.useRef<number>(Date.now());
 
     // ── Extract only the primitives that determine WHICH query to run ─────────
     const lat = userData?.location?.latitude ?? null;
@@ -35,6 +38,8 @@ export const useDonorRequests = (userData: UserDocument | null, loadingUser: boo
         if (!user || loadingUser) return;
 
         let unsubscribe: () => void = () => { };
+
+        listenerStartTime.current = Date.now();
 
         const filterAndEnrichRequests = (requests: DonationRequest[], isGlobal = false) => {
             const latestUserData = userDataRef.current;
@@ -91,6 +96,42 @@ export const useDonorRequests = (userData: UserDocument | null, loadingUser: boo
             return filtered;
         };
 
+        const processAndNotifyRequests = (filteredRequests: DonationRequest[], title: string) => {
+            filteredRequests.forEach(r => {
+                if (!r.id) return;
+                if (notifiedRequestIds.current.has(r.id)) return;
+
+                const createdAt = (r.createdAt as any)?.toDate
+                    ? (r.createdAt as any).toDate().getTime()
+                    : (r.createdAt as any)?.seconds
+                        ? (r.createdAt as any).seconds * 1000
+                        : typeof r.createdAt === 'number'
+                            ? r.createdAt
+                            : null;
+
+                if (createdAt && createdAt > listenerStartTime.current) {
+                    notifiedRequestIds.current.add(r.id);
+                    notifee.displayNotification({
+                        title,
+                        body: `A patient needs ${r.bloodGroup} blood at ${r.hospitalName || 'a nearby hospital'}.`,
+                        android: {
+                            channelId: 'default',
+                            importance: AndroidImportance.HIGH,
+                            pressAction: {
+                                id: 'default',
+                            },
+                            smallIcon: 'ic_launcher',
+                        },
+                        data: {
+                            requestId: r.id,
+                        },
+                    }).catch(err => console.error('Failed to display notifee notification:', err));
+                } else {
+                    notifiedRequestIds.current.add(r.id);
+                }
+            });
+        };
+
         if (lat && lng && isAvailable && isEligible) {
             unsubscribe = subscribeToNearbyRequests(
                 lat,
@@ -101,6 +142,9 @@ export const useDonorRequests = (userData: UserDocument | null, loadingUser: boo
                     const filtered = filterAndEnrichRequests(requests);
                     setNearbyRequests(filtered.slice(0, 10));
                     setLoadingRequests(false);
+
+                    // Notify for new matching requests
+                    processAndNotifyRequests(filtered, 'Urgent Blood Request Nearby');
                 }
             );
         } else {
@@ -108,6 +152,9 @@ export const useDonorRequests = (userData: UserDocument | null, loadingUser: boo
                 const filtered = filterAndEnrichRequests(requests, true);
                 setNearbyRequests(filtered.slice(0, 5));
                 setLoadingRequests(false);
+
+                // Notify for new matching requests
+                processAndNotifyRequests(filtered, 'Urgent Blood Request');
             });
         }
 

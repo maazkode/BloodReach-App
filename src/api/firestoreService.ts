@@ -76,9 +76,9 @@ const checkAndUpdateExpiry = (requests: DonationRequest[]): DonationRequest[] =>
                 requiredTime.setHours(23, 59, 59, 999);
                 if (now > requiredTime) {
                     if (r.id) {
-                        updateDoc(doc(db, 'requests', r.id), { 
-                            status: 'expired', 
-                            updatedAt: serverTimestamp() 
+                        updateDoc(doc(db, 'requests', r.id), {
+                            status: 'expired',
+                            updatedAt: serverTimestamp()
                         }).catch(console.error);
                     }
                     return { ...r, status: 'expired' };
@@ -244,20 +244,20 @@ export const createDonationRequest = async (
                 radiusInKm: 15,
                 bloodGroup: requestData.bloodGroup,
             })
-            .then(donors => {
-                donors.forEach(donor => {
-                    // Don't notify the requester if they are also a donor
-                    if (donor.uid === requestData.requesterId) return;
-                    
-                    queueNotification(
-                        donor.uid,
-                        '🩸 Urgent Blood Request',
-                        `A patient nearby needs ${requestData.bloodGroup} blood. Please consider donating!`,
-                        { type: 'new_request', requestId: ref.id }
-                    ).catch(err => console.error('Failed to queue notification for donor', err));
-                });
-            })
-            .catch(err => console.error('Failed to get nearby donors for notification', err));
+                .then(donors => {
+                    donors.forEach(donor => {
+                        // Don't notify the requester if they are also a donor
+                        if (donor.uid === requestData.requesterId) return;
+
+                        queueNotification(
+                            donor.uid,
+                            '🩸 Urgent Blood Request',
+                            `A patient nearby needs ${requestData.bloodGroup} blood. Please consider donating!`,
+                            { type: 'new_request', requestId: ref.id }
+                        ).catch(err => console.error('Failed to queue notification for donor', err));
+                    });
+                })
+                .catch(err => console.error('Failed to get nearby donors for notification', err));
         }
 
         return ref.id;
