@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { getAuth } from '@react-native-firebase/auth';
@@ -301,6 +300,11 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                 title={isRequester ? 'Request Control' : 'Donation Details'}
                 onBack={() => navigation.goBack()}
                 topInset={insets.top}
+                rightElement={isRequester && request.status !== 'completed' ? (
+                    <TouchableOpacity onPress={() => navigation.navigate('CreateRequest', { editMode: true, requestData: request })}>
+                        <MaterialIcon name="edit" size={24} color="#B62022" />
+                    </TouchableOpacity>
+                ) : undefined}
             />
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -317,6 +321,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                         matchedDonorsCount={request.matchedDonorIds?.length || 0}
                         postedAt={getTimeAgo(request.createdAt)}
                         onGetDirections={!isRequester ? handleOpenMaps : undefined}
+                        phone={isRequester ? request.phone : undefined}
                     />
 
                     {isRequester && (
@@ -335,7 +340,7 @@ const RequestDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                                 <DetailInfoCard
                                     mainText="Searching for Donors..."
                                     subText="We've notified nearby heroes."
-                                    icon="account-search-outline"
+                                    icon="person-search"
                                 />
                             ) : (
                                 matches.map((m) => (

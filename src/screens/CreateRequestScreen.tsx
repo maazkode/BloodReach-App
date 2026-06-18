@@ -22,7 +22,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getAuth } from '@react-native-firebase/auth';
 
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { createDonationRequest } from '../api/firestoreService';
+import { createDonationRequest, updateDonationRequest } from '../api/firestoreService';
 import { DonationRequest } from '../types/database';
 import { getFullLocationData, forwardGeocode } from '../api/locationService';
 import { geohashForLocation } from 'geofire-common';
@@ -37,23 +37,33 @@ const removeEmojis = (text: string) => {
     return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F02B}\u{1F004}\u{1F0CF}\u{1F018}-\u{1F02B}\u{1F004}\u{1F0CF}]/gu, '');
 };
 
-const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
+const CreateRequestScreen: React.FC<Props> = ({ route, navigation }) => {
     const { showModal } = useModal();
     const insets = useSafeAreaInsets();
 
-    const [patientName, setPatientName] = useState('');
-    const [bloodGroup, setBloodGroup] = useState('');
-    const [units, setUnits] = useState('1');
-    const [hospital, setHospital] = useState('');
-    const [address, setAddress] = useState('');
+    const editMode = route.params?.editMode || false;
+    const reqData = route.params?.requestData;
+
+    const [patientName, setPatientName] = useState(reqData?.patientName || '');
+    const [bloodGroup, setBloodGroup] = useState(reqData?.bloodGroup || '');
+    const [units, setUnits] = useState(reqData?.unitsRequired?.toString() || '1');
+    const [hospital, setHospital] = useState(reqData?.hospitalName || '');
+    const [address, setAddress] = useState(reqData?.city || '');
     const [fetchingLocation, setFetchingLocation] = useState(false);
-    const [date, setDate] = useState(new Date());
-    const [isEmergency, setIsEmergency] = useState(false);
-    const [phone, setPhone] = useState('');
-    const [coordinates, setCoordinates] = useState<{ latitude: number, longitude: number, geohash: string } | null>(null);
-    const [lastGeocodedAddress, setLastGeocodedAddress] = useState('');
-    const [isLocationVerified, setIsLocationVerified] = useState(false);
-    
+
+    const initialDate = reqData?.requiredDate
+        ? (typeof reqData.requiredDate.toDate === 'function'
+            ? reqData.requiredDate.toDate()
+            : new Date(reqData.requiredDate.seconds * 1000))
+        : new Date();
+    const [date, setDate] = useState(initialDate);
+
+    const [isEmergency, setIsEmergency] = useState(reqData?.urgencyLevel === 'urgent');
+    const [phone, setPhone] = useState(reqData?.phone || '');
+    const [coordinates, setCoordinates] = useState<{ latitude: number, longitude: number, geohash: string } | null>(reqData?.location || null);
+    const [lastGeocodedAddress, setLastGeocodedAddress] = useState(reqData?.city || '');
+    const [isLocationVerified, setIsLocationVerified] = useState(!!reqData?.location);
+
     // New states for inline verification
     const [isDetecting, setIsDetecting] = useState(false);
     const [hasGeocodeFailed, setHasGeocodeFailed] = useState(false);
@@ -188,7 +198,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
         }
         if (!hospital.trim()) tempErrors.hospital = 'Hospital name is required';
         if (!address.trim()) tempErrors.address = 'Address is required';
-        
+
         if (!isLocationVerified || !coordinates || address !== lastGeocodedAddress) {
             tempErrors.location = 'Location verification is required (use Locate)';
         }
@@ -218,23 +228,40 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
         setLoading(true);
         await safeRun(
             async () => {
-                const requestData: Omit<DonationRequest, 'id' | 'createdAt' | 'updatedAt'> = {
-                    requesterId: currentUser.uid,
-                    patientName: patientName.trim(),
-                    phone: phone.trim(),
-                    bloodGroup,
-                    unitsRequired: parseInt(units) || 1,
-                    hospitalName: hospital.trim(),
-                    hospitalAddress: hospital.trim(),
-                    city: address,
-                    location: coordinates!,
-                    urgencyLevel: isEmergency ? 'urgent' : 'normal',
-                    status: 'open',
-                    matchedDonorIds: [],
-                    requiredDate: date as any, // Will be converted to Timestamp in firestoreService
-                };
-                log('info', 'CreateRequest > handleSubmit', 'Submitting blood request', { bloodGroup, urgency: requestData.urgencyLevel });
-                await createDonationRequest(requestData);
+                if (editMode && reqData?.id) {
+                    const updateData: Partial<DonationRequest> = {
+                        patientName: patientName.trim(),
+                        phone: phone.trim(),
+                        bloodGroup,
+                        unitsRequired: parseInt(units) || 1,
+                        hospitalName: hospital.trim(),
+                        hospitalAddress: hospital.trim(),
+                        city: address,
+                        location: coordinates!,
+                        urgencyLevel: isEmergency ? 'urgent' : 'normal',
+                        requiredDate: date as any,
+                    };
+                    log('info', 'CreateRequest > handleSubmit', 'Updating blood request', { bloodGroup, urgency: updateData.urgencyLevel });
+                    await updateDonationRequest(reqData.id, updateData);
+                } else {
+                    const requestData: Omit<DonationRequest, 'id' | 'createdAt' | 'updatedAt'> = {
+                        requesterId: currentUser.uid,
+                        patientName: patientName.trim(),
+                        phone: phone.trim(),
+                        bloodGroup,
+                        unitsRequired: parseInt(units) || 1,
+                        hospitalName: hospital.trim(),
+                        hospitalAddress: hospital.trim(),
+                        city: address,
+                        location: coordinates!,
+                        urgencyLevel: isEmergency ? 'urgent' : 'normal',
+                        status: 'open',
+                        matchedDonorIds: [],
+                        requiredDate: date as any, // Will be converted to Timestamp in firestoreService
+                    };
+                    log('info', 'CreateRequest > handleSubmit', 'Submitting blood request', { bloodGroup, urgency: requestData.urgencyLevel });
+                    await createDonationRequest(requestData);
+                }
             },
             {
                 context: 'CreateRequest > handleSubmit',
@@ -243,8 +270,8 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 showModal,
                 onSuccess: () =>
                     showModal({
-                        title: 'Request Submitted ✓',
-                        description: 'Your blood request is now live. Nearby donors will be notified.',
+                        title: editMode ? 'Request Updated ✓' : 'Request Submitted ✓',
+                        description: editMode ? 'Your blood request has been successfully updated.' : 'Your blood request is now live. Nearby donors will be notified.',
                         type: 'success',
                         primaryText: 'Done',
                         onPrimaryPress: () => navigation.goBack()
@@ -262,7 +289,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                 <TouchableOpacity onPress={() => navigation.goBack()}>
                     <MaterialIcon name="arrow-back" size={24} color="#1E293B" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Blood Request</Text>
+                <Text style={styles.headerTitle}>{editMode ? 'Edit Request' : 'Blood Request'}</Text>
                 <View style={{ width: 24 }} />
             </View>
 
@@ -409,10 +436,10 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                                     <ActivityIndicator size="small" color="#B62022" />
                                 ) : (
                                     <>
-                                        <MaterialIcon 
-                                            name={isLocationVerified && address === lastGeocodedAddress ? "check-circle" : "location-searching"} 
-                                            size={16} 
-                                            color={isLocationVerified && address === lastGeocodedAddress ? "#16A34A" : "#B62022"} 
+                                        <MaterialIcon
+                                            name={isLocationVerified && address === lastGeocodedAddress ? "check-circle" : "location-searching"}
+                                            size={16}
+                                            color={isLocationVerified && address === lastGeocodedAddress ? "#16A34A" : "#B62022"}
                                         />
                                         <Text style={[
                                             styles.locationButtonText,
@@ -471,7 +498,7 @@ const CreateRequestScreen: React.FC<Props> = ({ navigation }) => {
                             {loading ? (
                                 <ActivityIndicator color="#fff" />
                             ) : (
-                                <Text style={styles.submitText}>Submit Request</Text>
+                                <Text style={styles.submitText}>{editMode ? 'Save Changes' : 'Submit Request'}</Text>
                             )}
                         </TouchableOpacity>
                     </View>

@@ -81,7 +81,25 @@ async function processBloodRequest(event: any) {
         const requesterDoc = await admin.firestore().collection("users").doc(requestData.requesterId).get();
         if (requesterDoc.exists) {
           const reqData = requesterDoc.data();
-          if (reqData?.fcmToken) {
+          
+          let skipRequester = false;
+          if (reqData && (reqData.isAvailable !== true || reqData.isEligibleToDonate !== true)) {
+            skipRequester = true;
+          }
+          if (reqData && reqData.schedule) {
+            let offsetHours = 5;
+            if (reqData.location && typeof reqData.location.longitude === "number") {
+                offsetHours = Math.round(reqData.location.longitude / 15);
+            }
+            const localDate = new Date(Date.now() + offsetHours * 60 * 60 * 1000);
+            if (!isUserAvailableNow(reqData.schedule, localDate)) {
+                skipRequester = true;
+            }
+          }
+
+          if (skipRequester) {
+            logger.info(`Test Mode: Requester ${requestData.requesterId} is OFF-DUTY. Skipping.`);
+          } else if (reqData?.fcmToken) {
             logger.info(`Test Mode: Adding requester's own token for verification.`);
             tokens.push(reqData.fcmToken);
             userIdsForTokens.push(requestData.requesterId);
@@ -113,7 +131,12 @@ async function processBloodRequest(event: any) {
 
           // Schedule Availability Check
           if (donorData.schedule) {
-            const isAvailable = isUserAvailableNow(donorData.schedule, new Date());
+            let offsetHours = 5;
+            if (donorData.location && typeof donorData.location.longitude === "number") {
+                offsetHours = Math.round(donorData.location.longitude / 15);
+            }
+            const localDate = new Date(Date.now() + offsetHours * 60 * 60 * 1000);
+            const isAvailable = isUserAvailableNow(donorData.schedule, localDate);
             if (!isAvailable) {
               logger.info(`Skipping ${donorId}: user is currently outside scheduled availability hours.`);
               continue;
@@ -407,7 +430,12 @@ app.get("/check-availability", async (req: any, res: any) => {
     }
 
     const userData = userDoc.data();
-    const available = isUserAvailableNow(userData?.schedule, new Date());
+    let offsetHours = 5;
+    if (userData?.location && typeof userData.location.longitude === "number") {
+        offsetHours = Math.round(userData.location.longitude / 15);
+    }
+    const localDate = new Date(Date.now() + offsetHours * 60 * 60 * 1000);
+    const available = isUserAvailableNow(userData?.schedule, localDate);
     return res.status(200).json({ uid, available });
   } catch (error) {
     logger.error("Error in /check-availability:", error);

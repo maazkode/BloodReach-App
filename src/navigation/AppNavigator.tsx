@@ -28,7 +28,7 @@ export type RootStackParamList = {
   UnifiedRegistration: undefined;
   DonorDashboard: { tab?: string };
   RequesterDashboard: { tab?: string };
-  CreateRequest: undefined;
+  CreateRequest: { editMode?: boolean; requestData?: any } | undefined;
   RequestDetail: { requestId: string };
   DonorHelpDetail: { requestId: string };
   Settings: undefined;

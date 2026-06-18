@@ -16,6 +16,7 @@ interface RequestSummaryCardProps {
     matchedDonorsCount?: number;
     postedAt?: string;
     onGetDirections?: () => void;
+    phone?: string;
 }
 
 const RequestSummaryCard: React.FC<RequestSummaryCardProps> = ({
@@ -30,6 +31,7 @@ const RequestSummaryCard: React.FC<RequestSummaryCardProps> = ({
     matchedDonorsCount,
     postedAt,
     onGetDirections,
+    phone,
 }) => {
     const isUrgent = urgencyLevel === 'urgent';
 
@@ -102,6 +104,19 @@ const RequestSummaryCard: React.FC<RequestSummaryCardProps> = ({
                         </View>
                     )}
                 </View>
+
+                {/* Contact Information */}
+                {phone && (
+                    <View style={styles.contactCard}>
+                        <View style={styles.contactIconBg}>
+                            <MaterialIcon name="phone" size={20} color="#16A34A" />
+                        </View>
+                        <View style={styles.contactTextContent}>
+                            <Text style={styles.contactLabel}>Contact Phone</Text>
+                            <Text style={styles.contactValue}>{phone}</Text>
+                        </View>
+                    </View>
+                )}
 
                 {/* Hospital Information */}
                 <View style={styles.hospitalCard}>
@@ -233,6 +248,44 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#64748B',
         fontWeight: '500',
+    },
+    contactCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F0FDF4',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#DCFCE7',
+    },
+    contactIconBg: {
+        width: 36,
+        height: 36,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 1,
+    },
+    contactTextContent: {
+        flex: 1,
+    },
+    contactLabel: {
+        fontSize: 12,
+        color: '#16A34A',
+        fontWeight: '600',
+        marginBottom: 2,
+    },
+    contactValue: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#14532D',
     },
     hospitalCard: {
         backgroundColor: '#F8FAFC',

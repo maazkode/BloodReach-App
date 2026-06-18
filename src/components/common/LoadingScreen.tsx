@@ -4,12 +4,19 @@ import LinearGradient from 'react-native-linear-gradient';
 
 interface LoadingScreenProps {
     title?: string;
-    tagline?: string;
+    tagline?: string | null;
+    containerStyle?: object;
+    titleStyle?: object;
+    logoStyle?: object;
+    logoBoxStyle?: object;
 }
 
 const LoadingScreen: React.FC<LoadingScreenProps> = ({
     title = "Optimizing Experience",
-    tagline = "Fetching your data..."
+    tagline = null,
+    titleStyle,
+    logoStyle,
+    logoBoxStyle
 }) => {
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const opacityAnim = useRef(new Animated.Value(0.6)).current;
@@ -54,18 +61,18 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({
         >
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
             <View style={styles.inner}>
-                <View style={styles.loadingLogoBox}>
+                <View style={[styles.loadingLogoBox, logoBoxStyle]}>
                     <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
                         <Image
                             source={require('../../assets/logo.webp')}
-                            style={styles.loadingLogo}
+                            style={[styles.loadingLogo, logoStyle]}
                             resizeMode="contain"
                         />
                     </Animated.View>
                 </View>
 
                 <View style={styles.textContainer}>
-                    <Text style={styles.loadingSyncText}>{title}</Text>
+                    <Text style={[styles.loadingSyncText, titleStyle]}>{title}</Text>
                     <Text style={styles.loadingTagline}>{tagline}</Text>
                 </View>
             </View>
@@ -96,7 +103,7 @@ const styles = StyleSheet.create({
         zIndex: 2,
     },
     textContainer: {
-        marginTop: 40,
+        marginTop: 10,
         alignItems: 'center',
     },
     loadingSyncText: {
