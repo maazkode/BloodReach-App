@@ -251,7 +251,7 @@ export const createDonationRequest = async (
 
                         queueNotification(
                             donor.uid,
-                            '🩸 Urgent Blood Request',
+                            'Urgent Blood Request',
                             `A patient nearby needs ${requestData.bloodGroup} blood. Please consider donating!`,
                             { type: 'new_request', requestId: ref.id }
                         ).catch(err => console.error('Failed to queue notification for donor', err));
