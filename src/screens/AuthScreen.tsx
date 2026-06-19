@@ -7,7 +7,6 @@ import {
     Image,
     Alert,
     ActivityIndicator,
-    Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FAIcon from 'react-native-vector-icons/FontAwesome';
@@ -28,24 +27,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 const AuthScreen: React.FC<Props> = ({ navigation }) => {
     const { showModal } = useModal();
     const [loading, setLoading] = useState(false);
-    const pulseAnim = useRef(new Animated.Value(1)).current;
 
-    useEffect(() => {
-        const pulse = Animated.sequence([
-            Animated.timing(pulseAnim, {
-                toValue: 1.08,
-                duration: 1000,
-                useNativeDriver: true,
-            }),
-            Animated.timing(pulseAnim, {
-                toValue: 1,
-                duration: 1000,
-                useNativeDriver: true,
-            }),
-        ]);
-
-        Animated.loop(pulse).start();
-    }, [pulseAnim]);
 
     const handleGoogleSignIn = async () => {
         if (loading) return;
@@ -124,13 +106,13 @@ const AuthScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={styles.brandingContainer}>
 
                     {/* Logo */}
-                    <Animated.View style={[styles.logoWrapper, { transform: [{ scale: pulseAnim }] }]}>
+                    <View style={[styles.logoWrapper, { transform: [{ scale: 1.2 }] }]}>
                         <Image
                             source={require('../assets/logo.webp')} // ✅ clean path
                             style={styles.logo}
                             resizeMode="contain"
                         />
-                    </Animated.View>
+                    </View>
 
                     {/* Text */}
                     <View style={styles.textContainer}>

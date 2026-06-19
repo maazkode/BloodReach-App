@@ -2,11 +2,13 @@ import { getAuth, GoogleAuthProvider, signInWithCredential, createUserWithEmailA
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { log, translateError, isOnline } from '../utility/errorHandler';
 
+import { GOOGLE_WEB_CLIENT_ID } from '@env';
+
 /**
  * Configure Google Sign-In with your Web Client ID from Firebase Console.
  */
 GoogleSignin.configure({
-    webClientId: '77440415256-99qs4h1gk8ec50brk7vb427a4br49pm9.apps.googleusercontent.com',
+    webClientId: GOOGLE_WEB_CLIENT_ID,
 });
 
 /**

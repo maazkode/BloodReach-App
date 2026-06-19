@@ -49,10 +49,10 @@ const RequestSummaryCard: React.FC<RequestSummaryCardProps> = ({
                     <Text style={styles.patientName} numberOfLines={1}>{patientName}</Text>
                 </View>
                 <View style={styles.urgencyPill}>
-                    <MaterialCommunityIcon 
-                        name={isUrgent ? "fire" : "clock-outline"} 
-                        size={12} 
-                        color={isUrgent ? '#B62022' : '#475569'} 
+                    <MaterialCommunityIcon
+                        name={isUrgent ? "fire" : "clock-outline"}
+                        size={12}
+                        color={isUrgent ? '#B62022' : '#475569'}
                     />
                     <Text style={[styles.urgencyText, { color: isUrgent ? '#B62022' : '#475569' }]}>
                         {urgencyLevel.toUpperCase()}
@@ -74,7 +74,7 @@ const RequestSummaryCard: React.FC<RequestSummaryCardProps> = ({
                     </View>
                     <View style={styles.statItem}>
                         <View style={[styles.iconCircle, { backgroundColor: '#FEF2F2' }]}>
-                            <MaterialCommunityIcon name="flask-outline" size={20} color="#B62022" />
+                            <MaterialCommunityIcon name="blood-bag" size={20} color="#B62022" />
                         </View>
                         <View>
                             <Text style={styles.statLabel}>Units Needed</Text>

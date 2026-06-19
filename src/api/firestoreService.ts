@@ -319,6 +319,19 @@ const queueNotification = async (userId: string, title: string, body: string, da
             status: 'pending',
             createdAt: serverTimestamp(),
         });
+
+        // Retrieve the recipient's fcmToken and send a real push notification for background delivery
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+            const userData = userSnap.data() as UserDocument;
+            if (userData.fcmToken) {
+                const { sendPushNotification } = require('./notificationService');
+                sendPushNotification(userData.fcmToken, title, body, data).catch((err: any) =>
+                    console.error('[Firestore] queueNotification > sendPushNotification error:', err)
+                );
+            }
+        }
     } catch (error) {
         console.error('[Firestore] queueNotification error:', error);
     }
@@ -591,7 +604,8 @@ export const getNearbyDonors = async ({
 
                 // Local filtering to avoid Firestore composite index errors
                 const isDonor = data.roles?.includes('donor');
-                if (!isDonor || !data.isAvailable || !data.isEligibleToDonate || data.bloodGroup !== bloodGroup) {
+                const compatibleGroups = getCompatibleBloodGroups(data.bloodGroup);
+                if (!isDonor || !data.isAvailable || !data.isEligibleToDonate || !compatibleGroups.includes(bloodGroup)) {
                     return;
                 }
 
